@@ -1,7 +1,12 @@
+<!-- LoginPage.vue -->
 <script setup>
+import { inject } from 'vue'; // Import inject
 import { useRouter } from 'vue-router';
 
 const router = useRouter();
+
+// Inject the globally provided language state
+const currentLanguage = inject('currentLanguage');
 
 const navigateToSignup = () => {
   router.push('/'); // Navigate to the root path (SignupView)
@@ -10,20 +15,30 @@ const navigateToSignup = () => {
 
 <template>
   <div class="login-page">
-    <header class="app-header">
-      <h1 class="project-title">X-Ray Exposure Calculator</h1>
-      </header>
+    <!-- The global header is now in App.vue -->
 
     <main class="login-main-content">
       <section class="login-card">
-        <h2>Welcome Back! Please Sign In</h2>
-        <p>This is where your elegant login form will be designed.</p>
-        <button class="action-button primary">Log In</button>
-        <p class="switch-link-container">
-          Or <a href="#" @click.prevent="router.push('/dashboard')">Go to Dashboard (Temp)</a>
+        <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'Welcome Back! Please Sign In' : 'أهلاً بعودتك! يرجى تسجيل الدخول' }}
+        </h2>
+        <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'This is where your elegant login form will be designed.' : 'هنا سيتم تصميم نموذج تسجيل الدخول الأنيق الخاص بك.' }}
         </p>
-        <p class="switch-link-container">
-          Don't have an account? <a href="#" @click.prevent="navigateToSignup">Sign Up</a>
+        <button class="action-button primary">
+          {{ currentLanguage === 'en' ? 'Log In' : 'تسجيل الدخول' }}
+        </button>
+        <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'Or' : 'أو' }}
+          <a href="#" @click.prevent="router.push('/dashboard')">
+            {{ currentLanguage === 'en' ? 'Go to Dashboard (Temp)' : 'الانتقال إلى لوحة التحكم (مؤقت)' }}
+          </a>
+        </p>
+        <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'Don\'t have an account?' : 'ليس لديك حساب؟' }}
+          <a href="#" @click.prevent="navigateToSignup">
+            {{ currentLanguage === 'en' ? 'Sign Up' : 'التسجيل' }}
+          </a>
         </p>
       </section>
     </main>
@@ -31,34 +46,16 @@ const navigateToSignup = () => {
 </template>
 
 <style scoped>
-/* Inherit common styles from SignupView if desired, or define new ones */
-/* For simplicity, we'll keep some basic structural styles here */
+/* Inherit common styles from App.vue or define new ones */
 
 .login-page {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: calc(100vh - 80px); /* Adjust height to account for global header */
   width: 100%;
 }
 
-.app-header {
-  background-color: #F1E234; /* Bright Yellow */
-  padding: 20px 30px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  min-height: 80px;
-}
-
-.project-title {
-  color: #000; /* Black text */
-  font-size: 2.8em;
-  font-weight: 800;
-  text-align: center;
-  flex-grow: 1;
-}
+/* No .app-header, .project-title here - they are in App.vue */
 
 .login-main-content {
   flex-grow: 1;
@@ -131,16 +128,9 @@ const navigateToSignup = () => {
 
 /* Responsive Adjustments (similar to SignupView) */
 @media (max-width: 768px) {
-  .app-header {
-    flex-direction: column;
-    padding: 15px 20px;
+  .login-main-content {
+    padding: 15px;
   }
-
-  .project-title {
-    font-size: 2em;
-    margin-bottom: 15px;
-  }
-
   .login-card {
     padding: 30px;
   }
@@ -151,8 +141,8 @@ const navigateToSignup = () => {
 }
 
 @media (max-width: 480px) {
-  .project-title {
-    font-size: 1.6em;
+  .login-card {
+    padding: 20px;
   }
 
   .action-button {

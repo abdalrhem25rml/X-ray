@@ -1,5 +1,9 @@
+<!-- PatientDashboard.vue -->
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, inject } from 'vue'; // Import inject
+
+// Inject the globally provided language state
+const currentLanguage = inject('currentLanguage');
 
 // Dummy patient data
 const patientName = ref('Ahmed Al-Saud'); // Example patient name
@@ -84,38 +88,54 @@ const closeScanDetails = () => {
 
 <template>
   <div class="patient-dashboard-container">
-    <header class="dashboard-header">
+    <!-- The global header is now in App.vue -->
+
+    <header class="dashboard-local-header">
+      <h2 class="patient-name" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        {{ currentLanguage === 'en' ? 'Welcome, ' : 'أهلاً بك، ' }} {{ patientName }}
+      </h2>
       <div class="exposure-indicator" :style="{ backgroundColor: exposureLevel.color }">
-        <span class="exposure-label">Accumulated Exposure:</span>
+        <span class="exposure-label">
+          {{ currentLanguage === 'en' ? 'Accumulated Exposure:' : 'التعرض التراكمي:' }}
+        </span>
         <span class="exposure-value">{{ accumulatedExposure.toFixed(2) }} mSv</span>
-        <span class="exposure-status">({{ exposureLevel.status }})</span>
+        <span class="exposure-status">
+          ({{ currentLanguage === 'en' ? exposureLevel.status : (exposureLevel.status === 'Low' ? 'منخفض' : (exposureLevel.status === 'Medium' ? 'متوسط' : 'مرتفع')) }})
+        </span>
       </div>
-      <h2 class="patient-name">Welcome, {{ patientName }}</h2>
     </header>
 
     <main class="dashboard-content">
       <section class="scan-history-section card">
-        <h3>Scan History</h3>
-        <p v-if="scanHistory.length === 0" class="no-scans-message">No scan history available.</p>
+        <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'Scan History' : 'سجل الفحوصات' }}
+        </h3>
+        <p v-if="scanHistory.length === 0" class="no-scans-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'No scan history available.' : 'لا يوجد سجل فحوصات متاح.' }}
+        </p>
         <div v-else class="table-container">
           <table>
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Scan Type</th>
-                <th>Dose (mSv)</th>
-                <th>Hospital</th>
-                <th>Actions</th>
+                <th :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ currentLanguage === 'en' ? 'Date' : 'التاريخ' }}</th>
+                <th :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}</th>
+                <th :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ currentLanguage === 'en' ? 'Dose (mSv)' : 'الجرعة (mSv)' }}</th>
+                <th :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ currentLanguage === 'en' ? 'Hospital' : 'المستشفى' }}</th>
+                <th :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="scan in scanHistory" :key="scan.id">
-                <td>{{ scan.date }}</td>
-                <td>{{ scan.type }}</td>
-                <td>{{ scan.dose_mSv.toFixed(3) }}</td>
-                <td>{{ scan.hospital }}</td>
-                <td>
-                  <button @click="openScanDetails(scan)" class="details-button">View Details</button>
+                <td :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ scan.date }}</td>
+                <td :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{ currentLanguage === 'en' ? scan.type : (scan.type === 'Chest X-Ray' ? 'أشعة سينية على الصدر' : (scan.type === 'CT Abdomen' ? 'أشعة مقطعية على البطن' : (scan.type === 'Dental X-Ray' ? 'أشعة أسنان' : (scan.type === 'Spine X-Ray' ? 'أشعة سينية على العمود الفقري' : (scan.type === 'CT Head' ? 'أشعة مقطعية على الرأس' : scan.type))))) }}
+                </td>
+                <td :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ scan.dose_mSv.toFixed(3) }}</td>
+                <td :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ scan.hospital }}</td>
+                <td :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  <button @click="openScanDetails(scan)" class="details-button">
+                    {{ currentLanguage === 'en' ? 'View Details' : 'عرض التفاصيل' }}
+                  </button>
                 </td>
               </tr>
             </tbody>
@@ -127,16 +147,22 @@ const closeScanDetails = () => {
         <div v-if="showScanDetailsModal" class="modal-overlay" @click.self="closeScanDetails">
           <div class="modal-content">
             <button class="close-modal-button" @click="closeScanDetails">&times;</button>
-            <h3 class="modal-title">Scan Details (ID: {{ selectedScan?.id }})</h3>
-            <div v-if="selectedScan" class="scan-details-grid">
-              <div class="detail-item"><strong>Scan Type:</strong> <span>{{ selectedScan.type }}</span></div>
-              <div class="detail-item"><strong>Date:</strong> <span>{{ selectedScan.date }}</span></div>
-              <div class="detail-item"><strong>Dose:</strong> <span>{{ selectedScan.dose_mSv.toFixed(3) }} mSv</span></div>
-              <div class="detail-item"><strong>Hospital:</strong> <span>{{ selectedScan.hospital }}</span></div>
-              <div class="detail-item"><strong>Radiologist:</strong> <span>{{ selectedScan.radiologist }}</span></div>
-              <div class="detail-item full-width"><strong>Details:</strong> <p>{{ selectedScan.details }}</p></div>
+            <h3 class="modal-title" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              {{ currentLanguage === 'en' ? 'Scan Details (ID: ' : 'تفاصيل الفحص (المعرف: ' }} {{ selectedScan?.id }})
+            </h3>
+            <div v-if="selectedScan" class="scan-details-grid" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              <div class="detail-item"><strong>{{ currentLanguage === 'en' ? 'Scan Type:' : 'نوع الفحص:' }}</strong> <span>
+                {{ currentLanguage === 'en' ? selectedScan.type : (selectedScan.type === 'Chest X-Ray' ? 'أشعة سينية على الصدر' : (selectedScan.type === 'CT Abdomen' ? 'أشعة مقطعية على البطن' : (selectedScan.type === 'Dental X-Ray' ? 'أشعة أسنان' : (selectedScan.type === 'Spine X-Ray' ? 'أشعة سينية على العمود الفقري' : (selectedScan.type === 'CT Head' ? 'أشعة مقطعية على الرأس' : selectedScan.type))))) }}
+              </span></div>
+              <div class="detail-item"><strong>{{ currentLanguage === 'en' ? 'Date:' : 'التاريخ:' }}</strong> <span>{{ selectedScan.date }}</span></div>
+              <div class="detail-item"><strong>{{ currentLanguage === 'en' ? 'Dose:' : 'الجرعة:' }}</strong> <span>{{ selectedScan.dose_mSv.toFixed(3) }} mSv</span></div>
+              <div class="detail-item"><strong>{{ currentLanguage === 'en' ? 'Hospital:' : 'المستشفى:' }}</strong> <span>{{ selectedScan.hospital }}</span></div>
+              <div class="detail-item"><strong>{{ currentLanguage === 'en' ? 'Radiologist:' : 'أخصائي الأشعة:' }}</strong> <span>{{ selectedScan.radiologist }}</span></div>
+              <div class="detail-item full-width"><strong>{{ currentLanguage === 'en' ? 'Details:' : 'التفاصيل:' }}</strong> <p>{{ selectedScan.details }}</p></div>
             </div>
-            <p v-else>No scan selected.</p>
+            <p v-else :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              {{ currentLanguage === 'en' ? 'No scan selected.' : 'لم يتم اختيار فحص.' }}
+            </p>
           </div>
         </div>
       </Transition>
@@ -148,25 +174,27 @@ const closeScanDetails = () => {
 .patient-dashboard-container {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: calc(100vh - 80px); /* Adjust height to account for global header */
   width: 100%;
   background-color: #f8f9fa; /* Light background for the main content area */
 }
 
-.dashboard-header {
-  background-color: #F1E234; /* The requested yellow */
+.dashboard-local-header {
+  /* This header is specific to the dashboard, below the global App.vue header */
+  background-color: #8D99AE; /* Using the accent color for dashboard header */
   padding: 20px 40px;
   display: flex;
   justify-content: space-between; /* Space out items */
   align-items: center;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  min-height: 90px; /* Slightly taller header */
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  min-height: 70px;
   flex-wrap: wrap; /* Allow wrapping on small screens */
   gap: 15px; /* Space between elements on wrap */
+  color: white; /* Text color for this header */
 }
 
 .patient-name {
-  color: black; /* Black text */
+  color: white; /* White text for contrast */
   font-size: 2.2em;
   font-weight: 700;
   margin: 0; /* Remove default margin */
@@ -175,7 +203,7 @@ const closeScanDetails = () => {
 .exposure-indicator {
   padding: 10px 20px;
   border-radius: 8px;
-  color: white; /* White text for contrast on colored background */
+  color: #333; /* Dark text for contrast on colored background */
   font-weight: bold;
   font-size: 1.2em;
   display: flex;
@@ -393,7 +421,7 @@ tr:hover {
 
 /* Responsive Adjustments */
 @media (max-width: 768px) {
-  .dashboard-header {
+  .dashboard-local-header {
     flex-direction: column;
     align-items: flex-start; /* Align content to left on small screens */
     padding: 15px 20px;
@@ -450,7 +478,7 @@ tr:hover {
 }
 
 @media (max-width: 480px) {
-  .dashboard-header {
+  .dashboard-local-header {
     padding: 10px 15px;
   }
 

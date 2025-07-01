@@ -1,18 +1,31 @@
+<!-- SignupView.vue -->
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useRouter } from 'vue-router'; // Import useRouter
 
 const router = useRouter(); // Get the router instance
 
 const showInfoModal = ref(false);
+const currentLanguage = ref('en'); // 'en' for English, 'ar' for Arabic
 
 const toggleInfoModal = () => {
   showInfoModal.value = !showInfoModal.value;
 };
 
+const toggleLanguage = () => {
+  currentLanguage.value = currentLanguage.value === 'en' ? 'ar' : 'en';
+  // Update document direction based on language
+  document.documentElement.dir = currentLanguage.value === 'ar' ? 'rtl' : 'ltr';
+};
+
 const navigateToLogin = () => {
   router.push('/login'); // Navigate to the /login path
 };
+
+// Watch for language changes to update the document direction on initial load
+watch(currentLanguage, (newLang) => {
+  document.documentElement.dir = newLang === 'ar' ? 'rtl' : 'ltr';
+}, { immediate: true }); // immediate: true to run on initial load
 
 const infoTextArabic = `
 التعرض الإشعاعي هو كمية الإشعاع التي يتلقاها الجسم عند مروره في بيئة تحتوي على إشعاع مؤين، مثل الأشعة السينية (X-rays) أو الأشعة المقطعية (CT). وتُقاس الجرعة الإشعاعية بوحدة "الميلي سيفرت" (mSv)، وهي وحدة تعكس التأثير البيولوجي للإشعاع على أنسجة الجسم.
@@ -99,20 +112,23 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
 
 <template>
   <div class="signup-page">
-    <header class="app-header">
-      <h1 class="project-title">X-Ray Exposure Calculator</h1>
-      <button @click="toggleInfoModal" class="info-button">
-        Information
-      </button>
-    </header>
-
     <main class="signup-main-content">
       <section class="signup-card">
-        <h2>Welcome! Please Sign Up</h2>
-        <p>This is where your elegant signup form will be designed.</p>
-        <button class="action-button primary">Create Account</button>
-        <p class="switch-link-container">
-          Already have an account? <a href="#" @click.prevent="navigateToLogin">Sign In</a>
+        <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'Welcome! Please Sign Up' : 'أهلاً بك! يرجى التسجيل' }}
+        </h2>
+        <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'This is where your elegant signup form will be designed.' : 'هنا سيتم تصميم نموذج التسجيل الأنيق الخاص بك.' }}
+        </p>
+        <!-- Signup form elements would go here -->
+        <button class="action-button primary">
+          {{ currentLanguage === 'en' ? 'Create Account' : 'إنشاء حساب' }}
+        </button>
+        <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ currentLanguage === 'en' ? 'Already have an account?' : 'هل لديك حساب بالفعل؟' }}
+          <a href="#" @click.prevent="navigateToLogin">
+            {{ currentLanguage === 'en' ? 'Sign In' : 'تسجيل الدخول' }}
+          </a>
         </p>
       </section>
     </main>
@@ -123,15 +139,91 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
           <button class="close-modal-button" @click="toggleInfoModal">
             &times;
           </button>
-          <h2 class="modal-title">Radiation Exposure Awareness</h2>
-          <div class="info-section">
-            <h3 class="lang-heading">العربية (Arabic)</h3>
+          <h2 class="modal-title">
+            {{ currentLanguage === 'en' ? 'Radiation Exposure Awareness' : 'التوعية بالتعرض الإشعاعي' }}
+          </h2>
+          <!-- Conditionally display Arabic or English content -->
+          <div v-if="currentLanguage === 'ar'" class="info-section">
+            <h3 class="lang-heading" dir="rtl">العربية (Arabic)</h3>
             <p class="lang-text arabic-text">{{ infoTextArabic }}</p>
+            <!-- Arabic table for ICRP limits -->
+            <div class="overflow-x-auto mt-4 rounded-lg border border-gray-300">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الفئة</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الحد السنوي المسموح به</th>
+                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ملاحظات</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">العاملون في المجال الطبي</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">20 ميلي سيفرت (mSv)</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">كمتوسط على مدى 5 سنوات، بشرط ألا يتجاوز 50 mSv في سنة واحدة.</td>
+                  </tr>
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">المرضى</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">لا يوجد حد صارم</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">يجب تقليل التعرض بقدر الإمكان وفق مبدأ ALARA (As Low As Reasonably Achievable).</td>
+                  </tr>
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">النساء الحوامل العاملات</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1 ميلي سيفرت للجنين خلال الحمل</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">يجب ألا تتجاوز الجرعة 1 mSv من تاريخ العلم بالحمل وحتى الولادة.</td>
+                  </tr>
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">العامة (غير العاملين بالمجال)</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1 ميلي سيفرت</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">في الظروف الطبيعية بدون إجراءات طبية.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-4 lang-text arabic-text">
+              التعرض الإشعاعي ضرورة طبية لا يمكن الاستغناء عنها، ولكن لا ينبغي أبدًا الاستهانة بمخاطره. فالمعرفة والوقاية والتقنيات الحديثة تمثل عناصر أساسية لحماية كل من المرضى والعاملين. التوعية المستمرة والتدريب والرقابة تضمن تحقيق الفائدة من الإشعاع بأقل الأضرار، وتحافظ على بيئة صحية وآمنة للجميع.
+            </p>
           </div>
-          <hr class="section-divider" />
-          <div class="info-section">
-            <h3 class="lang-heading">English</h3>
+          <div v-else class="info-section">
+            <h3 class="lang-heading" dir="ltr">English</h3>
             <p class="lang-text english-text">{{ infoTextEnglish }}</p>
+            <!-- English table for ICRP limits -->
+            <div class="overflow-x-auto mt-4 rounded-lg border border-gray-300">
+              <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Annual Permissible Limit</th>
+                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Medical Professionals</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">20 mSv</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Averaged over 5 years, not exceeding 50 mSv in any single year.</td>
+                  </tr>
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Patients</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">No strict limit</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Exposure should be as low as reasonably achievable (ALARA principle).</td>
+                  </tr>
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Pregnant Workers</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1 mSv to the fetus during pregnancy</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Dose should not exceed 1 mSv from the date of knowledge of pregnancy until birth.</td>
+                  </tr>
+                  <tr>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">General Public (Non-Occupational)</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1 mSv</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Under normal conditions without medical procedures.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p class="mt-4 lang-text english-text">
+              Radiation exposure is a medical necessity that cannot be dispensed with, but its risks should never be underestimated. Knowledge, prevention, and modern technologies are essential elements to protect both patients and workers. Continuous awareness, training, and monitoring ensure that radiation benefits are achieved with minimal harm, maintaining a healthy and safe environment for everyone.
+            </p>
           </div>
         </div>
       </div>
@@ -155,7 +247,7 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
   display: flex;
   justify-content: center; /* Center the title initially */
   align-items: center;
-  position: relative; /* For positioning the info button */
+  position: relative; /* For positioning the info and language buttons */
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   min-height: 80px; /* Ensure a decent height */
 }
@@ -166,7 +258,9 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
   font-weight: 800; /* Extra bold */
   text-align: center;
   flex-grow: 1; /* Allow it to take up space and help centering */
-  margin-left: 120px; /* Offset for the button on the right, keeping title truly centered visually */
+  /* Adjust margin-left to account for both left and right buttons */
+  margin-left: 60px; /* Offset for the language button */
+  margin-right: 60px; /* Offset for the info button */
 }
 
 .info-button {
@@ -187,6 +281,28 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
 }
 
 .info-button:hover {
+  background-color: #6a7483; /* Darker shade on hover */
+  transform: translateY(-50%) scale(1.03); /* Slight scale effect */
+}
+
+.language-toggle-button {
+  position: absolute;
+  left: 30px; /* Top left corner */
+  top: 50%;
+  transform: translateY(-50%); /* Vertically center */
+  background-color: #8D99AE; /* Desired accent color */
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 8px; /* Slightly more rounded corners */
+  cursor: pointer;
+  font-size: 1.1em;
+  font-weight: 600;
+  transition: background-color 0.3s ease, transform 0.2s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.language-toggle-button:hover {
   background-color: #6a7483; /* Darker shade on hover */
   transform: translateY(-50%) scale(1.03); /* Slight scale effect */
 }
@@ -319,7 +435,7 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
 .arabic-text {
   direction: rtl; /* Right-to-left for Arabic */
   text-align: justify;
-  font-family: 'Cairo', 'Arial', sans-serif; /* Consider a font that supports Arabic well */
+  font-family: 'Cairo', 'Arial', sans-serif; /* Use Cairo for Arabic */
 }
 
 .english-text {
@@ -333,43 +449,20 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
   margin: 40px 0; /* More spacing for the divider */
 }
 
-/* Modal Transition Animations */
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity 0.4s ease;
-}
-
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
-}
-
-.modal-fade-enter-active .modal-content,
-.modal-fade-leave-active .modal-content {
-  transition: transform 0.4s ease, opacity 0.4s ease;
-}
-
-.modal-fade-enter-from .modal-content {
-  transform: scale(0.95);
-  opacity: 0;
-}
-
-.modal-fade-leave-to .modal-content {
-  transform: scale(0.95);
-  opacity: 0;
-}
-
 /* Responsive Adjustments */
 @media (max-width: 768px) {
   .app-header {
     flex-direction: column;
     padding: 15px 20px;
+    min-height: auto; /* Allow height to adjust */
   }
 
   .project-title {
     font-size: 2em;
     margin-bottom: 15px;
     margin-left: 0; /* Reset margin for smaller screens */
+    margin-right: 0;
+    order: 2; /* Put title below buttons on small screens */
   }
 
   .info-button {
@@ -378,6 +471,16 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
     margin-top: 10px;
     width: 80%; /* Make button wider */
     padding: 10px 20px;
+    order: 3; /* Put info button below title */
+  }
+
+  .language-toggle-button {
+    position: static; /* Allow it to flow naturally */
+    transform: none;
+    margin-bottom: 10px; /* Space below button */
+    width: 80%; /* Make button wider */
+    padding: 10px 20px;
+    order: 1; /* Put language button at the top */
   }
 
   .signup-card {
@@ -417,8 +520,9 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
     font-size: 1.6em;
   }
 
-  .info-button {
+  .info-button, .language-toggle-button {
     font-size: 0.9em;
+    padding: 8px 15px;
   }
 
   .signup-card {
