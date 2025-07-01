@@ -1,4 +1,4 @@
-<!-- LoginPage.vue -->
+<!-- LoginView.vue -->
 <script setup>
 import { inject } from 'vue'; // Import inject
 import { useRouter } from 'vue-router';

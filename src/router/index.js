@@ -1,8 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 // Import your views
-import SignupView from '../components/SignupView.vue'
-import LoginPage from '../components/LoginPage.vue';
-import PatientDashboard from '../components/PatientDashboard.vue'
+import SignupView from '../views/SignupView.vue'
+import LoginPage from '../views/LoginView.vue';
+import PatientDashboard from '../components/PatientDashboard.vue' // WILL BE CHANGED!!!
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
