@@ -5,15 +5,10 @@ import { useRouter } from 'vue-router'; // Import useRouter
 
 const router = useRouter(); // Get the router instance
 
-const showInfoModal = ref(false);
-
 // Inject the globally provided language state and toggle function from App.vue
 const currentLanguage = inject('currentLanguage');
-const toggleLanguage = inject('toggleLanguage'); // Although not directly used by a button in this component, it's good practice to inject if available.
-
-const toggleInfoModal = () => {
-  showInfoModal.value = !showInfoModal.value;
-};
+// The toggleInfoModal is now provided by App.vue, but we don't need to inject it here
+// as the info button is no longer in this component.
 
 const navigateToLogin = () => {
   router.push('/login'); // Navigate to the /login path
@@ -28,12 +23,39 @@ const navigateToLogin = () => {
           {{ currentLanguage === 'en' ? 'Welcome! Please Sign Up' : 'أهلاً بك! يرجى التسجيل' }}
         </h2>
         <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'This is where your elegant signup form will be designed.' : 'هنا سيتم تصميم نموذج التسجيل الأنيق الخاص بك.' }}
+          {{ currentLanguage === 'en' ? 'Create your account to get started.' : 'أنشئ حسابك للبدء.' }}
         </p>
-        <!-- Signup form elements would go here -->
-        <button class="action-button primary">
-          {{ currentLanguage === 'en' ? 'Create Account' : 'إنشاء حساب' }}
-        </button>
+
+        <form class="signup-form">
+          <div class="form-group">
+            <label for="email" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              {{ currentLanguage === 'en' ? 'Email Address' : 'عنوان البريد الإلكتروني' }}
+            </label>
+            <input
+              type="email"
+              id="email"
+              :placeholder="currentLanguage === 'en' ? 'Enter your email' : 'أدخل بريدك الإلكتروني'"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="password" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              {{ currentLanguage === 'en' ? 'Password' : 'كلمة المرور' }}
+            </label>
+            <input
+              type="password"
+              id="password"
+              :placeholder="currentLanguage === 'en' ? 'Enter your password' : 'أدخل كلمة المرور'"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+            />
+          </div>
+
+          <button class="action-button primary" type="submit">
+            {{ currentLanguage === 'en' ? 'Create Account' : 'إنشاء حساب' }}
+          </button>
+        </form>
+
         <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{ currentLanguage === 'en' ? 'Already have an account?' : 'هل لديك حساب بالفعل؟' }}
           <a href="#" @click.prevent="navigateToLogin">
@@ -52,28 +74,6 @@ const navigateToLogin = () => {
   flex-direction: column;
   min-height: calc(100vh - 80px); /* Adjust height to account for global header */
   width: 100%;
-}
-
-/* No .app-header, .project-title, .language-toggle-button here - they are in App.vue */
-
-.info-button-local {
-  /* This is the info button specific to SignupView */
-  background-color: #8D99AE; /* Desired accent color */
-  color: white;
-  border: none;
-  padding: 12px 25px;
-  border-radius: 8px; /* Slightly more rounded corners */
-  cursor: pointer;
-  font-size: 1.1em;
-  font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  margin-top: 20px; /* Space above the button */
-}
-
-.info-button-local:hover {
-  background-color: #6a7483; /* Darker shade on hover */
-  transform: scale(1.03); /* Slight scale effect */
 }
 
 /* Main Content Area */
@@ -110,6 +110,44 @@ const navigateToLogin = () => {
   font-size: 1.1em;
 }
 
+/* Form Styling */
+.signup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px; /* Space between form groups */
+  margin-bottom: 30px; /* Space before the "Already have an account?" link */
+}
+
+.form-group {
+  text-align: left; /* Align labels and inputs to the left */
+}
+
+.form-group label {
+  display: block; /* Make label take full width */
+  margin-bottom: 8px;
+  color: #333;
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1em;
+  color: #333;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #8D99AE; /* Highlight border on focus */
+  box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2); /* Subtle glow on focus */
+}
+
+/* Action button (Create Account) */
 .action-button {
   background-color: #8D99AE;
   color: white;
@@ -121,187 +159,13 @@ const navigateToLogin = () => {
   font-weight: 600;
   transition: background-color 0.3s ease, transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+  width: 100%; /* Make button full width */
+  margin-top: 20px; /* Space above the button, if not already handled by form-group gap */
 }
 
 .action-button:hover {
   background-color: #6a7483;
   transform: translateY(-2px); /* Slight lift effect */
-}
-
-/* Modal Styling */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7); /* Darker overlay */
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  padding: 20px; /* Padding for smaller screens */
-}
-
-.modal-content {
-  background-color: white;
-  padding: 40px;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); /* Stronger shadow */
-  max-width: 900px; /* Wider modal for better text flow */
-  max-height: 90vh;
-  overflow-y: auto;
-  position: relative;
-  animation: fadeInScale 0.4s ease-out forwards; /* Smoother animation */
-}
-
-.close-modal-button {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  background: none;
-  border: none;
-  font-size: 2.5em; /* Larger X for easier clicking */
-  cursor: pointer;
-  color: #8D99AE; /* Use accent color for consistency */
-  transition: color 0.3s ease, transform 0.2s ease;
-}
-
-.close-modal-button:hover {
-  color: #555;
-  transform: rotate(90deg); /* Spin effect on close */
-}
-
-.modal-title {
-  text-align: center;
-  color: #8D99AE;
-  margin-bottom: 30px;
-  font-size: 2.2em;
-  font-weight: 700;
-}
-
-.info-section {
-  margin-bottom: 25px; /* Spacing between sections */
-}
-
-.lang-heading {
-  color: #555;
-  margin-bottom: 15px;
-  font-size: 1.6em;
-  font-weight: 600;
-  border-bottom: 2px solid #eee; /* Subtle separator */
-  padding-bottom: 5px;
-}
-
-.lang-text {
-  line-height: 1.8; /* Increased line height for readability */
-  font-size: 1.1em;
-  text-align: justify;
-  white-space: pre-wrap; /* Preserves formatting */
-  color: #444; /* Slightly darker text for readability */
-}
-
-.arabic-text {
-  direction: rtl; /* Right-to-left for Arabic */
-  text-align: justify;
-  font-family: 'Cairo', 'Arial', sans-serif; /* Use Cairo for Arabic */
-}
-
-.english-text {
-  direction: ltr;
-}
-
-.section-divider {
-  border: 0;
-  height: 1px;
-  background-color: #dde;
-  margin: 40px 0; /* More spacing for the divider */
-}
-
-/* Responsive Adjustments */
-@media (max-width: 768px) {
-  .app-header {
-    flex-direction: column;
-    padding: 15px 20px;
-    min-height: auto; /* Allow height to adjust */
-  }
-
-  .project-title {
-    font-size: 2em;
-    margin-bottom: 15px;
-    margin-left: 0; /* Reset margin for smaller screens */
-    margin-right: 0;
-    order: 2; /* Put title below buttons on small screens */
-  }
-
-  .info-button {
-    position: static; /* Allow it to flow naturally */
-    transform: none;
-    margin-top: 10px;
-    width: 80%; /* Make button wider */
-    padding: 10px 20px;
-    order: 3; /* Put info button below title */
-  }
-
-  .language-toggle-button {
-    position: static; /* Allow it to flow naturally */
-    transform: none;
-    margin-bottom: 10px; /* Space below button */
-    width: 80%; /* Make button wider */
-    padding: 10px 20px;
-    order: 1; /* Put language button at the top */
-  }
-
-  .signup-card {
-    padding: 30px;
-  }
-
-  .signup-card h2 {
-    font-size: 1.8em;
-  }
-
-  .modal-content {
-    padding: 25px;
-    max-width: 95%; /* More space on smaller screens */
-  }
-
-  .close-modal-button {
-    font-size: 2em;
-    top: 10px;
-    right: 10px;
-  }
-
-  .modal-title {
-    font-size: 1.8em;
-  }
-
-  .lang-heading {
-    font-size: 1.4em;
-  }
-
-  .lang-text {
-    font-size: 1em;
-  }
-}
-
-@media (max-width: 480px) {
-  .project-title {
-    font-size: 1.6em;
-  }
-
-  .info-button, .language-toggle-button {
-    font-size: 0.9em;
-    padding: 8px 15px;
-  }
-
-  .signup-card {
-    padding: 20px;
-  }
-
-  .action-button {
-    padding: 12px 20px;
-    font-size: 1em;
-  }
 }
 
 .switch-link-container {
@@ -320,5 +184,31 @@ const navigateToLogin = () => {
 .switch-link-container a:hover {
   color: #5a6473;
   text-decoration: underline;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .signup-main-content {
+    padding: 15px;
+  }
+
+  .signup-card {
+    padding: 30px;
+  }
+
+  .signup-card h2 {
+    font-size: 1.8em;
+  }
+}
+
+@media (max-width: 480px) {
+  .signup-card {
+    padding: 20px;
+  }
+
+  .action-button {
+    padding: 12px 20px;
+    font-size: 1em;
+  }
 }
 </style>

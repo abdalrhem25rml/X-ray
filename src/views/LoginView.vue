@@ -1,4 +1,4 @@
-<!-- LoginView.vue -->
+<!-- LoginPage.vue -->
 <script setup>
 import { inject } from 'vue'; // Import inject
 import { useRouter } from 'vue-router';
@@ -23,11 +23,39 @@ const navigateToSignup = () => {
           {{ currentLanguage === 'en' ? 'Welcome Back! Please Sign In' : 'أهلاً بعودتك! يرجى تسجيل الدخول' }}
         </h2>
         <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'This is where your elegant login form will be designed.' : 'هنا سيتم تصميم نموذج تسجيل الدخول الأنيق الخاص بك.' }}
+          {{ currentLanguage === 'en' ? 'Log in to access your dashboard.' : 'سجّل الدخول للوصول إلى لوحة التحكم الخاصة بك.' }}
         </p>
-        <button class="action-button primary">
-          {{ currentLanguage === 'en' ? 'Log In' : 'تسجيل الدخول' }}
-        </button>
+
+        <form class="login-form">
+          <div class="form-group">
+            <label for="email" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              {{ currentLanguage === 'en' ? 'Email Address' : 'عنوان البريد الإلكتروني' }}
+            </label>
+            <input
+              type="email"
+              id="email"
+              :placeholder="currentLanguage === 'en' ? 'Enter your email' : 'أدخل بريدك الإلكتروني'"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="password" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              {{ currentLanguage === 'en' ? 'Password' : 'كلمة المرور' }}
+            </label>
+            <input
+              type="password"
+              id="password"
+              :placeholder="currentLanguage === 'en' ? 'Enter your password' : 'أدخل كلمة المرور'"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+            />
+          </div>
+
+          <button class="action-button primary" type="submit">
+            {{ currentLanguage === 'en' ? 'Log In' : 'تسجيل الدخول' }}
+          </button>
+        </form>
+
         <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{ currentLanguage === 'en' ? 'Or' : 'أو' }}
           <a href="#" @click.prevent="router.push('/dashboard')">
@@ -90,6 +118,43 @@ const navigateToSignup = () => {
   font-size: 1.1em;
 }
 
+/* Form Styling (similar to signup-form) */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px; /* Space between form groups */
+  margin-bottom: 30px; /* Space before the "Or Go to Dashboard" link */
+}
+
+.form-group {
+  text-align: left; /* Align labels and inputs to the left */
+}
+
+.form-group label {
+  display: block; /* Make label take full width */
+  margin-bottom: 8px;
+  color: #333;
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 1em;
+  color: #333;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: #8D99AE; /* Highlight border on focus */
+  box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2); /* Subtle glow on focus */
+}
+
 .action-button {
   background-color: #8D99AE;
   color: white;
@@ -101,7 +166,8 @@ const navigateToSignup = () => {
   font-weight: 600;
   transition: background-color 0.3s ease, transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  margin-bottom: 20px; /* Space before the link */
+  width: 100%; /* Make button full width */
+  margin-top: 20px; /* Space above the button, if not already handled by form-group gap */
 }
 
 .action-button:hover {

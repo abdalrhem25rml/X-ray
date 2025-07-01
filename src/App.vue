@@ -75,39 +75,41 @@ const infoTextEnglish = `
 Radiation exposure is the amount of radiation received by the body when passing through an environment containing ionizing radiation, such as X-rays or CT scans. The radiation dose is measured in "millisieverts" (mSv), a unit that reflects the biological effect of radiation on body tissues.
 
 The danger lies in the fact that ionizing radiation can cause cell damage, increasing the risk of chronic diseases like cancer, especially with repeated or prolonged exposure. Therefore:
-**Patients** should only be exposed when necessary, and every examination should be recorded and its benefit evaluated against its harm.
-**Medical professionals**, such as radiologists and radiology technicians, are chronically exposed, requiring periodic monitoring and adherence to safety procedures.
-**Pregnant women** are a special category who should exercise extreme caution when exposed to radiation to avoid affecting the fetus.
+<b>Patients</b> should only be exposed when necessary, and every examination should be recorded and its benefit evaluated against its harm.
+<b>Medical professionals</b>, such as radiologists and radiology technicians, are chronically exposed, requiring periodic monitoring and adherence to safety procedures.
+<b>Pregnant women</b> are a special category who should exercise extreme caution when exposed to radiation to avoid affecting the fetus.
 
-**Annual Permissible Radiation Exposure Limit**
+<b>Annual Permissible Radiation Exposure Limit</b>
 According to the recommendations of the International Commission on Radiological Protection (ICRP):
-**Category:** Medical Professionals
-**Annual Permissible Limit:** 20 millisieverts (mSv)
-**Notes:** As an average over 5 years, provided it does not exceed 50 mSv in any single year.
+<b>Category:</b> Medical Professionals
+<b>Annual Permissible Limit:</b> 20 millisieverts (mSv)
+<b>Notes:</b> As an average over 5 years, provided it does not exceed 50 mSv in a single year.
 
-**Category:** Patients
-**Annual Permissible Limit:** No strict limit
-**Notes:** Exposure should be reduced as much as possible according to the ALARA principle (As Low As Reasonably Achievable).
+<b>Category:</b> Patients
+<b>Annual Permissible Limit:</b> No strict limit
+<b>Notes:</b> Exposure should be reduced as much as possible according to the ALARA principle (As Low As Reasonably Achievable).
 
-**Category:** Pregnant Workers
-**Annual Permissible Limit:** 1 millisievert for the fetus during pregnancy
-**Notes:** The dose should not exceed 1 mSv from the date of knowledge of pregnancy until birth.
+<b>Category:</b> Pregnant Workers
+<b>Annual Permissible Limit:</b> 1 millisievert for the fetus during pregnancy
+<b>Notes:</b> The dose should not exceed 1 mSv from the date of knowledge of pregnancy until birth.
 
-**Category:** General Public (non-medical workers)
-**Annual Permissible Limit:** 1 millisievert
-**Notes:** Under normal circumstances without medical procedures.
+<b>Category:</b> General Public (non-medical workers)
+<b>Annual Permissible Limit:</b> 1 millisievert
+<b>Notes:</b> Under normal circumstances without medical procedures.
 
-**How are doses monitored?**
-**Personal dose measuring devices** (TLD or Dosimeter) are worn on the body to record daily or monthly doses.
-**Smart electronic systems** are used in some hospitals to automatically track doses and maintain records.
-**Periodic investigations** by radiation protection departments to review exposure levels and verify the implementation of safety procedures.
+<b>How are doses monitored?</b>
+<b>Personal dose measuring devices</b> (TLD or Dosimeter) are worn on the body to record daily or monthly doses.
+<b>Smart electronic systems</b> are used in some hospitals to automatically track doses and maintain records.
+<b>Periodic investigations</b> by radiation protection departments to review exposure levels and verify the implementation of safety procedures.
 
-**Prevention Steps**
-* Use **lead shields** (e.g., aprons and barriers).
-* Reduce **exposure time** as much as possible.
-* Increase the **distance** between the person and the radiation source.
-* Use **alternative imaging techniques** such as ultrasound or MRI when possible.
-* Adopt **smart systems** to automatically calculate doses and alert the doctor if the safe limit is exceeded.
+<b>Prevention Steps</b>
+<ul>
+  <li>Use <b>lead shields</b> (e.g., aprons and barriers).</li>
+  <li>Reduce <b>exposure time</b> as much as possible.</li>
+  <li>Increase the <b>distance</b> between the person and the radiation source.</li>
+  <li>Use <b>alternative imaging techniques</b> such as ultrasound or MRI when possible.</li>
+  <li>Adopt <b>smart systems</b> to automatically calculate doses and alert the doctor if the safe limit is exceeded.</li>
+</ul>
 
 Radiation exposure is a medical necessity that cannot be dispensed with, but its risks should never be underestimated. Knowledge, prevention, and modern technologies are essential elements to protect both patients and workers. Continuous awareness, training, and monitoring ensure that radiation benefits are achieved with minimal harm, maintaining a healthy and safe environment for everyone.
 `;
@@ -158,7 +160,7 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
             <p class="lang-text arabic-text">{{ infoTextArabic }}</p>
             <!-- Arabic table for ICRP limits -->
             <div class="overflow-x-auto mt-4 rounded-lg border border-gray-300">
-              <table class="info-table"> <!-- Added class for specific styling -->
+              <table class="info-table" dir="rtl"> <!-- Added dir="rtl" here -->
                 <thead class="bg-gray-50">
                   <tr>
                     <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الفئة</th>
@@ -196,10 +198,10 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
           </div>
           <div v-else class="info-section">
             <h3 class="lang-heading" dir="ltr">English</h3>
-            <p class="lang-text english-text">{{ infoTextEnglish }}</p>
+            <p class="lang-text english-text" v-html="infoTextEnglish"></p> <!-- Use v-html here -->
             <!-- English table for ICRP limits -->
             <div class="overflow-x-auto mt-4 rounded-lg border border-gray-300">
-              <table class="info-table"> <!-- Added class for specific styling -->
+              <table class="info-table" dir="ltr"> <!-- Added dir="ltr" here for consistency -->
                 <thead class="bg-gray-50">
                   <tr>
                     <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
@@ -431,8 +433,20 @@ body {
 .info-table td {
   border: 1px solid #ddd; /* All sides border for cells */
   padding: 12px 15px;
-  text-align: left;
 }
+
+/* Specific text alignment for Arabic table */
+.info-table[dir="rtl"] th,
+.info-table[dir="rtl"] td {
+  text-align: right; /* Align text to the right for RTL tables */
+}
+
+/* Specific text alignment for English table */
+.info-table[dir="ltr"] th,
+.info-table[dir="ltr"] td {
+  text-align: left; /* Align text to the left for LTR tables */
+}
+
 
 .info-table th {
   background-color: #8D99AE; /* Accent color for table header */
