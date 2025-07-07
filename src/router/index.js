@@ -3,6 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import SignupView from '../views/SignupView.vue'
 import LoginPage from '../views/LoginView.vue';
 import PatientDashboard from '../components/PatientDashboard.vue' // WILL BE CHANGED!!!
+import ScanView from "../views/ScanView.vue"
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -23,6 +24,11 @@ const router = createRouter({
     name: 'PatientDashboard',
     component: PatientDashboard,
   },
+  {
+    path: '/scan',
+    name: 'scan',
+    component: ScanView
+  }
 ]
 })
 
