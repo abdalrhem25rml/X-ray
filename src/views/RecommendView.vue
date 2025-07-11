@@ -1,184 +1,183 @@
 <!-- views/RecommendView.vue -->
 <script setup>
-import { ref, inject } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, inject, watch, onMounted } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
+import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
 
 const router = useRouter();
+const route = useRoute();
 const currentLanguage = inject('currentLanguage');
+// toggleInfoModal is not used in this specific template, but kept if it's a global utility
+const toggleInfoModal = inject('toggleInfoModal');
+const db = inject('db'); // Inject Firestore instance
+const auth = inject('auth'); // Inject Auth instance
+const currentUserId = inject('currentUserId'); // Inject reactive currentUserId
+const isAuthReady = inject('isAuthReady'); // Inject reactive auth readiness
 
-// Patient Data State
-const age = ref('');
-const gender = ref(''); // 'male', 'female', 'other'
+// Access VITE_APP_ID directly from environment variables for Firestore path construction
+const VITE_APP_ID = import.meta.env.VITE_APP_ID;
+
+// Reactive state for form inputs (from your original template)
+const age = ref(null);
+const gender = ref('');
 const medicalHistory = ref('');
 const currentSymptoms = ref('');
-const isPregnant = ref(false);
 const allergies = ref('');
-const previousRadiationExposure = ref(''); // Updated to include quantity
-const scanType = ref(''); // New state for scan type: 'CT', 'X-ray', 'Both'
+const isPregnant = ref(false);
+const previousRadiationExposure = ref('');
+const scanType = ref(''); // Type of Scan to Consider
 
-const recommendationResult = ref('');
+// Reactive state for AI response and UI feedback
+const recommendationResult = ref(''); // This will hold the main text recommendation
+const factorDetails = ref(null); // Holds structured AI output for scan factors
+const calculatedMsv = ref(null); // Holds structured AI output for calculated mSv
 const isLoading = ref(false);
 const errorMessage = ref('');
-const calculatedMsv = ref(null); // To store the calculated mSv from Gemini
-const factorDetails = ref(null); // To store extracted factors from Gemini
 
-// Get the API key from environment variables
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_KEY;
+// Patient details from route params and fetched from Firestore
+const patientId = ref(route.params.patientId || '');
+const patientName = ref(''); // Will be fetched based on patientId
+const patientAge = ref(null); // Will be fetched based on patientId
+const patientGender = ref(''); // Will be fetched based on patientId
 
-// Function to convert basic Markdown to HTML
-const markdownToHtml = (markdown) => {
-  if (!markdown) return '';
-
-  let html = markdown;
-
-  // Convert headings (e.g., ## Heading)
-  html = html.replace(/^###\s*(.*)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^##\s*(.*)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^#\s*(.*)$/gm, '<h1>$1</h1>');
-
-  // Convert bold: **text** or __text__ to <strong>text</strong>
-  html = html.replace(/\*\*(.*?)\*\*|__(.*?)__/g, '<strong>$1$2</strong>');
-  // Convert italics: *text* or _text_ to <em>text</em>
-  html = html.replace(/(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)|(?<!_)_(?!_)(.*?)(?<!_)_(?!_)/g, '<em>$1$2</em>');
-
-  // Convert ordered lists (1. Item)
-  html = html.replace(/^(\d+\.\s.*)$/gm, '<li>$1</li>');
-  // Convert unordered lists (- Item or * Item)
-  html = html.replace(/^[*-]\s*(.*)$/gm, '<li>$1</li>');
-
-  // Wrap list items in ul/ol tags if they exist
-  const lines = html.split('<br>'); // Split by <br> which was previously added for newlines
-  let inList = false;
-  let listType = '';
-  let processedLines = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trim();
-    if (line.startsWith('<li>')) {
-      if (!inList) {
-        // Determine list type (very basic, assumes consistent list type)
-        listType = line.match(/^\d+\./) ? 'ol' : 'ul';
-        processedLines.push(`<${listType}>`);
-        inList = true;
-      }
-      processedLines.push(line);
-    } else {
-      if (inList) {
-        processedLines.push(`</${listType}>`);
-        inList = false;
-      }
-      processedLines.push(line);
-    }
-  }
-  if (inList) { // Close last list if still open
-    processedLines.push(`</${listType}>`);
-  }
-  html = processedLines.join('');
-
-  // Convert remaining newlines to <br> (after list processing)
-  html = html.replace(/\n/g, '<br>');
-
-
-  return html;
-};
-
-// Function to extract factors and mSv from Gemini's text response
-const extractFactorsAndMsv = (text) => {
-  const extracted = {};
-  // Regex to handle both English and Arabic labels and units.
-  // Now specifically looking for optional square brackets around the numbers.
-  // (\d+(?:\.\d+)?) captures the number (integer or float) in group 1.
-  const exposureTimeMatch = text.match(/(?:Exposure Time|وقت التعرض):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:ms|ملي ثانية)/i);
-  const tubeCurrentMatch = text.match(/(?:Tube Current|تيار الأنبوب):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:mA|ملي أمبير)/i);
-  const tubeVoltageMatch = text.match(/(?:Tube Voltage|جهد الأنبوب):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:kV|كيلو فولت)/i);
-  const msvMatch = text.match(/(?:Calculated mSv|الجرعة المحسوبة بالملي سيفرت \(mSv\)):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:mSv|ملي سيفرت)/i);
-
-
-  if (exposureTimeMatch) extracted.exposureTimeMs = parseFloat(exposureTimeMatch[1]);
-  if (tubeCurrentMatch) extracted.tubeCurrentMa = parseFloat(tubeCurrentMatch[1]);
-  if (tubeVoltageMatch) extracted.tubeVoltageKv = parseFloat(tubeVoltageMatch[1]);
-  if (msvMatch) extracted.calculatedMsv = parseFloat(msvMatch[1]);
-
-  console.log("Extracted Factors and mSv:", extracted); // Debugging log
-  return extracted;
-};
-
-
-// Function to call Gemini API for recommendations
-const getRecommendations = async () => {
-  // Basic validation
-  if (!age.value || !gender.value || !medicalHistory.value || !currentSymptoms.value || !scanType.value) {
-    errorMessage.value = currentLanguage.value === 'en'
-      ? 'Please fill in all required patient details (Age, Gender, Medical History, Current Symptoms, and Scan Type).'
-      : 'الرجاء ملء جميع تفاصيل المريض المطلوبة (العمر، الجنس، التاريخ الطبي، الأعراض الحالية، ونوع الفحص).';
+// Function to fetch patient details if patientId is provided in the route
+const fetchPatientDetails = async (id) => {
+  // Ensure db and currentUserId are available before attempting to fetch
+  if (!id || !db || !currentUserId.value) {
+    console.warn("Cannot fetch patient details: ID, DB, or User ID not ready.");
     return;
   }
 
-  // Check if API key is available
-  if (!GEMINI_API_KEY) {
-    errorMessage.value = currentLanguage.value === 'en'
-      ? 'Gemini API key is not configured. Please set VITE_GEMINI_KEY in your .env file.'
-      : 'لم يتم تكوين مفتاح API الخاص بـ Gemini. يرجى تعيين VITE_GEMINI_KEY في ملف .env الخاص بك.';
-    console.error('VITE_GEMINI_KEY is not defined.');
-    return;
-  }
-
-  isLoading.value = true;
-  errorMessage.value = '';
-  recommendationResult.value = '';
-  calculatedMsv.value = null; // Reset
-  factorDetails.value = null; // Reset
+  const userIdVal = currentUserId.value; // Get the current user ID
+  // Construct the Firestore document reference for the patient
+  const patientDocRef = doc(db, `artifacts/${VITE_APP_ID}/users/${userIdVal}/patients`, id);
 
   try {
-    // Construct the prompt with patient information
-    // STRONGLY EMPHASIZED EXACT FORMAT AND PLACEMENT FOR FACTORS AND MSV CALCULATION
-    let prompt = currentLanguage.value === 'en'
-      ? `Provide ONLY the predicted scan factors and the calculated mSv dosage first, in the EXACT format on a single line, then a separator "---", then the medical recommendation.
-        Predicted ${scanType.value === 'X-ray' ? 'X-ray' : 'CT'} Factors: Exposure Time: [value] ms, Tube Current: [value] mA, Tube Voltage: [value] kV. Calculated mSv: [value] mSv (using formula: mSv = (Tube Voltage * Tube Current * Exposure Time_ms * 0.00000001)).
-        ---
-        Provide a concise medical recommendation regarding ${scanType.value === 'Both' ? 'X-ray or CT scans' : scanType.value + ' scans'} for a patient based on the following details.
-        Always adhere to the ALARA (As Low As Reasonably Achievable) principle.
-        Patient Details:
-        - Age: ${age.value} years
-        - Gender: ${gender.value}
-        - Medical History: ${medicalHistory.value}
-        - Current Symptoms: ${currentSymptoms.value}
-        - Allergies: ${allergies.value || 'None'}
-        - Previous Radiation Exposure History (Type, Date, and approximate Quantity in mSv if known): ${previousRadiationExposure.value || 'Not specified'}
-        ${gender.value === 'female' && isPregnant.value ? '- Pregnancy Status: Pregnant. Provide specific notes regarding radiation dosage for pregnant patients.' : ''}
+    const patientSnap = await getDoc(patientDocRef);
+    if (patientSnap.exists()) {
+      const patientData = patientSnap.data();
+      patientName.value = patientData.name;
+      patientAge.value = patientData.age;
+      patientGender.value = patientData.gender;
+      // Pre-fill form fields if patient data is available and makes sense
+      age.value = patientData.age;
+      gender.value = patientData.gender.toLowerCase(); // Ensure lowercase for select
+      console.log("Patient details fetched and form pre-filled:", patientData);
+    } else {
+      console.warn("Patient not found for ID:", id);
+      errorMessage.value = currentLanguage.value === 'en' ? 'Patient not found. Please select a valid patient.' : 'المريض غير موجود. الرجاء اختيار مريض صالح.';
+    }
+  } catch (error) {
+    console.error("Error fetching patient details:", error);
+    errorMessage.value = currentLanguage.value === 'en' ? 'Error fetching patient details.' : 'خطأ في جلب تفاصيل المريض.';
+  }
+};
 
-        Please provide a comprehensive, clear, and concise recommendation. Format the recommendation part using Markdown for readability (e.g., bold text, bullet points, headings). Ensure the response is entirely in English. Do NOT provide the mSv calculation formula in your response again after the factors line.`
-      : `الرجاء تقديم عوامل الفحص المتوقعة والجرعة المحسوبة بالملي سيفرت أولاً فقط، بالصيغة الدقيقة على سطر واحد، ثم فاصل "---"، ثم التوصية الطبية.
-        عوامل فحص ${scanType.value === 'X-ray' ? 'الأشعة السينية' : 'الأشعة المقطعية'} المتوقعة: وقت التعرض: [قيمة] ملي ثانية، تيار الأنبوب: [قيمة] ملي أمبير، جهد الأنبوب: [قيمة] كيلو فولت. الجرعة المحسوبة بالملي سيفرت (mSv): [قيمة] ملي سيفرت (باستخدام الصيغة: ملي سيفرت = (جهد الأنبوب * تيار الأنبوب * وقت التعرض بالملي ثانية * 0.00000001)).
-        ---
-        قدم توصية طبية موجزة بشأن فحوصات ${scanType.value === 'Both' ? 'الأشعة السينية أو الأشعة المقطعية' : (scanType.value === 'X-ray' ? 'الأشعة السينية' : 'الأشعة المقطعية')} لمريض بناءً على التفاصيل التالية.
-        التزم دائمًا بمبدأ ALARA (أقل ما يمكن تحقيقه بشكل معقول).
-        تفاصيل المريض:
-        - العمر: ${age.value} سنة
-        - الجنس: ${gender.value === 'male' ? 'ذكر' : (gender.value === 'female' ? 'أنثى' : 'آخر')}
-        - التاريخ الطبي: ${medicalHistory.value}
-        - الأعراض الحالية: ${currentSymptoms.value}
-        - الحساسية: ${allergies.value || 'لا يوجد'}
-        - التعرض السابق للإشعاع (النوع، التاريخ، والكمية التقريبية بالملي سيفرت إن أمكن): ${previousRadiationExposure.value || 'غير محدد'}
-        ${gender.value === 'female' && isPregnant.value ? '- حالة الحمل: حامل. قدم ملاحظات محددة بخصوص جرعة الإشعاع للمريضات الحوامل.' : ''}
+// Watch for changes in auth readiness and patientId to fetch details
+watch([isAuthReady, () => route.params.patientId], ([ready, newPatientId]) => {
+  patientId.value = newPatientId || '';
+  if (ready && patientId.value) {
+    fetchPatientDetails(patientId.value);
+  }
+}, { immediate: true }); // Run immediately on component mount
 
-        الرجاء تقديم توصية شاملة وواضحة وموجزة. قم بتنسيق جزء التوصية باستخدام Markdown لسهولة القراءة (على سبيل المثال، النص الغامق، النقاط النقطية، العناوين). تأكد من أن الرد باللغة العربية بالكامل. لا تقدم صيغة حساب الجرعة بالملي سيفرت في ردك مرة أخرى بعد سطر العوامل.`
+const getRecommendations = async () => {
+  isLoading.value = true;
+  errorMessage.value = ''; // Clear previous errors
+  recommendationResult.value = ''; // Clear previous results
+  factorDetails.value = null;
+  calculatedMsv.value = null;
+
+  // Basic validation for required fields
+  if (!age.value || !gender.value || !medicalHistory.value || !currentSymptoms.value || !scanType.value) {
+    errorMessage.value = currentLanguage.value === 'en' ? 'Please fill in all required fields (Age, Gender, Medical History, Current Symptoms, Scan Type).' : 'الرجاء تعبئة جميع الحقول المطلوبة (العمر، الجنس، التاريخ الطبي، الأعراض الحالية، نوع الفحص).';
+    isLoading.value = false;
+    return;
+  }
+  if (!patientId.value || !patientName.value) {
+    errorMessage.value = currentLanguage.value === 'en' ? 'No patient selected or patient details not loaded. Please go back to Patient List and select a patient.' : 'لم يتم اختيار مريض أو لم يتم تحميل تفاصيل المريض. الرجاء العودة إلى قائمة المرضى واختيار مريض.';
+    isLoading.value = false;
+    return;
+  }
+
+  // Construct the prompt for the Gemini API
+  const prompt = currentLanguage.value === 'en' ?
+    `Based on the following patient details, provide a medical recommendation for an X-ray or CT scan.
+    Also, estimate the typical Tube Voltage (kV), Tube Current (mA), Exposure Time (ms) for the recommended scan, and the approximate Effective Dose (mSv).
+    Patient Name: ${patientName.value}
+    Age: ${age.value}
+    Gender: ${gender.value}
+    Medical History: ${medicalHistory.value}
+    Current Symptoms: ${currentSymptoms.value}
+    Allergies: ${allergies.value || 'None'}
+    Is Pregnant: ${isPregnant.value ? 'Yes' : 'No'}
+    Previous Radiation Exposure: ${previousRadiationExposure.value || 'None known'}
+    Type of Scan to Consider: ${scanType.value}
+
+    The recommendation should be concise, professional, and explain if the estimated dose is within safe limits according to ICRP guidelines (20 mSv/year for medical professionals, 1 mSv/year for general public, 1 mSv for fetus during pregnancy for pregnant workers). If the estimated dose is high, suggest alternatives or precautions.
+    Provide the response in a JSON format with the following keys: "recommendationText" (string), "factorDetails" (object with "tubeVoltageKv", "tubeCurrentMa", "exposureTimeMs" as numbers), and "calculatedMsv" (number).
+    Example JSON structure:
+    {
+      "recommendationText": "...",
+      "factorDetails": {
+        "tubeVoltageKv": 80,
+        "tubeCurrentMa": 100,
+        "exposureTimeMs": 50
+      },
+      "calculatedMsv": 0.1
+    }` :
+    `بناءً على تفاصيل المريض التالية، قدم توصية طبية لفحص بالأشعة السينية أو الأشعة المقطعية.
+    أيضًا، قم بتقدير جهد الأنبوب (kV)، تيار الأنبوب (mA)، وقت التعرض (ms) للفحص الموصى به، والجرعة الفعالة التقريبية (mSv).
+    اسم المريض: ${patientName.value}
+    العمر: ${age.value}
+    الجنس: ${gender.value}
+    التاريخ الطبي: ${medicalHistory.value}
+    الأعراض الحالية: ${currentSymptoms.value}
+    الحساسية: ${allergies.value || 'لا يوجد'}
+    هل هي حامل: ${isPregnant.value ? 'نعم' : 'لا'}
+    التعرض السابق للإشعاع: ${previousRadiationExposure.value || 'لا يوجد معلومات'}
+    نوع الفحص المراد النظر فيه: ${scanType.value}
+
+    يجب أن تكون التوصية موجزة واحترافية، وتوضح ما إذا كانت الجرعة المقدرة ضمن الحدود الآمنة وفقًا لإرشادات اللجنة الدولية للحماية من الإشعاع (ICRP) (20 ملي سيفرت/سنة للعاملين في المجال الطبي، 1 ملي سيفرت/سنة لعامة الجمهور، 1 ملي سيفرت للجنين أثناء الحمل للعاملات الحوامل). إذا كانت الجرعة المقدرة عالية، اقترح بدائل أو احتياطات.
+    قدم الاستجابة بتنسيق JSON مع المفاتيح التالية: "recommendationText" (سلسلة نصية), "factorDetails" (كائن يحتوي على "tubeVoltageKv", "tubeCurrentMa", "exposureTimeMs" كأرقام), و "calculatedMsv" (رقم).
+    مثال على هيكل JSON:
+    {
+      "recommendationText": "...",
+      "factorDetails": {
+        "tubeVoltageKv": 80,
+        "tubeCurrentMa": 100,
+        "exposureTimeMs": 50
+      },
+      "calculatedMsv": 0.1
+    }`;
+
+  try {
+    const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
     const payload = {
-      contents: [
-        {
-          role: "user",
-          parts: [{ text: prompt }]
-        }
-      ],
+      contents: chatHistory,
       generationConfig: {
-        maxOutputTokens: 1000,
-        temperature: 0.7,
-        topP: 0.9,
-        topK: 40
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            recommendationText: { type: "STRING" },
+            factorDetails: {
+              type: "OBJECT",
+              properties: {
+                tubeVoltageKv: { type: "NUMBER" },
+                tubeCurrentMa: { type: "NUMBER" },
+                exposureTimeMs: { type: "NUMBER" }
+              }
+            },
+            calculatedMsv: { type: "NUMBER" }
+          },
+          required: ["recommendationText", "factorDetails", "calculatedMsv"]
+        }
       }
     };
 
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const apiKey = ""; // Canvas will provide this at runtime for gemini-2.0-flash
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -186,72 +185,71 @@ const getRecommendations = async () => {
       body: JSON.stringify(payload)
     });
 
-    console.log('Raw API Response:', response);
-
-    if (!response.ok) {
-      const errorBody = await response.json();
-      console.error('API Error Response Body:', errorBody);
-      errorMessage.value = currentLanguage.value === 'en'
-        ? `API Error: ${response.status} - ${errorBody.error?.message || 'Unknown error'}`
-        : `خطأ في واجهة برمجة التطبيقات: ${response.status} - ${errorBody.error?.message || 'خطأ غير معروف'}`;
-      return;
-    }
-
     const result = await response.json();
-    console.log('Parsed API Result:', result);
 
     if (result.candidates && result.candidates.length > 0 &&
         result.candidates[0].content && result.candidates[0].content.parts &&
         result.candidates[0].content.parts.length > 0) {
-      const geminiText = result.candidates[0].content.parts[0].text;
-      console.log("--- Gemini's raw text response (for debugging factors) ---");
-      console.log(geminiText); // THIS IS THE CRUCIAL LOG FOR YOU TO COPY IF IT FAILS AGAIN
-      console.log("----------------------------------------------------------");
+      const jsonResponse = JSON.parse(result.candidates[0].content.parts[0].text);
 
-      // Split the text to isolate the factors line
-      const parts = geminiText.split('---');
-      let factorsAndMsvLine = '';
-      let recommendationMarkdown = geminiText; // Default to full text if split fails
+      recommendationResult.value = jsonResponse.recommendationText;
+      factorDetails.value = jsonResponse.factorDetails;
+      calculatedMsv.value = jsonResponse.calculatedMsv;
 
-      if (parts.length > 1) {
-        factorsAndMsvLine = parts[0].trim();
-        recommendationMarkdown = parts.slice(1).join('---').trim(); // Rejoin the rest for markdown
+      console.log("Recommendation generated:", recommendationResult.value);
+      console.log("Factor Details:", factorDetails.value);
+      console.log("Calculated mSv:", calculatedMsv.value);
+
+      // Save recommendation to Firestore
+      if (db && currentUserId.value) {
+        const userIdVal = currentUserId.value;
+        const recommendationsCollectionRef = collection(db, `artifacts/${VITE_APP_ID}/users/${userIdVal}/recommendationHistory`);
+        try {
+          await addDoc(recommendationsCollectionRef, {
+            patientId: patientId.value,
+            patientName: patientName.value, // Save patient name for easier display later
+            age: age.value,
+            gender: gender.value,
+            medicalHistory: medicalHistory.value,
+            currentSymptoms: currentSymptoms.value,
+            allergies: allergies.value,
+            isPregnant: isPregnant.value,
+            previousRadiationExposure: previousRadiationExposure.value,
+            scanType: scanType.value,
+            recommendation: recommendationResult.value,
+            factorDetails: factorDetails.value,
+            calculatedMsv: calculatedMsv.value,
+            timestamp: new Date(), // Store current timestamp for ordering
+            language: currentLanguage.value // Store the language of the recommendation
+          });
+          console.log("Recommendation saved to Firestore successfully.");
+        } catch (saveError) {
+          console.error("Error saving recommendation to Firestore:", saveError);
+          errorMessage.value = currentLanguage.value === 'en' ? 'Failed to save recommendation to history.' : 'فشل حفظ التوصية في السجل.';
+        }
       } else {
-        console.warn("Separator '---' not found in Gemini response. Attempting to parse factors from full text.");
-        factorsAndMsvLine = geminiText; // Try to parse from full text as fallback
+        console.warn("Firestore or User ID not available, recommendation not saved.");
       }
 
-      // Extract factors and mSv from the dedicated line
-      const extracted = extractFactorsAndMsv(factorsAndMsvLine);
-      factorDetails.value = {
-        exposureTimeMs: extracted.exposureTimeMs,
-        tubeCurrentMa: extracted.tubeCurrentMa,
-        tubeVoltageKv: extracted.tubeVoltageKv,
-      };
-      calculatedMsv.value = extracted.calculatedMsv;
-
-      // Use the markdownToHtml function to process the recommendation part
-      recommendationResult.value = markdownToHtml(recommendationMarkdown);
-      console.log('Gemini recommendation (HTML):', recommendationResult.value);
     } else {
-      if (result.promptFeedback && result.promptFeedback.blockReason) {
-        errorMessage.value = currentLanguage.value === 'en'
-          ? `Response blocked due to safety reasons: ${result.promptFeedback.blockReason}`
-          : `تم حظر الاستجابة لأسباب تتعلق بالسلامة: ${result.promptFeedback.blockReason}`;
-      } else {
-        errorMessage.value = currentLanguage.value === 'en' ? 'No valid response from API or unexpected structure.' : 'لا توجد استجابة صالحة من واجهة برمجة التطبيقات أو هيكل غير متوقع.';
-      }
+      errorMessage.value = currentLanguage.value === 'en' ? 'Could not generate recommendation. Please try again.' : 'تعذر إنشاء التوصية. الرجاء المحاولة مرة أخرى.';
       console.error('API response structure:', result);
     }
-
-  } catch (err) {
-    console.error('Error calling Gemini API:', err);
-    errorMessage.value = currentLanguage.value === 'en' ? `Recommendation failed: ${err.message}` : `فشل التوصية: ${err.message}`;
+  } catch (error) {
+    console.error("Error generating recommendation:", error);
+    errorMessage.value = currentLanguage.value === 'en' ? `An error occurred: ${error.message}` : `حدث خطأ: ${error.message}`;
   } finally {
     isLoading.value = false;
   }
 };
 
+const goToDashboard = () => {
+  router.push('/dashboard');
+};
+
+const goToPatientList = () => {
+  router.push('/patients');
+};
 </script>
 
 <template>
@@ -263,6 +261,18 @@ const getRecommendations = async () => {
         </h2>
         <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{ currentLanguage === 'en' ? 'Enter patient details to receive recommendations for X-ray or CT scans.' : 'أدخل تفاصيل المريض لتلقي توصيات بشأن فحوصات الأشعة السينية أو الأشعة المقطعية.' }}
+        </p>
+
+        <!-- Display patient info if available -->
+        <p v-if="patientId && patientName" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" class="patient-info-display">
+          {{ currentLanguage === 'en' ? 'Generating recommendation for Patient:' : 'إنشاء توصية للمريض:' }}
+          <strong>{{ patientName }}</strong> ({{ patientAge }} {{ currentLanguage === 'en' ? 'years old' : 'سنة' }}, {{ currentLanguage === 'en' ? patientGender : (patientGender === 'Male' ? 'ذكر' : 'أنثى') }})
+        </p>
+        <p v-else :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" class="text-red-600 font-bold mb-4">
+          {{ currentLanguage === 'en' ? 'No patient selected or patient details not loaded. Please select a patient from the Patient List to generate a recommendation for their history.' : 'لم يتم اختيار مريض أو لم يتم تحميل تفاصيل المريض. الرجاء اختيار مريض من قائمة المرضى لإنشاء توصية لسجله.' }}
+          <button @click="goToPatientList" class="inline-link-button">
+            {{ currentLanguage === 'en' ? 'Go to Patient List' : 'اذهب إلى قائمة المرضى' }}
+          </button>
         </p>
 
         <!-- Disclaimer for non-medical use -->
@@ -397,9 +407,10 @@ const getRecommendations = async () => {
           <button
             type="submit"
             class="action-button primary recommend-button"
-            :disabled="isLoading"
+            :disabled="isLoading || !patientId || !isAuthReady || !currentUserId || !age || !gender || !medicalHistory || !currentSymptoms || !scanType"
           >
             <span v-if="isLoading">
+              <i class="fas fa-spinner fa-spin"></i>
               {{ currentLanguage === 'en' ? 'Getting Recommendations...' : 'جاري الحصول على التوصيات...' }}
             </span>
             <span v-else>
@@ -419,7 +430,7 @@ const getRecommendations = async () => {
         >
           <h3>{{ currentLanguage === 'en' ? 'Recommendations:' : 'التوصيات:' }}</h3>
 
-          <div v-if="factorDetails && factorDetails.tubeVoltageKv" class="factor-details mt-4">
+          <div v-if="factorDetails && factorDetails.tubeVoltageKv !== undefined" class="factor-details mt-4">
             <h4>{{ currentLanguage === 'en' ? 'Predicted Scan Factors:' : 'عوامل الفحص المتوقعة:' }}</h4>
             <p>
               <strong>{{ currentLanguage === 'en' ? 'Tube Voltage:' : 'جهد الأنبوب:' }}</strong> {{ factorDetails.tubeVoltageKv }} kV<br/>
@@ -444,7 +455,7 @@ const getRecommendations = async () => {
         </div>
 
         <p class="switch-link-container mt-8" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          <a href="#" @click.prevent="router.push('/dashboard')">
+          <a href="#" @click.prevent="goToDashboard">
             {{ currentLanguage === 'en' ? 'Back to Dashboard' : 'العودة إلى لوحة التحكم' }}
           </a>
         </p>
@@ -492,6 +503,29 @@ const getRecommendations = async () => {
   color: #555;
   margin-bottom: 30px;
   font-size: 1.1em;
+}
+
+.patient-info-display {
+  font-size: 1.1em;
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 20px;
+}
+
+.inline-link-button {
+  background: none;
+  border: none;
+  color: #8D99AE;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: 1em;
+  padding: 0;
+  margin-left: 5px;
+  transition: color 0.2s ease;
+}
+
+.inline-link-button:hover {
+  color: #6a7483;
 }
 
 /* Form Styling */

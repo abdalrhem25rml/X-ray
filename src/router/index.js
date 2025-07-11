@@ -23,17 +23,19 @@ const router = createRouter({
       path: '/dashboard',
       name: 'dashboard',
       component: DashboardView,
-      // meta: { requiresAuth: true } // Uncomment this later if you want to protect this route
+      meta: { requiresAuth: true } // Uncomment this later if you want to protect this route
     },
     {
-      path: '/recommend',
+      path: '/recommend/:patientId?', // Make patientId optional for flexibility
       name: 'recommend',
-      component: RecommendView
+      component: RecommendView,
+      meta: { requiresAuth: true } // Uncomment this later if you want to protect this route
     },
     {
       path: '/patients', // New route for patient list
       name: 'patients',
-      component: PatientListView
+      component: PatientListView,
+      meta: { requiresAuth: true } // Uncomment this later if you want to protect this route
     }
   ]
 })
