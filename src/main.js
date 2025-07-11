@@ -1,14 +1,14 @@
 // main.js
 import './assets/main.css'
 
-import { createApp, ref } from 'vue' // Import ref here
+import { createApp, ref } from 'vue'
 import App from './App.vue'
 import router from './router'
 
 // Firebase SDK imports for standard npm installation
 import { initializeApp } from "firebase/app";
-import { getAuth, signInAnonymously, onAuthStateChanged } from "firebase/auth"; // Removed signInWithCustomToken as it's not used directly here
-import { getFirestore } from "firebase/firestore"; // Import getFirestore for database
+import { getAuth, onAuthStateChanged } from "firebase/auth"; // Removed signInAnonymously import
+import { getFirestore } from "firebase/firestore";
 import { useAuthStore } from './stores/auth';
 import { createPinia } from 'pinia'
 
@@ -39,15 +39,13 @@ app.use(pinia);
 app.use(router);
 
 // Global authentication state for Firestore operations
-// currentUserId should be a ref from the start
-const currentUserId = ref(null);
+const currentUserId = ref(null); // Reactive ref for current user ID
 const isAuthReady = ref(false); // Reactive state to track auth readiness
 
 // Initialize the auth store and listen for auth state changes
 const authStore = useAuthStore();
 // Pass the initialized auth instance to your store's initAuth method
-// You will need to modify your auth.js to accept this argument.
-authStore.initAuth(auth); // <--- IMPORTANT CHANGE HERE
+authStore.initAuth(auth);
 
 // Set up onAuthStateChanged listener directly in main.js to update reactive states
 onAuthStateChanged(auth, (user) => {
@@ -57,18 +55,6 @@ onAuthStateChanged(auth, (user) => {
   } else {
     currentUserId.value = null; // No user signed in
     console.log("Firebase Auth State Changed: No user is signed in.");
-    // Attempt anonymous sign-in if no user is signed in
-    signInAnonymously(auth)
-      .then(() => {
-        currentUserId.value = auth.currentUser?.uid; // Update after anonymous sign-in
-        console.log("Signed in anonymously for local development. UID:", currentUserId.value);
-      })
-      .catch((error) => {
-        console.error("Error signing in anonymously for local development:", error);
-        // Fallback to a random UUID if anonymous sign-in also fails
-        currentUserId.value = crypto.randomUUID();
-        console.warn("Using a random UUID as userId due to authentication failure:", currentUserId.value);
-      });
   }
   isAuthReady.value = true; // Mark authentication as ready after initial check
 });

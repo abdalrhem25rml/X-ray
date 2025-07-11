@@ -100,12 +100,6 @@ const navigateToSignup = () => {
         </button>
 
         <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'Or' : 'أو' }}
-          <a href="#" @click.prevent="router.push('/dashboard')">
-            {{ currentLanguage === 'en' ? 'Go to Dashboard (Temp)' : 'الانتقال إلى لوحة التحكم (مؤقت)' }}
-          </a>
-        </p>
-        <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{ currentLanguage === 'en' ? 'Don\'t have an account?' : 'ليس لديك حساب؟' }}
           <a href="#" @click.prevent="navigateToSignup">
             {{ currentLanguage === 'en' ? 'Sign Up' : 'التسجيل' }}
