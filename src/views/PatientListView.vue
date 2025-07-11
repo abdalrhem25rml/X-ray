@@ -33,6 +33,10 @@ const patientRecommendationResult = ref('');
 const isGeneratingRecommendation = ref(false);
 const recommendationErrorMessage = ref(''); // Specific for recommendation generation
 
+// New reactive states for predicted factors and calculated mSv in recommendation modal
+const predictedFactorDetails = ref(null); // To store extracted factors from Gemini
+const calculatedMsv = ref(null); // To store the calculated mSv from Gemini
+
 // Get the API key from environment variables
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_KEY;
 
@@ -63,6 +67,7 @@ const markdownToHtml = (markdown) => {
   let listType = '';
   let processedLines = [];
 
+  // Corrected for loop condition
   for (let i = 0; i < lines.length; i++) {
     let line = lines[i].trim();
     if (line.startsWith('<li>')) {
@@ -90,6 +95,27 @@ const markdownToHtml = (markdown) => {
   html = html.replace(/\n/g, '<br>');
 
   return html;
+};
+
+// Function to extract factors and mSv from Gemini's text response
+const extractFactorsAndMsv = (text) => {
+  const extracted = {};
+  // Regex to handle both English and Arabic labels and units.
+  // Now specifically looking for optional square brackets around the numbers.
+  // (\d+(?:\.\d+)?) captures the number (integer or float) in group 1.
+  const exposureTimeMatch = text.match(/(?:Exposure Time|وقت التعرض):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:ms|ملي ثانية)/i);
+  const tubeCurrentMatch = text.match(/(?:Tube Current|تيار الأنبوب):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:mA|ملي أمبير)/i);
+  const tubeVoltageMatch = text.match(/(?:Tube Voltage|جهد الأنبوب):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:kV|كيلو فولت)/i);
+  const msvMatch = text.match(/(?:Calculated mSv|الجرعة المحسوبة بالملي سيفرت \(mSv\)):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:mSv|ملي سيفرت)/i);
+
+
+  if (exposureTimeMatch) extracted.exposureTimeMs = parseFloat(exposureTimeMatch[1]);
+  if (tubeCurrentMatch) extracted.tubeCurrentMa = parseFloat(tubeCurrentMatch[1]);
+  if (tubeVoltageMatch) extracted.tubeVoltageKv = parseFloat(tubeVoltageMatch[1]);
+  if (msvMatch) extracted.calculatedMsv = parseFloat(msvMatch[1]);
+
+  console.log("Extracted Factors and mSv:", extracted); // Debugging log
+  return extracted;
 };
 
 
@@ -186,6 +212,8 @@ const getPatientRecommendation = async (patient) => {
   showRecommendationModal.value = true;
   patientRecommendationResult.value = ''; // Clear previous recommendation
   recommendationErrorMessage.value = ''; // Clear previous error
+  predictedFactorDetails.value = null; // Clear previous factors
+  calculatedMsv.value = null; // Clear previous mSv
   isGeneratingRecommendation.value = true;
 
   if (!GEMINI_API_KEY) {
@@ -201,7 +229,10 @@ const getPatientRecommendation = async (patient) => {
     // Construct the prompt with patient information (excluding current symptoms as they are not stored)
     // EMPHASIS ADDED ON MEDICAL HISTORY AND PREVIOUS RADIATION EXPOSURE
     let prompt = currentLanguage.value === 'en'
-      ? `Provide medical recommendations regarding X-ray or CT scans for a patient based on the following historical details. It is crucial to consider the comprehensive medical history and any previous radiation exposure when making recommendations. Mention possible risks and important considerations.
+      ? `Provide ONLY the predicted scan factors and the calculated mSv dosage first, in the EXACT format on a single line, then a separator "---", then the medical recommendation.
+        Predicted Scan Factors: Exposure Time: [value] ms, Tube Current: [value] mA, Tube Voltage: [value] kV. Calculated mSv: [value] mSv (using formula: mSv = (Tube Voltage * Tube Current * Exposure Time_ms * 0.00000001)).
+        ---
+        Provide a concise medical recommendation regarding X-ray or CT scans for a patient based on the following historical details. It is crucial to consider the comprehensive medical history and any previous radiation exposure when making recommendations. Mention possible risks and important considerations.
         Patient Name: ${patient.name}
         - Age: ${patient.age} years
         - Gender: ${patient.gender}
@@ -209,8 +240,11 @@ const getPatientRecommendation = async (patient) => {
         - Allergies: ${patient.allergies.join(', ') || 'None'}
         - Previous Radiation Exposure History (Type, Date, and approximate Quantity in mSv if known): ${patient.previousRadiationExposure.join(', ') || 'Not specified'}
 
-        Please provide a comprehensive, clear, and concise recommendation. Format the response using Markdown for readability (e.g., bold text, bullet points, headings). Ensure the response is entirely in English.`
-      : `قدم توصيات طبية بشأن فحوصات الأشعة السينية أو الأشعة المقطعية لمريض بناءً على التفاصيل التاريخية التالية. من الأهمية بمكان مراعاة التاريخ الطبي الشامل وأي تعرض سابق للإشعاع عند تقديم التوصيات. اذكر أيضًا المخاطر المحتملة والاعتبارات الهامة.
+        Please provide a comprehensive, clear, and concise recommendation. Format the response using Markdown for readability (e.g., bold text, bullet points, headings). Ensure the response is entirely in English. Do NOT provide the mSv calculation formula in your response again after the factors line.`
+      : `الرجاء تقديم عوامل الفحص المتوقعة والجرعة المحسوبة بالملي سيفرت أولاً فقط، بالصيغة الدقيقة على سطر واحد، ثم فاصل "---"، ثم التوصية الطبية.
+        عوامل الفحص المتوقعة: وقت التعرض: [قيمة] ملي ثانية، تيار الأنبوب: [قيمة] ملي أمبير، جهد الأنبوب: [قيمة] كيلو فولت. الجرعة المحسوبة بالملي سيفرت (mSv): [قيمة] ملي سيفرت (باستخدام الصيغة: ملي سيفرت = (جهد الأنبوب * تيار الأنبوب * وقت التعرض بالملي ثانية * 0.00000001)).
+        ---
+        قدم توصية طبية موجزة بشأن فحوصات الأشعة السينية أو الأشعة المقطعية لمريض بناءً على التفاصيل التاريخية التالية. من الأهمية بمكان مراعاة التاريخ الطبي الشامل وأي تعرض سابق للإشعاع عند تقديم التوصيات. اذكر أيضًا المخاطر المحتملة والاعتبارات الهامة.
         اسم المريض: ${patient.name}
         - العمر: ${patient.age} سنة
         - الجنس: ${patient.gender === 'male' ? 'ذكر' : (patient.gender === 'female' ? 'أنثى' : 'آخر')}
@@ -218,7 +252,7 @@ const getPatientRecommendation = async (patient) => {
         - الحساسية: ${patient.allergies.join(', ') || 'لا يوجد'}
         - التعرض السابق للإشعاع (النوع، التاريخ، والكمية التقريبية بالملي سيفرت إن أمكن): ${patient.previousRadiationExposure.join(', ') || 'غير محدد'}
 
-        الرجاء تقديم توصية شاملة وواضحة وموجزة. قم بتنسيق الاستجابة باستخدام Markdown لسهولة القراءة (على سبيل المثال، النص الغامق، النقاط النقطية، العناوين). تأكد من أن الرد باللغة العربية بالكامل.`;
+        الرجاء تقديم توصية شاملة وواضحة وموجزة. قم بتنسيق الاستجابة باستخدام Markdown لسهولة القراءة (على سبيل المثال، النص الغامق، النقاط النقطية، العناوين). تأكد من أن الرد باللغة العربية بالكامل. لا تقدم صيغة حساب الجرعة بالملي سيفرت في ردك مرة أخرى بعد سطر العوامل.`;
 
     const payload = {
       contents: [
@@ -243,27 +277,58 @@ const getPatientRecommendation = async (patient) => {
       body: JSON.stringify(payload)
     });
 
+    console.log('Raw API Response:', response);
+
     if (!response.ok) {
       const errorBody = await response.json();
-      console.error('Gemini API Error Response Body:', errorBody);
+      console.error('API Error Response Body:', errorBody);
       recommendationErrorMessage.value = currentLanguage.value === 'en'
-        ? `Gemini API Error: ${response.status} - ${errorBody.error?.message || 'Unknown error'}`
-        : `خطأ في واجهة برمجة تطبيقات Gemini: ${response.status} - ${errorBody.error?.message || 'خطأ غير معروف'}`;
+        ? `API Error: ${response.status} - ${errorBody.error?.message || 'Unknown error'}`
+        : `خطأ في واجهة برمجة التطبيقات: ${response.status} - ${errorBody.error?.message || 'خطأ غير معروف'}`;
       return;
     }
 
     const result = await response.json();
-    console.log('Parsed Gemini API Result:', result);
+    console.log('Parsed API Result:', result);
 
     if (result.candidates && result.candidates.length > 0 &&
         result.candidates[0].content && result.candidates[0].content.parts &&
         result.candidates[0].content.parts.length > 0) {
-      patientRecommendationResult.value = markdownToHtml(result.candidates[0].content.parts[0].text);
+      const geminiText = result.candidates[0].content.parts[0].text;
+      console.log("--- Gemini's raw text response (for debugging factors) ---");
+      console.log(geminiText); // THIS IS THE CRUCIAL LOG FOR YOU TO COPY IF IT FAILS AGAIN
+      console.log("----------------------------------------------------------");
+
+      // Split the text to isolate the factors line
+      const parts = geminiText.split('---');
+      let factorsAndMsvLine = '';
+      let recommendationMarkdown = geminiText; // Default to full text if split fails
+
+      if (parts.length > 1) {
+        factorsAndMsvLine = parts[0].trim();
+        recommendationMarkdown = parts.slice(1).join('---').trim(); // Rejoin the rest for markdown
+      } else {
+        console.warn("Separator '---' not found in Gemini response. Attempting to parse factors from full text.");
+        factorsAndMsvLine = geminiText; // Try to parse from full text as fallback
+      }
+
+      // Extract factors and mSv from the dedicated line
+      const extracted = extractFactorsAndMsv(factorsAndMsvLine);
+      predictedFactorDetails.value = { // Using new state variable
+        exposureTimeMs: extracted.exposureTimeMs,
+        tubeCurrentMa: extracted.tubeCurrentMa,
+        tubeVoltageKv: extracted.tubeVoltageKv,
+      };
+      calculatedMsv.value = extracted.calculatedMsv; // Using new state variable
+
+      // Use the markdownToHtml function to process the recommendation part
+      patientRecommendationResult.value = markdownToHtml(recommendationMarkdown);
+      console.log('Gemini recommendation (HTML):', patientRecommendationResult.value);
     } else {
       if (result.promptFeedback && result.promptFeedback.blockReason) {
         recommendationErrorMessage.value = currentLanguage.value === 'en'
-          ? `Recommendation blocked due to safety reasons: ${result.promptFeedback.blockReason}`
-          : `تم حظر التوصية لأسباب تتعلق بالسلامة: ${result.promptFeedback.blockReason}`;
+          ? `Response blocked due to safety reasons: ${result.promptFeedback.blockReason}`
+          : `تم حظر الاستجابة لأسباب تتعلق بالسلامة: ${result.promptFeedback.blockReason}`;
       } else {
         recommendationErrorMessage.value = currentLanguage.value === 'en' ? 'No valid recommendation from API or unexpected structure.' : 'لا توجد توصية صالحة من واجهة برمجة التطبيقات أو هيكل غير متوقع.';
       }
@@ -450,6 +515,28 @@ watch(isAuthReady, (ready) => {
           {{ recommendationErrorMessage }}
         </div>
         <div v-else-if="patientRecommendationResult" class="recommendation-display mt-4">
+          <!-- Display Predicted Scan Factors -->
+          <div v-if="predictedFactorDetails && predictedFactorDetails.tubeVoltageKv" class="factor-details mt-4">
+            <h4>{{ currentLanguage === 'en' ? 'Predicted Scan Factors:' : 'عوامل الفحص المتوقعة:' }}</h4>
+            <p>
+              <strong>{{ currentLanguage === 'en' ? 'Tube Voltage:' : 'جهد الأنبوب:' }}</strong> {{ predictedFactorDetails.tubeVoltageKv }} kV<br/>
+              <strong>{{ currentLanguage === 'en' ? 'Tube Current:' : 'تيار الأنبوب:' }}</strong> {{ predictedFactorDetails.tubeCurrentMa }} mA<br/>
+              <strong>{{ currentLanguage === 'en' ? 'Exposure Time:' : 'وقت التعرض:' }}</strong> {{ predictedFactorDetails.exposureTimeMs }} ms
+            </p>
+          </div>
+
+          <!-- Display Calculated Effective Dose -->
+          <div v-if="calculatedMsv !== null" class="msv-details mt-4">
+            <h4>{{ currentLanguage === 'en' ? 'Calculated Effective Dose:' : 'الجرعة الفعالة المحسوبة:' }}</h4>
+            <p>
+              {{ currentLanguage === 'en' ? 'Approximate Effective Dose:' : 'الجرعة الفعالة التقريبية:' }}
+              <strong>{{ calculatedMsv }} mSv</strong>
+            </p>
+            <p v-if="parseFloat(calculatedMsv) > 5" class="text-red-600 font-semibold">
+              {{ currentLanguage === 'en' ? 'Warning: This calculated dose is relatively high. Further medical consultation is strongly recommended.' : 'تحذير: هذه الجرعة المحسوبة مرتفعة نسبيًا. يوصى بشدة باستشارة طبية إضافية.' }}
+            </p>
+          </div>
+
           <div class="result-text" v-html="patientRecommendationResult"></div>
         </div>
 

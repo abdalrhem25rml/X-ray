@@ -19,13 +19,13 @@ const scanType = ref(''); // New state for scan type: 'CT', 'X-ray', 'Both'
 const recommendationResult = ref('');
 const isLoading = ref(false);
 const errorMessage = ref('');
+const calculatedMsv = ref(null); // To store the calculated mSv from Gemini
+const factorDetails = ref(null); // To store extracted factors from Gemini
 
 // Get the API key from environment variables
-// Vite exposes env variables prefixed with VITE_ on import.meta.env
 const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_KEY;
 
 // Function to convert basic Markdown to HTML
-// NOTE: For full Markdown support, consider using a library like 'marked' or 'markdown-it'.
 const markdownToHtml = (markdown) => {
   if (!markdown) return '';
 
@@ -82,6 +82,28 @@ const markdownToHtml = (markdown) => {
   return html;
 };
 
+// Function to extract factors and mSv from Gemini's text response
+const extractFactorsAndMsv = (text) => {
+  const extracted = {};
+  // Regex to handle both English and Arabic labels and units.
+  // Now specifically looking for optional square brackets around the numbers.
+  // (\d+(?:\.\d+)?) captures the number (integer or float) in group 1.
+  const exposureTimeMatch = text.match(/(?:Exposure Time|وقت التعرض):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:ms|ملي ثانية)/i);
+  const tubeCurrentMatch = text.match(/(?:Tube Current|تيار الأنبوب):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:mA|ملي أمبير)/i);
+  const tubeVoltageMatch = text.match(/(?:Tube Voltage|جهد الأنبوب):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:kV|كيلو فولت)/i);
+  const msvMatch = text.match(/(?:Calculated mSv|الجرعة المحسوبة بالملي سيفرت \(mSv\)):\s*\[?(\d+(?:\.\d+)?)\]?\s*(?:mSv|ملي سيفرت)/i);
+
+
+  if (exposureTimeMatch) extracted.exposureTimeMs = parseFloat(exposureTimeMatch[1]);
+  if (tubeCurrentMatch) extracted.tubeCurrentMa = parseFloat(tubeCurrentMatch[1]);
+  if (tubeVoltageMatch) extracted.tubeVoltageKv = parseFloat(tubeVoltageMatch[1]);
+  if (msvMatch) extracted.calculatedMsv = parseFloat(msvMatch[1]);
+
+  console.log("Extracted Factors and mSv:", extracted); // Debugging log
+  return extracted;
+};
+
+
 // Function to call Gemini API for recommendations
 const getRecommendations = async () => {
   // Basic validation
@@ -104,24 +126,33 @@ const getRecommendations = async () => {
   isLoading.value = true;
   errorMessage.value = '';
   recommendationResult.value = '';
+  calculatedMsv.value = null; // Reset
+  factorDetails.value = null; // Reset
 
   try {
     // Construct the prompt with patient information
+    // STRONGLY EMPHASIZED EXACT FORMAT AND PLACEMENT FOR FACTORS AND MSV CALCULATION
     let prompt = currentLanguage.value === 'en'
-      ? `Provide medical recommendations regarding ${scanType.value === 'Both' ? 'X-ray or CT scans' : scanType.value + ' scans'} for a patient based on the following details. Also, mention possible risks and important considerations.
+      ? `Provide ONLY the predicted scan factors and the calculated mSv dosage first, in the EXACT format on a single line, then a separator "---", then the medical recommendation.
+        Predicted ${scanType.value === 'X-ray' ? 'X-ray' : 'CT'} Factors: Exposure Time: [value] ms, Tube Current: [value] mA, Tube Voltage: [value] kV. Calculated mSv: [value] mSv (using formula: mSv = (Tube Voltage * Tube Current * Exposure Time_ms * 0.00000001)).
+        ---
+        Provide a concise medical recommendation regarding ${scanType.value === 'Both' ? 'X-ray or CT scans' : scanType.value + ' scans'} for a patient based on the following details.
+        Always adhere to the ALARA (As Low As Reasonably Achievable) principle.
         Patient Details:
         - Age: ${age.value} years
         - Gender: ${gender.value}
         - Medical History: ${medicalHistory.value}
         - Current Symptoms: ${currentSymptoms.value}
         - Allergies: ${allergies.value || 'None'}
-        - Previous Radiation Exposure: ${previousRadiationExposure.value || 'Not specified'}
-        ${gender.value === 'female' && isPregnant.value ? '- Pregnancy Status: Pregnant' : ''}
         - Previous Radiation Exposure History (Type, Date, and approximate Quantity in mSv if known): ${previousRadiationExposure.value || 'Not specified'}
-        - Desired Scan Type: ${scanType.value}
+        ${gender.value === 'female' && isPregnant.value ? '- Pregnancy Status: Pregnant. Provide specific notes regarding radiation dosage for pregnant patients.' : ''}
 
-        Please provide a comprehensive, clear, and concise recommendation. Format the response using Markdown for readability (e.g., bold text, bullet points, headings). Ensure the response is entirely in English.`
-      : `قدم توصيات طبية بشأن فحوصات ${scanType.value === 'Both' ? 'الأشعة السينية أو الأشعة المقطعية' : (scanType.value === 'X-ray' ? 'الأشعة السينية' : 'الأشعة المقطعية')} لمريض بناءً على التفاصيل التالية. اذكر أيضًا المخاطر المحتملة والاعتبارات الهامة.
+        Please provide a comprehensive, clear, and concise recommendation. Format the recommendation part using Markdown for readability (e.g., bold text, bullet points, headings). Ensure the response is entirely in English. Do NOT provide the mSv calculation formula in your response again after the factors line.`
+      : `الرجاء تقديم عوامل الفحص المتوقعة والجرعة المحسوبة بالملي سيفرت أولاً فقط، بالصيغة الدقيقة على سطر واحد، ثم فاصل "---"، ثم التوصية الطبية.
+        عوامل فحص ${scanType.value === 'X-ray' ? 'الأشعة السينية' : 'الأشعة المقطعية'} المتوقعة: وقت التعرض: [قيمة] ملي ثانية، تيار الأنبوب: [قيمة] ملي أمبير، جهد الأنبوب: [قيمة] كيلو فولت. الجرعة المحسوبة بالملي سيفرت (mSv): [قيمة] ملي سيفرت (باستخدام الصيغة: ملي سيفرت = (جهد الأنبوب * تيار الأنبوب * وقت التعرض بالملي ثانية * 0.00000001)).
+        ---
+        قدم توصية طبية موجزة بشأن فحوصات ${scanType.value === 'Both' ? 'الأشعة السينية أو الأشعة المقطعية' : (scanType.value === 'X-ray' ? 'الأشعة السينية' : 'الأشعة المقطعية')} لمريض بناءً على التفاصيل التالية.
+        التزم دائمًا بمبدأ ALARA (أقل ما يمكن تحقيقه بشكل معقول).
         تفاصيل المريض:
         - العمر: ${age.value} سنة
         - الجنس: ${gender.value === 'male' ? 'ذكر' : (gender.value === 'female' ? 'أنثى' : 'آخر')}
@@ -129,11 +160,9 @@ const getRecommendations = async () => {
         - الأعراض الحالية: ${currentSymptoms.value}
         - الحساسية: ${allergies.value || 'لا يوجد'}
         - التعرض السابق للإشعاع (النوع، التاريخ، والكمية التقريبية بالملي سيفرت إن أمكن): ${previousRadiationExposure.value || 'غير محدد'}
-        ${gender.value === 'female' && isPregnant.value ? '- حالة الحمل: حامل' : ''}
-        - نوع الفحص المطلوب: ${scanType.value === 'CT' ? 'الأشعة المقطعية' : (scanType.value === 'X-ray' ? 'الأشعة السينية' : 'كلاهما')}
+        ${gender.value === 'female' && isPregnant.value ? '- حالة الحمل: حامل. قدم ملاحظات محددة بخصوص جرعة الإشعاع للمريضات الحوامل.' : ''}
 
-        الرجاء تقديم توصية شاملة وواضحة وموجزة. قم بتنسيق الاستجابة باستخدام Markdown لسهولة القراءة (على سبيل المثال، النص الغامق، النقاط النقطية، العناوين). تأكد من أن الرد باللغة العربية بالكامل.`;
-
+        الرجاء تقديم توصية شاملة وواضحة وموجزة. قم بتنسيق جزء التوصية باستخدام Markdown لسهولة القراءة (على سبيل المثال، النص الغامق، النقاط النقطية، العناوين). تأكد من أن الرد باللغة العربية بالكامل. لا تقدم صيغة حساب الجرعة بالملي سيفرت في ردك مرة أخرى بعد سطر العوامل.`
     const payload = {
       contents: [
         {
@@ -174,8 +203,35 @@ const getRecommendations = async () => {
     if (result.candidates && result.candidates.length > 0 &&
         result.candidates[0].content && result.candidates[0].content.parts &&
         result.candidates[0].content.parts.length > 0) {
-      // Use the markdownToHtml function to process the response
-      recommendationResult.value = markdownToHtml(result.candidates[0].content.parts[0].text);
+      const geminiText = result.candidates[0].content.parts[0].text;
+      console.log("--- Gemini's raw text response (for debugging factors) ---");
+      console.log(geminiText); // THIS IS THE CRUCIAL LOG FOR YOU TO COPY IF IT FAILS AGAIN
+      console.log("----------------------------------------------------------");
+
+      // Split the text to isolate the factors line
+      const parts = geminiText.split('---');
+      let factorsAndMsvLine = '';
+      let recommendationMarkdown = geminiText; // Default to full text if split fails
+
+      if (parts.length > 1) {
+        factorsAndMsvLine = parts[0].trim();
+        recommendationMarkdown = parts.slice(1).join('---').trim(); // Rejoin the rest for markdown
+      } else {
+        console.warn("Separator '---' not found in Gemini response. Attempting to parse factors from full text.");
+        factorsAndMsvLine = geminiText; // Try to parse from full text as fallback
+      }
+
+      // Extract factors and mSv from the dedicated line
+      const extracted = extractFactorsAndMsv(factorsAndMsvLine);
+      factorDetails.value = {
+        exposureTimeMs: extracted.exposureTimeMs,
+        tubeCurrentMa: extracted.tubeCurrentMa,
+        tubeVoltageKv: extracted.tubeVoltageKv,
+      };
+      calculatedMsv.value = extracted.calculatedMsv;
+
+      // Use the markdownToHtml function to process the recommendation part
+      recommendationResult.value = markdownToHtml(recommendationMarkdown);
       console.log('Gemini recommendation (HTML):', recommendationResult.value);
     } else {
       if (result.promptFeedback && result.promptFeedback.blockReason) {
@@ -362,6 +418,27 @@ const getRecommendations = async () => {
           :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
         >
           <h3>{{ currentLanguage === 'en' ? 'Recommendations:' : 'التوصيات:' }}</h3>
+
+          <div v-if="factorDetails && factorDetails.tubeVoltageKv" class="factor-details mt-4">
+            <h4>{{ currentLanguage === 'en' ? 'Predicted Scan Factors:' : 'عوامل الفحص المتوقعة:' }}</h4>
+            <p>
+              <strong>{{ currentLanguage === 'en' ? 'Tube Voltage:' : 'جهد الأنبوب:' }}</strong> {{ factorDetails.tubeVoltageKv }} kV<br/>
+              <strong>{{ currentLanguage === 'en' ? 'Tube Current:' : 'تيار الأنبوب:' }}</strong> {{ factorDetails.tubeCurrentMa }} mA<br/>
+              <strong>{{ currentLanguage === 'en' ? 'Exposure Time:' : 'وقت التعرض:' }}</strong> {{ factorDetails.exposureTimeMs }} ms
+            </p>
+          </div>
+
+          <div v-if="calculatedMsv !== null" class="msv-details mt-4">
+            <h4>{{ currentLanguage === 'en' ? 'Calculated Effective Dose:' : 'الجرعة الفعالة المحسوبة:' }}</h4>
+            <p>
+              {{ currentLanguage === 'en' ? 'Approximate Effective Dose:' : 'الجرعة الفعالة التقريبية:' }}
+              <strong>{{ calculatedMsv }} mSv</strong>
+            </p>
+            <p v-if="parseFloat(calculatedMsv) > 5" class="text-red-600 font-semibold">
+              {{ currentLanguage === 'en' ? 'Warning: This calculated dose is relatively high. Further medical consultation is strongly recommended.' : 'تحذير: هذه الجرعة المحسوبة مرتفعة نسبيًا. يوصى بشدة باستشارة طبية إضافية.' }}
+            </p>
+          </div>
+
           <!-- Use v-html to render the Markdown-converted HTML -->
           <div class="result-text" v-html="recommendationResult"></div>
         </div>
@@ -525,15 +602,30 @@ const getRecommendations = async () => {
   text-align: center; /* Center the heading */
 }
 
-.prediction-result[dir="ltr"] .result-text {
+.prediction-result h4 {
+  color: #40a9ff; /* Slightly lighter blue for sub-heading */
+  font-size: 1.2em;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+  font-weight: 600;
+  text-align: center;
+}
+
+.prediction-result[dir="ltr"] .result-text,
+.prediction-result[dir="ltr"] .factor-details,
+.prediction-result[dir="ltr"] .msv-details {
   text-align: left;
 }
 
-.prediction-result[dir="rtl"] .result-text {
+.prediction-result[dir="rtl"] .result-text,
+.prediction-result[dir="rtl"] .factor-details,
+.prediction-result[dir="rtl"] .msv-details {
   text-align: right;
 }
 
-.prediction-result .result-text {
+.prediction-result .result-text,
+.prediction-result .factor-details p,
+.prediction-result .msv-details p {
   color: #333;
   font-size: 1.1em;
   line-height: 1.6;

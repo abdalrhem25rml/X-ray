@@ -31,87 +31,97 @@ watch(currentLanguage, (newLang) => {
 
 // Information text content (moved from SignupView.vue)
 const infoTextArabic = `
-التعرض الإشعاعي هو كمية الإشعاع التي يتلقاها الجسم عند مروره في بيئة تحتوي على إشعاع مؤين، مثل الأشعة السينية (X-rays) أو الأشعة المقطعية (CT). وتُقاس الجرعة الإشعاعية بوحدة "الميلي سيفرت" (mSv)، وهي وحدة تعكس التأثير البيولوجي للإشعاع على أنسجة الجسم.
+<p>التعرض الإشعاعي هو كمية الإشعاع التي يتلقاها الجسم عند مروره في بيئة تحتوي على إشعاع مؤين، مثل الأشعة السينية (X-rays) أو الأشعة المقطعية (CT). وتُقاس الجرعة الإشعاعية بوحدة "الميلي سيفرت" (mSv)، وهي وحدة تعكس التأثير البيولوجي للإشعاع على أنسجة الجسم.</p>
 
-تكمن الخطورة في أن الإشعاع المؤين يمكن أن يسبب تلفًا في الخلايا، مما يزيد من خطر الإصابة بالأمراض المزمنة مثل السرطان، خاصةً مع التعرض المتكرر أو الطويل. لذلك:
-المرضى يجب ألا يتعرضوا إلا عند الضرورة، ويجب تسجيل كل فحص وتقييم فائدته مقابل ضرره.
-العاملون في المجال الطبي مثل أطباء الأشعة وفنيي الأشعة، يتعرضون بشكل مزمن، مما يستدعي مراقبة دورية واتباع إجراءات السلامة.
-النساء الحوامل هن فئة خاصة يجب أخذ الحيطة الشديدة عند تعرّضهن للإشعاع لتجنّب التأثير على الجنين.
+<p>تكمن الخطورة في أن الإشعاع المؤين يمكن أن يسبب تلفًا في الخلايا، مما يزيد من خطر الإصابة بالأمراض المزمنة مثل السرطان، خاصةً مع التعرض المتكرر أو الطويل. لذلك:</p>
+<ul>
+  <li><strong>المرضى</strong> يجب ألا يتعرضوا إلا عند الضرورة، ويجب تسجيل كل فحص وتقييم فائدته مقابل ضرره.</li>
+  <li><strong>العاملون في المجال الطبي</strong> مثل أطباء الأشعة وفنيي الأشعة، يتعرضون بشكل مزمن، مما يستدعي مراقبة دورية واتباع إجراءات السلامة.</li>
+  <li><strong>النساء الحوامل</strong> هن فئة خاصة يجب أخذ الحيطة الشديدة عند تعرّضهن للإشعاع لتجنّب التأثير على الجنين.</li>
+</ul>
 
-الحد السنوي المسموح به للتعرض الإشعاعي
-وفقًا لتوصيات اللجنة الدولية للحماية من الإشعاع (ICRP):
-الفئة: العاملون في المجال الطبي
-الحد السنوي المسموح به: 20 ميلي سيفرت (mSv)
-ملاحظات: كمتوسط على مدى 5 سنوات، بشرط ألا يتجاوز 50 mSv في سنة واحدة.
+<p><strong>الحد السنوي المسموح به للتعرض الإشعاعي</strong><br>
+وفقًا لتوصيات اللجنة الدولية للحماية من الإشعاع (ICRP):</p>
+<strong>الفئة:</strong> العاملون في المجال الطبي<br>
+<strong>الحد السنوي المسموح به:</strong> 20 ميلي سيفرت (mSv)<br>
+<strong>ملاحظات:</strong> كمتوسط على مدى 5 سنوات، بشرط ألا يتجاوز 50 mSv في سنة واحدة.
 
-الفئة: المرضى
-الحد السنوي المسموح به: لا يوجد حد صارم
-ملاحظات: يجب تقليل التعرض بقدر الإمكان وفق مبدأ ALARA (As Low As Reasonably Achievable).
+<p><strong>الفئة:</strong> المرضى<br>
+<strong>الحد السنوي المسموح به:</strong> لا يوجد حد صارم<br>
+<strong>ملاحظات:</strong> يجب تقليل التعرض بقدر الإمكان وفق مبدأ ALARA (As Low As Reasonably Achievable).</p>
 
-الفئة: النساء الحوامل العاملات
-الحد السنوي المسموح به: 1 ميلي سيفرت للجنين خلال الحمل
-ملاحظات: يجب ألا تتجاوز الجرعة 1 mSv من تاريخ العلم بالحمل وحتى الولادة.
+<p><strong>الفئة:</strong> النساء الحوامل العاملات<br>
+<strong>الحد السنوي المسموح به:</strong> 1 ميلي سيفرت للجنين خلال الحمل<br>
+<strong>ملاحظات:</strong> يجب ألا تتجاوز الجرعة 1 mSv من تاريخ العلم بالحمل وحتى الولادة.</p>
 
-الفئة: العامة (غير العاملين بالمجال)
-الحد السنوي المسموح به: 1 ميلي سيفرت
-ملاحظات: في الظروف الطبيعية بدون إجراءات طبية.
+<p><strong>الفئة:</strong> العامة (غير العاملين بالمجال)<br>
+<strong>الحد السنوي المسموح به:</strong> 1 ميلي سيفرت<br>
+<strong>ملاحظات:</strong> في الظروف الطبيعية بدون إجراءات طبية.</p>
 
-كيف تتم مراقبة الجرعات؟
-أجهزة قياس الجرعة الشخصية (TLD أو Dosimeter) تُلبس على الجسم لتسجيل الجرعة اليومية أو الشهرية.
-أنظمة إلكترونية ذكية تُستخدم في بعض المستشفيات لمتابعة الجرعة تلقائيًا وحفظ السجلات.
-تحقيقات دورية من أقسام الوقاية الإشعاعية لمراجعة مستويات التعرض والتحقق من تطبيق إجراءات السلامة
+<p><strong>كيف تتم مراقبة الجرعات؟</strong></p>
+<ul>
+  <li><strong>أجهزة قياس الجرعة الشخصية</strong> (TLD أو Dosimeter) تُلبس على الجسم لتسجيل الجرعة اليومية أو الشهرية.</li>
+  <li><strong>أنظمة إلكترونية ذكية</strong> تُستخدم في بعض المستشفيات لمتابعة الجرعة تلقائيًا وحفظ السجلات.</li>
+  <li><strong>تحقيقات دورية</strong> من أقسام الوقاية الإشعاعية لمراجعة مستويات التعرض والتحقق من تطبيق إجراءات السلامة.</li>
+</ul>
 
-خطوات الوقاية
-استخدام الواقيات الرصاصية (مثل السترات والدروع).
-تقليل وقت التعرض قدر الإمكان.
-زيادة المسافة بين الشخص ومصدر الإشعاع.
-استخدام تقنيات تصوير بديلة مثل الموجات فوق الصوتية أو الرنين المغناطيسي عند الإمكان.
-اعتماد أنظمة ذكية لحساب الجرعات تلقائيًا وتنبيه الطبيب في حال تجاوز الحد الآمن.
+<p><strong>خطوات الوقاية</strong></p>
+<ul>
+  <li>استخدام <strong>الواقيات الرصاصية</strong> (مثل السترات والدروع).</li>
+  <li>تقليل <strong>وقت التعرض</strong> قدر الإمكان.</li>
+  <li>زيادة <strong>المسافة</strong> بين الشخص ومصدر الإشعاع.</li>
+  <li>استخدام <strong>تقنيات تصوير بديلة</strong> مثل الموجات فوق الصوتية أو الرنين المغناطيسي عند الإمكان.</li>
+  <li>اعتماد <strong>أنظمة ذكية</strong> لحساب الجرعات تلقائيًا وتنبيه الطبيب في حال تجاوز الحد الآمن.</li>
+</ul>
 
-التعرض الإشعاعي ضرورة طبية لا يمكن الاستغناء عنها، ولكن لا ينبغي أبدًا الاستهانة بمخاطره. فالمعرفة والوقاية والتقنيات الحديثة تمثل عناصر أساسية لحماية كل من المرضى والعاملين. التوعية المستمرة والتدريب والرقابة تضمن تحقيق الفائدة من الإشعاع بأقل الأضرار، وتحافظ على بيئة صحية وآمنة للجميع
+<p>التعرض الإشعاعي ضرورة طبية لا يمكن الاستغناء عنها، ولكن لا ينبغي أبدًا الاستهانة بمخاطره. فالمعرفة والوقاية والتقنيات الحديثة تمثل عناصر أساسية لحماية كل من المرضى والعاملين. التوعية المستمرة والتدريب والرقابة تضمن تحقيق الفائدة من الإشعاع بأقل الأضرار، وتحافظ على بيئة صحية وآمنة للجميع.</p>
 `;
 
 const infoTextEnglish = `
-Radiation exposure is the amount of radiation received by the body when passing through an environment containing ionizing radiation, such as X-rays or CT scans. The radiation dose is measured in "millisieverts" (mSv), a unit that reflects the biological effect of radiation on body tissues.
+<p>Radiation exposure is the amount of radiation received by the body when passing through an environment containing ionizing radiation, such as X-rays or CT scans. The radiation dose is measured in "millisieverts" (mSv), a unit that reflects the biological effect of radiation on body tissues.</p>
 
-The danger lies in the fact that ionizing radiation can cause cell damage, increasing the risk of chronic diseases like cancer, especially with repeated or prolonged exposure. Therefore:
-<b>Patients</b> should only be exposed when necessary, and every examination should be recorded and its benefit evaluated against its harm.
-<b>Medical professionals</b>, such as radiologists and radiology technicians, are chronically exposed, requiring periodic monitoring and adherence to safety procedures.
-<b>Pregnant women</b> are a special category who should exercise extreme caution when exposed to radiation to avoid affecting the fetus.
-
-<b>Annual Permissible Radiation Exposure Limit</b>
-According to the recommendations of the International Commission on Radiological Protection (ICRP):
-<b>Category:</b> Medical Professionals
-<b>Annual Permissible Limit:</b> 20 millisieverts (mSv)
-<b>Notes:</b> As an average over 5 years, provided it does not exceed 50 mSv in a single year.
-
-<b>Category:</b> Patients
-<b>Annual Permissible Limit:</b> No strict limit
-<b>Notes:</b> Exposure should be reduced as much as possible according to the ALARA principle (As Low As Reasonably Achievable).
-
-<b>Category:</b> Pregnant Workers
-<b>Annual Permissible Limit:</b> 1 millisievert for the fetus during pregnancy
-<b>Notes:</b> The dose should not exceed 1 mSv from the date of knowledge of pregnancy until birth.
-
-<b>Category:</b> General Public (non-medical workers)
-<b>Annual Permissible Limit:</b> 1 millisievert
-<b>Notes:</b> Under normal circumstances without medical procedures.
-
-<b>How are doses monitored?</b>
-<b>Personal dose measuring devices</b> (TLD or Dosimeter) are worn on the body to record daily or monthly doses.
-<b>Smart electronic systems</b> are used in some hospitals to automatically track doses and maintain records.
-<b>Periodic investigations</b> by radiation protection departments to review exposure levels and verify the implementation of safety procedures.
-
-<b>Prevention Steps</b>
+<p>The danger lies in the fact that ionizing radiation can cause cell damage, increasing the risk of chronic diseases like cancer, especially with repeated or prolonged exposure. Therefore:</p>
 <ul>
-  <li>Use <b>lead shields</b> (e.g., aprons and barriers).</li>
-  <li>Reduce <b>exposure time</b> as much as possible.</li>
-  <li>Increase the <b>distance</b> between the person and the radiation source.</li>
-  <li>Use <b>alternative imaging techniques</b> such as ultrasound or MRI when possible.</li>
-  <li>Adopt <b>smart systems</b> to automatically calculate doses and alert the doctor if the safe limit is exceeded.</li>
+  <li><strong>Patients</strong> should only be exposed when necessary, and every examination should be recorded and its benefit evaluated against its harm.</li>
+  <li><strong>Medical professionals</strong>, such as radiologists and radiology technicians, are chronically exposed, requiring periodic monitoring and adherence to safety procedures.</li>
+  <li><strong>Pregnant women</strong> are a special category who should exercise extreme caution when exposed to radiation to avoid affecting the fetus.</li>
 </ul>
 
-Radiation exposure is a medical necessity that cannot be dispensed with, but its risks should never be underestimated. Knowledge, prevention, and modern technologies are essential elements to protect both patients and workers. Continuous awareness, training, and monitoring ensure that radiation benefits are achieved with minimal harm, maintaining a healthy and safe environment for everyone.
+<p><strong>Annual Permissible Radiation Exposure Limit</strong><br>
+According to the recommendations of the International Commission on Radiological Protection (ICRP):</p>
+<strong>Category:</strong> Medical Professionals<br>
+<strong>Annual Permissible Limit:</strong> 20 millisieverts (mSv)<br>
+<strong>Notes:</strong> As an average over 5 years, provided it does not exceed 50 mSv in a single year.
+
+<p><strong>Category:</strong> Patients<br>
+<strong>Annual Permissible Limit:</strong> No strict limit<br>
+<strong>Notes:</strong> Exposure should be reduced as much as possible according to the ALARA principle (As Low As Reasonably Achievable).</p>
+
+<p><strong>Category:</strong> Pregnant Workers<br>
+<strong>Annual Permissible Limit:</strong> 1 millisievert for the fetus during pregnancy<br>
+<strong>Notes:</strong> The dose should not exceed 1 mSv from the date of knowledge of pregnancy until birth.</p>
+
+<p><strong>Category:</strong> General Public (non-medical workers)<br>
+<strong>Annual Permissible Limit:</strong> 1 millisievert<br>
+<strong>Notes:</strong> Under normal circumstances without medical procedures.</p>
+
+<p><strong>How are doses monitored?</strong></p>
+<ul>
+  <li><strong>Personal dose measuring devices</strong> (TLD or Dosimeter) are worn on the body to record daily or monthly doses.</li>
+  <li><strong>Smart electronic systems</strong> are used in some hospitals to automatically track doses and maintain records.</li>
+  <li><strong>Periodic investigations</strong> by radiation protection departments to review exposure levels and verify the implementation of safety procedures.</li>
+</ul>
+
+<p><strong>Prevention Steps</strong></p>
+<ul>
+  <li>Use <strong>lead shields</strong> (e.g., aprons and barriers).</li>
+  <li>Reduce <strong>exposure time</strong> as much as possible.</li>
+  <li>Increase the <strong>distance</strong> between the person and the radiation source.</li>
+  <li>Use <strong>alternative imaging techniques</strong> such as ultrasound or MRI when possible.</li>
+  <li>Adopt <strong>smart systems</strong> to automatically calculate doses and alert the doctor if the safe limit is exceeded.</li>
+</ul>
+
+<p>Radiation exposure is a medical necessity that cannot be dispensed with, but its risks should never be underestimated. Knowledge, prevention, and modern technologies are essential elements to protect both patients and workers. Continuous awareness, training, and monitoring ensure that the benefits of radiation are achieved with minimal harm, maintaining a healthy and safe environment for everyone.</p>
 `;
 </script>
 
@@ -157,7 +167,7 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
           <!-- Conditionally display Arabic or English content -->
           <div v-if="currentLanguage === 'ar'" class="info-section">
             <h3 class="lang-heading" dir="rtl">العربية (Arabic)</h3>
-            <p class="lang-text arabic-text">{{ infoTextArabic }}</p>
+            <div class="lang-text arabic-text" v-html="infoTextArabic"></div> <!-- Use v-html here -->
             <!-- Arabic table for ICRP limits -->
             <div class="overflow-x-auto mt-4 rounded-lg border border-gray-300">
               <table class="info-table" dir="rtl"> <!-- Added dir="rtl" here -->
@@ -198,7 +208,7 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
           </div>
           <div v-else class="info-section">
             <h3 class="lang-heading" dir="ltr">English</h3>
-            <p class="lang-text english-text" v-html="infoTextEnglish"></p> <!-- Use v-html here -->
+            <div class="lang-text english-text" v-html="infoTextEnglish"></div> <!-- Use v-html here -->
             <!-- English table for ICRP limits -->
             <div class="overflow-x-auto mt-4 rounded-lg border border-gray-300">
               <table class="info-table" dir="ltr"> <!-- Added dir="ltr" here for consistency -->
@@ -234,7 +244,7 @@ Radiation exposure is a medical necessity that cannot be dispensed with, but its
               </table>
             </div>
             <p class="mt-4 lang-text english-text">
-              Radiation exposure is a medical necessity that cannot be dispensed with, but its risks should never be underestimated. Knowledge, prevention, and modern technologies are essential elements to protect both patients and workers. Continuous awareness, training, and monitoring ensure that radiation benefits are achieved with minimal harm, maintaining a healthy and safe environment for everyone.
+              Radiation exposure is a medical necessity that cannot be dispensed with, but its risks should never be underestimated. Knowledge, prevention, and modern technologies are essential elements to protect both patients and workers. Continuous awareness, training, and monitoring ensure that the benefits of radiation are achieved with minimal harm, maintaining a healthy and safe environment for everyone.
             </p>
           </div>
         </div>
@@ -400,9 +410,37 @@ body {
   line-height: 1.8; /* Increased line height for readability */
   font-size: 1.1em;
   text-align: justify;
-  white-space: pre-wrap; /* Preserves formatting */
+  /* Removed white-space: pre-wrap; to allow proper HTML rendering */
   color: #444; /* Slightly darker text for readability */
 }
+
+/* Styles for lists within the info modal text */
+.lang-text ul {
+  list-style-type: disc !important; /* Ensures the bullet points appear, overriding any reset */
+  list-style-position: outside !important; /* Ensures bullets are outside the content */
+  margin-top: 10px !important;
+  margin-bottom: 10px !important;
+  /* Removed padding-left: 0 !important; padding-right: 0 !important; from here */
+}
+
+.lang-text.english-text ul {
+  padding-left: 20px !important; /* Explicit padding for LTR lists */
+  margin-left: 0 !important; /* Ensure no additional margin */
+  margin-right: 0 !important;
+}
+
+.lang-text.arabic-text ul {
+  padding-right: 20px !important; /* Explicit padding for RTL lists */
+  padding-left: 0 !important; /* Ensure no left padding */
+  margin-right: 0 !important; /* Ensure no additional margin */
+  margin-left: 0 !important;
+}
+
+.lang-text li {
+  margin-bottom: 5px !important; /* Spacing between list items */
+  /* No specific text-align here, let it inherit or default */
+}
+
 
 .arabic-text {
   direction: rtl; /* Right-to-left for Arabic */
