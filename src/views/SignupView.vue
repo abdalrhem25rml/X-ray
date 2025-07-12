@@ -32,7 +32,7 @@ const handleGoogleSignup = async () => {
 };
 
 const navigateToLogin = () => {
-  router.push('/login'); // Navigate to the /login path
+  router.push('/signin'); // Navigate to the /login path
 };
 </script>
 

@@ -3,11 +3,11 @@ import './assets/main.css'
 
 import { createApp, ref } from 'vue'
 import App from './App.vue'
-import router from './router'
+import router from './router' // Import the router
 
-// Firebase SDK imports for standard npm installation
+// Firebase SDK imports
 import { initializeApp } from "firebase/app";
-import { getAuth, onAuthStateChanged } from "firebase/auth"; // Removed signInAnonymously import
+import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { useAuthStore } from './stores/auth';
 import { createPinia } from 'pinia'
@@ -16,13 +16,16 @@ import { createPinia } from 'pinia'
 // Firebase configuration using environment variables (Vite's import.meta.env)
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_API_KEY,
-  authDomain: import.meta.env.VITE_AUTH_DOMAIN,
+  authDomain: import.meta.env.VITE_AUTH_DOMAIN, // Use from .env or Firebase default
   projectId: import.meta.env.VITE_PROJECT_ID,
   storageBucket: import.meta.env.VITE_STORAGE_BUCKET,
   messagingSenderId: import.meta.env.VITE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_APP_ID,
   measurementId: import.meta.env.VITE_MEASUREMENT_ID // Optional
 };
+
+console.log("main.js: Firebase Config authDomain:", firebaseConfig.authDomain);
+
 
 // Initialize Firebase App FIRST
 const firebaseApp = initializeApp(firebaseConfig);
@@ -36,27 +39,49 @@ const pinia = createPinia();
 app.use(pinia);
 
 // Use the router
-app.use(router);
+app.use(router); // Make sure router is used before authStore is initialized
 
 // Global authentication state for Firestore operations
-const currentUserId = ref(null); // Reactive ref for current user ID
+const currentUserId = ref(null);
 const isAuthReady = ref(false); // Reactive state to track auth readiness
 
 // Initialize the auth store and listen for auth state changes
 const authStore = useAuthStore();
-// Pass the initialized auth instance to your store's initAuth method
-authStore.initAuth(auth);
+authStore.initAuth(auth); // Pass the initialized auth instance to your store's initAuth method
 
 // Set up onAuthStateChanged listener directly in main.js to update reactive states
 onAuthStateChanged(auth, (user) => {
-  if (user) {
-    currentUserId.value = user.uid;
-    console.log("Firebase Auth State Changed: User is signed in with UID:", currentUserId.value);
-  } else {
-    currentUserId.value = null; // No user signed in
-    console.log("Firebase Auth State Changed: No user is signed in.");
-  }
+  currentUserId.value = user ? user.uid : null;
+  authStore.user = user; // Update Pinia store's user state
+  authStore.isAuthenticated = !!user; // Update Pinia store's isAuthenticated state
   isAuthReady.value = true; // Mark authentication as ready after initial check
+
+  console.log("main.js: Firebase Auth State Changed: User is:", user ? user.uid : 'null');
+
+  if (user) {
+    console.log("main.js: Firebase Auth State Changed: User is signed in with UID:", user.uid);
+    // Redirect to dashboard if user is signed in and currently on a public auth route
+    const currentRouteName = router.currentRoute.value.name;
+    if (currentRouteName === 'signup' || currentRouteName === 'signin') {
+      console.log("main.js: Authenticated user on auth page, redirecting to dashboard.");
+      router.push('/dashboard');
+    }
+  } else {
+    console.log("main.js: Firebase Auth State Changed: No user is signed in.");
+    // Attempt anonymous sign-in as a fallback for local development if no explicit user
+    signInAnonymously(auth)
+      .then(() => {
+        currentUserId.value = auth.currentUser?.uid; // Update after anonymous sign-in
+        authStore.user = auth.currentUser; // Update Pinia store
+        authStore.isAuthenticated = !!auth.currentUser; // Update Pinia store
+        console.log("main.js: Signed in anonymously for local development. UID:", currentUserId.value);
+      })
+      .catch((error) => {
+        console.error("main.js: Error signing in anonymously for local development:", error);
+        currentUserId.value = crypto.randomUUID(); // Fallback to a random UUID
+        console.warn("main.js: Using a random UUID as userId due to authentication failure:", currentUserId.value);
+      });
+  }
 });
 
 
@@ -65,6 +90,7 @@ app.provide('db', db);
 app.provide('auth', auth);
 app.provide('currentUserId', currentUserId); // Provide reactive userId
 app.provide('isAuthReady', isAuthReady); // Provide reactive auth status
+app.provide('appId', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id'); // Provide appId
 
 app.mount('#app');
 

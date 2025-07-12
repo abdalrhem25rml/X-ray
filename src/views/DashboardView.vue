@@ -11,7 +11,7 @@ const auth = inject('auth'); // Inject the auth instance from main.js
 const handleLogout = async () => {
   try {
     await auth.signOut();
-    router.push('/login'); // Redirect to login page after logout
+    router.push('/signin'); // Redirect to login page after logout
   } catch (error) {
     console.error("Error logging out:", error);
     // Optionally display an error message to the user

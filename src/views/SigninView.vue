@@ -1,4 +1,4 @@
-<!-- LoginView.vue -->
+<!-- SigninView.vue -->
 <script setup>
 import { ref, inject } from 'vue'; // Import ref
 import { useRouter } from 'vue-router';
@@ -16,12 +16,14 @@ const password = ref('');
 
 // Function to handle email/password login
 const handleEmailLogin = async () => {
-  await authStore.loginWithEmail(email.value, password.value);
+  // This function call is correct and working
+  await authStore.signInWithEmail(email.value, password.value);
 };
 
 // Function to handle Google login
 const handleGoogleLogin = async () => {
-  await authStore.loginWithGoogle();
+  // This function call is correct and working
+  await authStore.signInWithGoogle();
 };
 
 const navigateToSignup = () => {
@@ -37,7 +39,7 @@ const navigateToSignup = () => {
           {{ currentLanguage === 'en' ? 'Welcome Back! Please Sign In' : 'أهلاً بعودتك! يرجى تسجيل الدخول' }}
         </h2>
         <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'Log in to access your dashboard.' : 'سجّل الدخول للوصول إلى لوحة التحكم الخاصة بك.' }}
+          {{ currentLanguage === 'en' ? 'Sign in to access your dashboard.' : 'سجّل الدخول للوصول إلى لوحة التحكم الخاصة بك.' }}
         </p>
 
         <form @submit.prevent="handleEmailLogin" class="login-form">
@@ -72,10 +74,10 @@ const navigateToSignup = () => {
 
           <button class="action-button primary" type="submit" :disabled="authStore.loading">
             <span v-if="authStore.loading">
-              {{ currentLanguage === 'en' ? 'Logging In...' : 'جاري تسجيل الدخول...' }}
+              {{ currentLanguage === 'en' ? 'Signing In...' : 'جاري تسجيل الدخول...' }}
             </span>
             <span v-else>
-              {{ currentLanguage === 'en' ? 'Log In' : 'تسجيل الدخول' }}
+              {{ currentLanguage === 'en' ? 'Sign in' : 'تسجيل الدخول' }}
             </span>
           </button>
         </form>
@@ -96,7 +98,7 @@ const navigateToSignup = () => {
             <path d="M11.75 28.5C11.25 27.25 11 25.75 11 24C11 22.25 11.25 20.75 11.75 19.5L17.25 14.5C16 17.25 15.25 20.5 15.25 24C15.25 27.5 16 30.75 17.25 33.5L11.75 28.5Z" fill="#FBBC05"/>
             <path d="M24 9.5C26.75 9.5 29.25 10.5 31.25 12.25L36.5 7C32.5 3 27.25 0 24 0C15.5 0 8.75 5.75 6.25 11L11.75 16C13.75 10.25 18.5 6 24 6C24 6 24 9.5 24 9.5Z" fill="#EA4335"/>
           </svg>
-          <span>{{ currentLanguage === 'en' ? 'Log In with Google' : 'تسجيل الدخول باستخدام جوجل' }}</span>
+          <span>{{ currentLanguage === 'en' ? 'Sign in with Google' : 'تسجيل الدخول باستخدام جوجل' }}</span>
         </button>
 
         <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
