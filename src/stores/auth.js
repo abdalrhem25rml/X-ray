@@ -3,37 +3,33 @@ import { defineStore } from 'pinia';
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithPopup, // Using signInWithPopup for Google Auth
+  signInWithPopup,
   GoogleAuthProvider,
   updateProfile,
   onAuthStateChanged,
-  signOut as firebaseSignOut
+  signOut as firebaseSignOut,
+  sendPasswordResetEmail, // Import for password reset
+  confirmPasswordReset, // Import for confirming password reset
+  applyActionCode, // Needed for applying action code if confirmPasswordReset requires it
 } from "firebase/auth";
-
-// No need to import router here, as redirection is handled by router.beforeEach
-// import router from '../router';
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
-    user: null, // Stores the Firebase user object
-    isAuthenticated: false, // Indicates if a user is currently logged in
-    isAuthReady: false, // Indicates if the initial Firebase auth check is complete
-    loading: false, // For general loading states (e.g., during signup/login)
-    error: null,    // For authentication-related errors
-    authInstance: null, // To store the auth instance passed from main.js
+    user: null,
+    isAuthenticated: false,
+    isAuthReady: false,
+    loading: false,
+    error: null,
+    successMessage: null, // New state for success messages
+    authInstance: null,
   }),
 
   getters: {
-    // Returns the current user's display name or 'Guest' if not logged in
     currentUserDisplayName: (state) => state.user ? state.user.displayName || state.user.email : 'Guest',
-    // Checks if a user is currently logged in
     isLoggedIn: (state) => state.isAuthenticated,
   },
 
   actions: {
-    // Initializes the Firebase Auth listener
-    // This method now *receives* the auth instance from main.js and stores it.
-    // The actual onAuthStateChanged listener is managed in main.js.
     initAuth(auth) {
       if (!auth) {
         console.error("Auth Store: Auth instance not provided to initAuth.");
@@ -41,24 +37,19 @@ export const useAuthStore = defineStore('auth', {
       }
       this.authInstance = auth;
       console.log("Auth Store: initAuth called, authInstance set.");
-
-      // For signInWithPopup, getRedirectResult is not the primary mechanism,
-      // so we'll remove its call here to simplify and avoid confusion.
-      // The onAuthStateChanged listener in main.js will be the source of truth.
     },
 
-    // Handles user signup with email and password
     async signupWithEmail(name, email, password) {
       this.loading = true;
       this.error = null;
+      this.successMessage = null;
       try {
         if (!this.authInstance) throw new Error("Auth instance not initialized.");
         const userCredential = await createUserWithEmailAndPassword(this.authInstance, email, password);
         const user = userCredential.user;
         await updateProfile(user, { displayName: name });
         console.log("Auth Store: User signed up with email via Pinia:", user.email, "Name:", user.displayName);
-        // State update (user, isAuthenticated) will be handled by the onAuthStateChanged listener in main.js
-        // Redirection will be handled by router.beforeEach
+        this.successMessage = 'Account created successfully! You are now logged in.';
       } catch (error) {
         console.error("Auth Store: Error signing up with email via Pinia:", error.code, error.message);
         switch (error.code) {
@@ -73,10 +64,10 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    // Handles user signup with Google using a popup
     async signupWithGoogle() {
       this.loading = true;
       this.error = null;
+      this.successMessage = null;
       try {
         if (!this.authInstance) {
           console.error("Auth Store: signupWithGoogle - Auth instance is null or undefined.");
@@ -84,11 +75,10 @@ export const useAuthStore = defineStore('auth', {
         }
         const provider = new GoogleAuthProvider();
         console.log("Auth Store: signupWithGoogle - Attempting to open Google signup popup...");
-        const userCredential = await signInWithPopup(this.authInstance, provider); // Using signInWithPopup
+        const userCredential = await signInWithPopup(this.authInstance, provider);
         const user = userCredential.user;
         console.log("Auth Store: signupWithGoogle SUCCESS via popup. User:", user.email);
-        // State update (user, isAuthenticated) will be handled by the onAuthStateChanged listener in main.js
-        // Redirection will be handled by router.beforeEach
+        this.successMessage = 'Signed up with Google successfully! You are now logged in.';
       } catch (error) {
         console.error("Auth Store: signupWithGoogle - Error during Google signup popup:", error.code, error.message);
         switch (error.code) {
@@ -102,16 +92,15 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    // Handles user login with email and password
-    async signInWithEmail(email, password) { // Renamed from loginWithEmail
+    async signInWithEmail(email, password) {
       this.loading = true;
       this.error = null;
+      this.successMessage = null;
       try {
         if (!this.authInstance) throw new Error("Auth instance not initialized.");
         const userCredential = await signInWithEmailAndPassword(this.authInstance, email, password);
         console.log("Auth Store: User signed in with email:", userCredential.user.email);
-        // State update (user, isAuthenticated) will be handled by the onAuthStateChanged listener in main.js
-        // Redirection will be handled by router.beforeEach
+        this.successMessage = 'Logged in successfully!';
       } catch (error) {
         console.error("Auth Store: Error signing in with email:", error.code, error.message);
         switch (error.code) {
@@ -126,10 +115,10 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    // Handles user login with Google using a popup
-    async signInWithGoogle() { // Renamed from loginWithGoogle
+    async signInWithGoogle() {
       this.loading = true;
       this.error = null;
+      this.successMessage = null;
       try {
         if (!this.authInstance) {
           console.error("Auth Store: signInWithGoogle - Auth instance is null or undefined.");
@@ -137,11 +126,10 @@ export const useAuthStore = defineStore('auth', {
         }
         const provider = new GoogleAuthProvider();
         console.log("Auth Store: signInWithGoogle - Attempting to open Google login popup...");
-        const userCredential = await signInWithPopup(this.authInstance, provider); // Using signInWithPopup
+        const userCredential = await signInWithPopup(this.authInstance, provider);
         const user = userCredential.user;
         console.log("Auth Store: signInWithGoogle SUCCESS via popup. User:", user.email);
-        // State update (user, isAuthenticated) will be handled by the onAuthStateChanged listener in main.js
-        // Redirection will be handled by router.beforeEach
+        this.successMessage = 'Logged in with Google successfully!';
       } catch (error) {
         console.error("Auth Store: signInWithGoogle - Error during Google login popup:", error.code, error.message);
         switch (error.code) {
@@ -155,19 +143,75 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    // Handles user logout
     async signOut() {
       this.loading = true;
       this.error = null;
+      this.successMessage = null;
       try {
         if (!this.authInstance) throw new Error("Auth instance not initialized.");
         await firebaseSignOut(this.authInstance);
         console.log('Auth Store: User logged out.');
-        // State update (user, isAuthenticated) will be handled by the onAuthStateChanged listener in main.js
-        // Redirection will be handled by router.beforeEach
+        this.successMessage = 'You have been logged out.';
       } catch (error) {
         console.error("Auth Store: Error signing out:", error.message);
         this.error = `Logout failed: ${error.message}`;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    // New action: Send password reset email
+    async sendPasswordReset(email) {
+      this.loading = true;
+      this.error = null;
+      this.successMessage = null;
+      try {
+        if (!this.authInstance) throw new Error("Auth instance not initialized.");
+        await sendPasswordResetEmail(this.authInstance, email);
+        this.successMessage = 'Password reset email sent! Please check your inbox.';
+        console.log("Auth Store: Password reset email sent to:", email);
+      } catch (error) {
+        console.error("Auth Store: Error sending password reset email:", error.code, error.message);
+        switch (error.code) {
+          case 'auth/invalid-email': this.error = 'The email address is not valid.'; break;
+          case 'auth/user-not-found': this.error = 'No user found with this email address.'; break;
+          default: this.error = `Failed to send reset email: ${error.message}`; break;
+        }
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    // New action: Confirm password reset and set new password
+    async confirmPasswordReset(oobCode, newPassword) {
+      this.loading = true;
+      this.error = null;
+      this.successMessage = null;
+      try {
+        if (!this.authInstance) throw new Error("Auth instance not initialized.");
+
+        // Apply the action code first to validate it
+        await applyActionCode(this.authInstance, oobCode);
+        console.log("Auth Store: Action code applied successfully.");
+
+        // Then confirm the password reset
+        await confirmPasswordReset(this.authInstance, oobCode, newPassword);
+        this.successMessage = 'Your password has been reset successfully! You are now logged in.';
+        console.log("Auth Store: Password reset confirmed and new password set.");
+
+        // After successful password reset, the user is typically signed in automatically
+        // The onAuthStateChanged listener in main.js will pick this up and redirect to dashboard.
+
+      } catch (error) {
+        console.error("Auth Store: Error confirming password reset:", error.code, error.message);
+        switch (error.code) {
+          case 'auth/expired-action-code': this.error = 'The password reset link has expired.'; break;
+          case 'auth/invalid-action-code': this.error = 'The password reset link is invalid.'; break;
+          case 'auth/user-disabled': this.error = 'This account has been disabled.'; break;
+          case 'auth/user-not-found': this.error = 'User not found for this reset request.'; break;
+          case 'auth/weak-password': this.error = 'The new password is too weak. Please choose a stronger password (at least 6 characters).'; break;
+          default: this.error = `Failed to reset password: ${error.message}`; break;
+        }
       } finally {
         this.loading = false;
       }

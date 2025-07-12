@@ -29,6 +29,11 @@ const handleGoogleLogin = async () => {
 const navigateToSignup = () => {
   router.push('/'); // Navigate to the root path (SignupView)
 };
+
+// New function to navigate to the reset password page
+const navigateToResetPassword = () => {
+  router.push('/resetpassword');
+};
 </script>
 
 <template>
@@ -70,6 +75,12 @@ const navigateToSignup = () => {
               required
               minlength="6"
             />
+            <!-- Forgot password link added here -->
+            <p class="forgot-password-link" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              <a href="#" @click.prevent="navigateToResetPassword">
+                {{ currentLanguage === 'en' ? 'Forgot your password?' : 'هل نسيت كلمة المرور؟' }}
+              </a>
+            </p>
           </div>
 
           <button class="action-button primary" type="submit" :disabled="authStore.loading">
@@ -86,6 +97,11 @@ const navigateToSignup = () => {
         <div v-if="authStore.error" class="message error-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{ authStore.error }}
         </div>
+        <!-- Display success message from store -->
+        <div v-if="authStore.successMessage" class="message success-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+          {{ authStore.successMessage }}
+        </div>
+
 
         <div class="divider" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           <span>{{ currentLanguage === 'en' ? 'OR' : 'أو' }}</span>
@@ -194,6 +210,29 @@ const navigateToSignup = () => {
   box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2); /* Subtle glow on focus */
 }
 
+/* New style for forgot password link */
+.forgot-password-link {
+  text-align: left; /* Default for LTR languages */
+  margin-top: 8px; /* Space above the link */
+  font-size: 0.9em;
+}
+
+/* Specific style for RTL direction */
+[dir="rtl"] .forgot-password-link {
+  text-align: right;
+}
+
+.forgot-password-link a {
+  color: #8D99AE; /* Use the theme's accent color */
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.forgot-password-link a:hover {
+  text-decoration: underline;
+}
+
+
 .action-button {
   background-color: #8D99AE;
   color: white;
@@ -206,7 +245,7 @@ const navigateToSignup = () => {
   transition: background-color 0.3s ease, transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   width: 100%; /* Make button full width */
-  margin-top: 20px; /* Space above the button, if not already handled by form-group gap */
+  /* margin-top: 20px; Space above the button, if not already handled by form-group gap */
 }
 
 .action-button:hover {
@@ -313,6 +352,12 @@ const navigateToSignup = () => {
   background-color: #ffe0e0;
   color: #d32f2f;
   border: 1px solid #d32f2f;
+}
+
+.success-message {
+  background-color: #e6ffed;
+  color: #1a7a3d;
+  border: 1px solid #1a7a3d;
 }
 
 /* Responsive Adjustments (similar to SignupView) */
