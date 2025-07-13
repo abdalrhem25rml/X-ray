@@ -477,7 +477,7 @@ onUnmounted(() => {
             {{ currentLanguage === 'en' ? 'Existing Patients' : 'المرضى الحاليون' }}
           </h3>
           <div v-if="isLoadingPatients" class="loading-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-            <i class="fas fa-spinner fa-spin"></i>
+<font-awesome-icon icon="spinner" spin />
             {{ currentLanguage === 'en' ? 'Loading patients...' : 'جاري تحميل المرضى...' }}
           </div>
           <div v-else-if="patients.length === 0" class="no-patients-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
@@ -500,16 +500,16 @@ onUnmounted(() => {
                   <td :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ currentLanguage === 'en' ? patient.gender : (patient.gender === 'male' ? 'ذكر' : (patient.gender === 'female' ? 'أنثى' : 'آخر')) }}</td>
                   <td>
                     <button @click="openPatientDetails(patient)" class="action-button-sm view-button" aria-label="View patient details">
-                      <i class="fas fa-eye"></i>
+    <font-awesome-icon icon="eye" />
                     </button>
                     <button @click="openEditPatientModal(patient)" class="action-button-sm edit-button" aria-label="Edit patient">
-                      <i class="fas fa-edit"></i>
+<font-awesome-icon icon="edit" />
                     </button>
                     <button @click="confirmDeletePatient(patient)" class="action-button-sm delete-button" aria-label="Delete patient">
-                      <i class="fas fa-trash-alt"></i>
+<font-awesome-icon icon="trash-alt" />
                     </button>
                     <button @click="goToRecommendPage(patient.id)" class="action-button-sm recommend-button" aria-label="Generate new recommendation">
-                      <i class="fas fa-file-medical"></i>
+<font-awesome-icon icon="file-medical" />
                     </button>
                   </td>
                 </tr>
@@ -579,7 +579,7 @@ onUnmounted(() => {
 
             <button type="submit" class="action-button primary" :disabled="isAddingPatient">
               <span v-if="isAddingPatient">
-                <i class="fas fa-spinner fa-spin"></i>
+<font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Adding Patient...' : 'جاري إضافة المريض...' }}
               </span>
               <span v-else>
@@ -617,7 +617,7 @@ onUnmounted(() => {
               {{ currentLanguage === 'en' ? 'Recommendation History' : 'سجل التوصيات' }}
             </h4>
             <button @click="goToRecommendPage(selectedPatient.id)" class="action-button primary generate-new-recommendation-button">
-              <i class="fas fa-plus"></i>
+<font-awesome-icon icon="plus" />
               {{ currentLanguage === 'en' ? 'Generate New Recommendation' : 'إنشاء توصية جديدة' }}
             </button>
 
@@ -635,13 +635,13 @@ onUnmounted(() => {
                 <p><strong>{{ currentLanguage === 'en' ? 'Reason:' : 'السبب:' }}</strong> {{ rec.reason || 'N/A' }}</p>
                 <div class="recommendation-actions">
                   <button @click="openRecommendationDetails(rec)" class="action-button-sm view-button">
-                    <i class="fas fa-eye"></i>
+                    <i class="fas fa-eye"></i> <!-- View Icon -->
                   </button>
                   <button @click="openEditRecommendationModal(rec)" class="action-button-sm edit-button">
-                    <i class="fas fa-edit"></i>
+                    <i class="fas fa-edit"></i> <!-- Edit Icon -->
                   </button>
                   <button @click="confirmDeleteRecommendation(rec)" class="action-button-sm delete-button">
-                    <i class="fas fa-trash-alt"></i>
+                    <i class="fas fa-trash-alt"></i> <!-- Delete Icon -->
                   </button>
                 </div>
               </div>
@@ -703,7 +703,7 @@ onUnmounted(() => {
 
             <button type="submit" class="action-button primary" :disabled="isLoadingPatients">
               <span v-if="isLoadingPatients">
-                <i class="fas fa-spinner fa-spin"></i>
+<font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Updating...' : 'جاري التحديث...' }}
               </span>
               <span v-else>
@@ -733,7 +733,7 @@ onUnmounted(() => {
           <div class="modal-actions">
             <button @click="deletePatient" class="action-button delete-button-confirm" :disabled="isLoadingPatients">
               <span v-if="isLoadingPatients">
-                <i class="fas fa-spinner fa-spin"></i>
+<font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Deleting...' : 'جاري الحذف...' }}
               </span>
               <span v-else>
@@ -827,7 +827,7 @@ onUnmounted(() => {
             </div>
             <button type="submit" class="action-button primary" :disabled="isLoadingPatients">
               <span v-if="isLoadingPatients">
-                <i class="fas fa-spinner fa-spin"></i>
+<font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Updating...' : 'جاري التحديث...' }}
               </span>
               <span v-else>
@@ -857,7 +857,7 @@ onUnmounted(() => {
           <div class="modal-actions">
             <button @click="deleteRecommendation" class="action-button delete-button-confirm" :disabled="isLoadingPatients">
               <span v-if="isLoadingPatients">
-                <i class="fas fa-spinner fa-spin"></i>
+<font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Deleting...' : 'جاري الحذف...' }}
               </span>
               <span v-else>

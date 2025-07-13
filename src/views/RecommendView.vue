@@ -410,7 +410,7 @@ const goToPatientList = () => {
             :disabled="isLoading || !patientId || !isAuthReady || !currentUserId || !age || !gender || !medicalHistory || !currentSymptoms || !scanType"
           >
             <span v-if="isLoading">
-              <i class="fas fa-spinner fa-spin"></i>
+<font-awesome-icon icon="spinner" spin />
               {{ currentLanguage === 'en' ? 'Getting Recommendations...' : 'جاري الحصول على التوصيات...' }}
             </span>
             <span v-else>

@@ -3,7 +3,7 @@ import './assets/main.css'
 
 import { createApp, ref } from 'vue'
 import App from './App.vue'
-import router from './router' // Import the router
+import router from './router'
 
 // Firebase SDK imports
 import { initializeApp } from "firebase/app";
@@ -11,6 +11,23 @@ import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { useAuthStore } from './stores/auth';
 import { createPinia } from 'pinia'
+
+// --- Font Awesome imports ---
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import {
+  faEye,
+  faEdit,
+  faTrashAlt,
+  faFileMedical,
+  faPlus,
+  faSpinner // For loading indicators
+  // Add any other solid icons you use here (e.g., faUser, faCog, etc.)
+} from '@fortawesome/free-solid-svg-icons'
+
+// Add the imported icons to the Font Awesome library
+library.add(faEye, faEdit, faTrashAlt, faFileMedical, faPlus, faSpinner)
+// --- End Font Awesome imports ---
 
 
 // Firebase configuration using environment variables (Vite's import.meta.env)
@@ -39,7 +56,11 @@ const pinia = createPinia();
 app.use(pinia);
 
 // Use the router
-app.use(router); // Make sure router is used before authStore is initialized
+app.use(router);
+
+// Register the Font Awesome component globally
+app.component('font-awesome-icon', FontAwesomeIcon)
+
 
 // Global authentication state for Firestore operations
 const currentUserId = ref(null);
@@ -62,7 +83,8 @@ onAuthStateChanged(auth, (user) => {
     console.log("main.js: Firebase Auth State Changed: User is signed in with UID:", user.uid);
     // Redirect to dashboard if user is signed in and currently on a public auth route
     const currentRouteName = router.currentRoute.value.name;
-    if (currentRouteName === 'signup' || currentRouteName === 'signin') {
+    const publicAuthRoutes = ['signup', 'signin', 'resetpassword', 'newpassword'];
+    if (publicAuthRoutes.includes(currentRouteName)) {
       console.log("main.js: Authenticated user on auth page, redirecting to dashboard.");
       router.push('/dashboard');
     }
