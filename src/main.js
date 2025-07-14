@@ -7,7 +7,7 @@ import router from './router'
 
 // Firebase SDK imports
 import { initializeApp } from "firebase/app";
-import { getAuth, onAuthStateChanged, signInAnonymously } from "firebase/auth";
+import { getAuth, onAuthStateChanged } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { useAuthStore } from './stores/auth';
 import { createPinia } from 'pinia'
@@ -90,19 +90,10 @@ onAuthStateChanged(auth, (user) => {
     }
   } else {
     console.log("main.js: Firebase Auth State Changed: No user is signed in.");
-    // Attempt anonymous sign-in as a fallback for local development if no explicit user
-    signInAnonymously(auth)
-      .then(() => {
-        currentUserId.value = auth.currentUser?.uid; // Update after anonymous sign-in
-        authStore.user = auth.currentUser; // Update Pinia store
-        authStore.isAuthenticated = !!auth.currentUser; // Update Pinia store
-        console.log("main.js: Signed in anonymously for local development. UID:", currentUserId.value);
-      })
-      .catch((error) => {
-        console.error("main.js: Error signing in anonymously for local development:", error);
-        currentUserId.value = crypto.randomUUID(); // Fallback to a random UUID
-        console.warn("main.js: Using a random UUID as userId due to authentication failure:", currentUserId.value);
-      });
+    currentUserId.value = null;
+    authStore.user = null;
+    authStore.isAuthenticated = false;
+
   }
 });
 
