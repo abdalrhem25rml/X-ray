@@ -1,22 +1,22 @@
 <!-- views/DashboardView.vue -->
 <script setup>
-import { inject } from 'vue';
-import { useRouter } from 'vue-router';
+import { inject } from 'vue'
+import { useRouter } from 'vue-router'
 
-const router = useRouter();
-const currentLanguage = inject('currentLanguage');
-const auth = inject('auth'); // Inject the auth instance from main.js
+const router = useRouter()
+const currentLanguage = inject('currentLanguage')
+const auth = inject('auth') // Inject the auth instance from main.js
 
 // Function to handle logout
 const handleLogout = async () => {
   try {
-    await auth.signOut();
-    router.push('/signin'); // Redirect to login page after logout
+    await auth.signOut()
+    router.push('/signin') // Redirect to login page after logout
   } catch (error) {
-    console.error("Error logging out:", error);
+    console.error('Error logging out:', error)
     // Optionally display an error message to the user
   }
-};
+}
 </script>
 
 <template>
@@ -24,30 +24,48 @@ const handleLogout = async () => {
     <main class="dashboard-main-content">
       <section class="dashboard-card">
         <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'Welcome to X-Ray Dose Tracker' : 'مرحبًا بك في متتبع جرعات الأشعة السينية' }}
+          {{
+            currentLanguage === 'en'
+              ? 'Welcome to X-Ray Dose Tracker'
+              : 'مرحبًا بك في متتبع جرعات الأشعة السينية'
+          }}
         </h2>
         <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'Your comprehensive tool for managing patient radiation exposure and recommendations.' : 'أداتك الشاملة لإدارة تعرض المرضى للإشعاع وتقديم التوصيات.' }}
+          {{
+            currentLanguage === 'en'
+              ? 'Your comprehensive tool for managing patient radiation exposure and recommendations.'
+              : 'أداتك الشاملة لإدارة تعرض المرضى للإشعاع وتقديم التوصيات.'
+          }}
         </p>
 
         <div class="dashboard-features">
           <div class="feature-item" @click="router.push('/recommend')">
-            <i class="fas fa-file-medical"></i> <!-- Icon for recommendation -->
+            <i class="fas fa-file-medical"></i>
+            <!-- Icon for recommendation -->
             <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
               {{ currentLanguage === 'en' ? 'Get Scan Recommendation' : 'الحصول على توصية' }}
             </h3>
             <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-              {{ currentLanguage === 'en' ? 'Receive AI-powered recommendations for X-ray or CT scans based on patient data.' : 'احصل على توصيات مدعومة بالذكاء الاصطناعي لفحوصات الأشعة السينية أو الأشعة المقطعية بناءً على بيانات المريض.' }}
+              {{
+                currentLanguage === 'en'
+                  ? 'Receive AI-powered recommendations for X-ray or CT scans based on patient data.'
+                  : 'احصل على توصيات مدعومة بالذكاء الاصطناعي لفحوصات الأشعة السينية أو الأشعة المقطعية بناءً على بيانات المريض.'
+              }}
             </p>
           </div>
 
           <div class="feature-item" @click="router.push('/patients')">
-            <i class="fas fa-users"></i> <!-- Icon for patient management -->
+            <i class="fas fa-users"></i>
+            <!-- Icon for patient management -->
             <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
               {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
             </h3>
             <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-              {{ currentLanguage === 'en' ? 'View, add, and manage patient records securely.' : 'عرض وإضافة وإدارة سجلات المرضى بأمان.' }}
+              {{
+                currentLanguage === 'en'
+                  ? 'View, add, and manage patient records securely.'
+                  : 'عرض وإضافة وإدارة سجلات المرضى بأمان.'
+              }}
             </p>
           </div>
         </div>
@@ -89,7 +107,7 @@ const handleLogout = async () => {
 }
 
 .dashboard-card h2 {
-  color: #8D99AE;
+  color: #8d99ae;
   margin-bottom: 20px;
   font-size: 2.2em;
   font-weight: 700;
@@ -118,7 +136,9 @@ const handleLogout = async () => {
   min-width: 280px; /* Minimum width for feature items */
   max-width: 350px;
   cursor: pointer;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -134,7 +154,7 @@ const handleLogout = async () => {
 
 .feature-item i {
   font-size: 3.5em;
-  color: #8D99AE;
+  color: #8d99ae;
   margin-bottom: 15px;
 }
 
@@ -153,7 +173,7 @@ const handleLogout = async () => {
 }
 
 .action-button {
-  background-color: #8D99AE;
+  background-color: #8d99ae;
   color: white;
   border: none;
   padding: 15px 30px;
@@ -161,7 +181,9 @@ const handleLogout = async () => {
   cursor: pointer;
   font-size: 1.15em;
   font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   margin-top: 40px;
   width: auto; /* Allow button to size based on content */

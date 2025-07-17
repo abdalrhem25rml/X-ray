@@ -1,23 +1,23 @@
 <!-- ResetPasswordView.vue -->
 <script setup>
-import { ref, inject } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '../stores/auth';
+import { ref, inject } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
-const router = useRouter();
-const authStore = useAuthStore();
+const router = useRouter()
+const authStore = useAuthStore()
 
-const currentLanguage = inject('currentLanguage');
+const currentLanguage = inject('currentLanguage')
 
-const email = ref('');
+const email = ref('')
 
 const handlePasswordReset = async () => {
-  await authStore.sendPasswordReset(email.value);
-};
+  await authStore.sendPasswordReset(email.value)
+}
 
 const navigateToSignin = () => {
-  router.push('/signin');
-};
+  router.push('/signin')
+}
 </script>
 
 <template>
@@ -28,7 +28,11 @@ const navigateToSignin = () => {
           {{ currentLanguage === 'en' ? 'Reset Your Password' : 'إعادة تعيين كلمة المرور' }}
         </h2>
         <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'Enter your email address to receive a password reset link.' : 'أدخل عنوان بريدك الإلكتروني لتلقي رابط إعادة تعيين كلمة المرور.' }}
+          {{
+            currentLanguage === 'en'
+              ? 'Enter your email address to receive a password reset link.'
+              : 'أدخل عنوان بريدك الإلكتروني لتلقي رابط إعادة تعيين كلمة المرور.'
+          }}
         </p>
 
         <form @submit.prevent="handlePasswordReset" class="reset-password-form">
@@ -57,11 +61,19 @@ const navigateToSignin = () => {
         </form>
 
         <!-- Display error message from store -->
-        <div v-if="authStore.error" class="message error-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <div
+          v-if="authStore.error"
+          class="message error-message"
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+        >
           {{ authStore.error }}
         </div>
         <!-- Display success message from store -->
-        <div v-if="authStore.successMessage" class="message success-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <div
+          v-if="authStore.successMessage"
+          class="message success-message"
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+        >
           {{ authStore.successMessage }}
         </div>
 
@@ -106,7 +118,7 @@ const navigateToSignin = () => {
 }
 
 .reset-password-card h2 {
-  color: #8D99AE;
+  color: #8d99ae;
   margin-bottom: 20px;
   font-size: 2em;
   font-weight: 700;
@@ -144,18 +156,20 @@ const navigateToSignin = () => {
   border-radius: 8px;
   font-size: 1em;
   color: #333;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
   box-sizing: border-box;
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #8D99AE;
+  border-color: #8d99ae;
   box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2);
 }
 
 .action-button {
-  background-color: #8D99AE;
+  background-color: #8d99ae;
   color: white;
   border: none;
   padding: 15px 30px;
@@ -163,7 +177,9 @@ const navigateToSignin = () => {
   cursor: pointer;
   font-size: 1.15em;
   font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   width: 100%;
   margin-top: 20px;
@@ -188,7 +204,7 @@ const navigateToSignin = () => {
 }
 
 .switch-link-container a {
-  color: #8D99AE;
+  color: #8d99ae;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.3s ease;

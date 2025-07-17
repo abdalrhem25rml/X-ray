@@ -1,112 +1,133 @@
 <!-- views/RecommendView.vue -->
 <script setup>
-import { ref, inject, watch, onMounted } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
-import { collection, addDoc, doc, getDoc } from 'firebase/firestore';
+import { ref, inject, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import { collection, addDoc, doc, getDoc } from 'firebase/firestore'
 
-const router = useRouter();
-const route = useRoute();
-const currentLanguage = inject('currentLanguage');
+const router = useRouter()
+const route = useRoute()
+const currentLanguage = inject('currentLanguage')
 // toggleInfoModal is not used in this specific template, but kept if it's a global utility
-const toggleInfoModal = inject('toggleInfoModal');
-const db = inject('db'); // Inject Firestore instance
-const auth = inject('auth'); // Inject Auth instance
-const currentUserId = inject('currentUserId'); // Inject reactive currentUserId
-const isAuthReady = inject('isAuthReady'); // Inject reactive auth readiness
+const db = inject('db') // Inject Firestore instance
+const currentUserId = inject('currentUserId') // Inject reactive currentUserId
+const isAuthReady = inject('isAuthReady') // Inject reactive auth readiness
 
 // Access VITE_APP_ID directly from environment variables for Firestore path construction
-const VITE_APP_ID = import.meta.env.VITE_APP_ID;
+const VITE_APP_ID = import.meta.env.VITE_APP_ID
 
 // Reactive state for form inputs (from your original template)
-const age = ref(null);
-const gender = ref('');
-const medicalHistory = ref('');
-const currentSymptoms = ref('');
-const allergies = ref('');
-const isPregnant = ref(false);
-const previousRadiationExposure = ref('');
-const scanType = ref(''); // Type of Scan to Consider
+const age = ref(null)
+const gender = ref('')
+const medicalHistory = ref('')
+const currentSymptoms = ref('')
+const allergies = ref('')
+const isPregnant = ref(false)
+const previousRadiationExposure = ref('')
+const scanType = ref('') // Type of Scan to Consider
 
 // Reactive state for AI response and UI feedback
-const recommendationResult = ref(''); // This will hold the main text recommendation
-const factorDetails = ref(null); // Holds structured AI output for scan factors
-const calculatedMsv = ref(null); // Holds structured AI output for calculated mSv
-const isLoading = ref(false);
-const errorMessage = ref('');
+const recommendationResult = ref('') // This will hold the main text recommendation
+const factorDetails = ref(null) // Holds structured AI output for scan factors
+const calculatedMsv = ref(null) // Holds structured AI output for calculated mSv
+const isLoading = ref(false)
+const errorMessage = ref('')
 
 // Patient details from route params and fetched from Firestore
-const patientId = ref(route.params.patientId || '');
-const patientName = ref(''); // Will be fetched based on patientId
-const patientAge = ref(null); // Will be fetched based on patientId
-const patientGender = ref(''); // Will be fetched based on patientId
+const patientId = ref(route.params.patientId || '')
+const patientName = ref('') // Will be fetched based on patientId
+const patientAge = ref(null) // Will be fetched based on patientId
+const patientGender = ref('') // Will be fetched based on patientId
 
 // Function to fetch patient details if patientId is provided in the route
 const fetchPatientDetails = async (id) => {
   // Ensure db and currentUserId are available before attempting to fetch
   if (!id || !db || !currentUserId.value) {
-    console.warn("Cannot fetch patient details: ID, DB, or User ID not ready.");
-    return;
+    console.warn('Cannot fetch patient details: ID, DB, or User ID not ready.')
+    return
   }
 
-  const userIdVal = currentUserId.value; // Get the current user ID
+  const userIdVal = currentUserId.value // Get the current user ID
   // Construct the Firestore document reference for the patient
-  const patientDocRef = doc(db, `artifacts/${VITE_APP_ID}/users/${userIdVal}/patients`, id);
+  const patientDocRef = doc(db, `artifacts/${VITE_APP_ID}/users/${userIdVal}/patients`, id)
 
   try {
-    const patientSnap = await getDoc(patientDocRef);
+    const patientSnap = await getDoc(patientDocRef)
     if (patientSnap.exists()) {
-      const patientData = patientSnap.data();
-      patientName.value = patientData.name;
-      patientAge.value = patientData.age;
-      patientGender.value = patientData.gender;
+      const patientData = patientSnap.data()
+      patientName.value = patientData.name
+      patientAge.value = patientData.age
+      patientGender.value = patientData.gender
       // Pre-fill form fields if patient data is available and makes sense
-      age.value = patientData.age;
-      gender.value = patientData.gender.toLowerCase(); // Ensure lowercase for select
+      age.value = patientData.age
+      gender.value = patientData.gender.toLowerCase() // Ensure lowercase for select
       // Pre-fill other relevant form fields
-      medicalHistory.value = patientData.medicalHistory?.join(', ') || '';
-      allergies.value = patientData.allergies?.join(', ') || '';
-      previousRadiationExposure.value = patientData.previousRadiationExposure?.join(', ') || '';
-      console.log("Patient details fetched and form pre-filled:", patientData);
+      medicalHistory.value = patientData.medicalHistory?.join(', ') || ''
+      allergies.value = patientData.allergies?.join(', ') || ''
+      previousRadiationExposure.value = patientData.previousRadiationExposure?.join(', ') || ''
+      console.log('Patient details fetched and form pre-filled:', patientData)
     } else {
-      console.warn("Patient not found for ID:", id);
-      errorMessage.value = currentLanguage.value === 'en' ? 'Patient not found. Please select a valid patient.' : 'المريض غير موجود. الرجاء اختيار مريض صالح.';
+      console.warn('Patient not found for ID:', id)
+      errorMessage.value =
+        currentLanguage.value === 'en'
+          ? 'Patient not found. Please select a valid patient.'
+          : 'المريض غير موجود. الرجاء اختيار مريض صالح.'
     }
   } catch (error) {
-    console.error("Error fetching patient details:", error);
-    errorMessage.value = currentLanguage.value === 'en' ? 'Error fetching patient details.' : 'خطأ في جلب تفاصيل المريض.';
+    console.error('Error fetching patient details:', error)
+    errorMessage.value =
+      currentLanguage.value === 'en'
+        ? 'Error fetching patient details.'
+        : 'خطأ في جلب تفاصيل المريض.'
   }
-};
+}
 
 // Watch for changes in auth readiness and patientId to fetch details
-watch([isAuthReady, () => route.params.patientId], ([ready, newPatientId]) => {
-  patientId.value = newPatientId || '';
-  if (ready && patientId.value) {
-    fetchPatientDetails(patientId.value);
-  }
-}, { immediate: true }); // Run immediately on component mount
+watch(
+  [isAuthReady, () => route.params.patientId],
+  ([ready, newPatientId]) => {
+    patientId.value = newPatientId || ''
+    if (ready && patientId.value) {
+      fetchPatientDetails(patientId.value)
+    }
+  },
+  { immediate: true },
+) // Run immediately on component mount
 
 const getRecommendations = async () => {
-  isLoading.value = true;
-  errorMessage.value = ''; // Clear previous errors
-  recommendationResult.value = ''; // Clear previous results
-  factorDetails.value = null;
-  calculatedMsv.value = null;
+  isLoading.value = true
+  errorMessage.value = '' // Clear previous errors
+  recommendationResult.value = '' // Clear previous results
+  factorDetails.value = null
+  calculatedMsv.value = null
 
   // Basic validation for required fields
-  if (!age.value || !gender.value || !medicalHistory.value || !currentSymptoms.value || !scanType.value) {
-    errorMessage.value = currentLanguage.value === 'en' ? 'Please fill in all required fields (Age, Gender, Medical History, Current Symptoms, Scan Type).' : 'الرجاء تعبئة جميع الحقول المطلوبة (العمر، الجنس، التاريخ الطبي، الأعراض الحالية، نوع الفحص).';
-    isLoading.value = false;
-    return;
+  if (
+    !age.value ||
+    !gender.value ||
+    !medicalHistory.value ||
+    !currentSymptoms.value ||
+    !scanType.value
+  ) {
+    errorMessage.value =
+      currentLanguage.value === 'en'
+        ? 'Please fill in all required fields (Age, Gender, Medical History, Current Symptoms, Scan Type).'
+        : 'الرجاء تعبئة جميع الحقول المطلوبة (العمر، الجنس، التاريخ الطبي، الأعراض الحالية، نوع الفحص).'
+    isLoading.value = false
+    return
   }
   if (!patientId.value || !patientName.value) {
-    errorMessage.value = currentLanguage.value === 'en' ? 'No patient selected or patient details not loaded. Please go back to Patient List and select a patient.' : 'لم يتم اختيار مريض أو لم يتم تحميل تفاصيل المريض. الرجاء العودة إلى قائمة المرضى واختيار مريض.';
-    isLoading.value = false;
-    return;
+    errorMessage.value =
+      currentLanguage.value === 'en'
+        ? 'No patient selected or patient details not loaded. Please go back to Patient List and select a patient.'
+        : 'لم يتم اختيار مريض أو لم يتم تحميل تفاصيل المريض. الرجاء العودة إلى قائمة المرضى واختيار مريض.'
+    isLoading.value = false
+    return
   }
 
   // Construct the prompt for the Gemini API
-  const prompt = currentLanguage.value === 'en' ?
-    `Based on the following patient details, provide a medical recommendation for an X-ray or CT scan.
+  const prompt =
+    currentLanguage.value === 'en'
+      ? `Based on the following patient details, provide a medical recommendation for an X-ray or CT scan.
     Also, estimate the typical Tube Voltage (kV), Tube Current (mA), Exposure Time (ms) for the recommended scan, and the approximate Effective Dose (mSv).
     Patient Name: ${patientName.value}
     Age: ${age.value}
@@ -129,8 +150,8 @@ const getRecommendations = async () => {
         "exposureTimeMs": 50
       },
       "calculatedMsv": 0.1
-    }` :
-    `بناءً على تفاصيل المريض التالية، قدم توصية طبية لفحص بالأشعة السينية أو الأشعة المقطعية.
+    }`
+      : `بناءً على تفاصيل المريض التالية، قدم توصية طبية لفحص بالأشعة السينية أو الأشعة المقطعية.
     أيضًا، قم بتقدير جهد الأنبوب (kV)، تيار الأنبوب (mA)، وقت التعرض (ms) للفحص الموصى به، والجرعة الفعالة التقريبية (mSv).
     اسم المريض: ${patientName.value}
     العمر: ${age.value}
@@ -153,61 +174,68 @@ const getRecommendations = async () => {
         "exposureTimeMs": 50
       },
       "calculatedMsv": 0.1
-    }`;
+    }`
 
   try {
-    const chatHistory = [{ role: "user", parts: [{ text: prompt }] }];
+    const chatHistory = [{ role: 'user', parts: [{ text: prompt }] }]
     const payload = {
       contents: chatHistory,
       generationConfig: {
-        responseMimeType: "application/json",
+        responseMimeType: 'application/json',
         responseSchema: {
-          type: "OBJECT",
+          type: 'OBJECT',
           properties: {
-            recommendationText: { type: "STRING" },
+            recommendationText: { type: 'STRING' },
             factorDetails: {
-              type: "OBJECT",
+              type: 'OBJECT',
               properties: {
-                tubeVoltageKv: { type: "NUMBER" },
-                tubeCurrentMa: { type: "NUMBER" },
-                exposureTimeMs: { type: "NUMBER" }
-              }
+                tubeVoltageKv: { type: 'NUMBER' },
+                tubeCurrentMa: { type: 'NUMBER' },
+                exposureTimeMs: { type: 'NUMBER' },
+              },
             },
-            calculatedMsv: { type: "NUMBER" }
+            calculatedMsv: { type: 'NUMBER' },
           },
-          required: ["recommendationText", "factorDetails", "calculatedMsv"]
-        }
-      }
-    };
+          required: ['recommendationText', 'factorDetails', 'calculatedMsv'],
+        },
+      },
+    }
 
     const apiKey = import.meta.env.VITE_GEMINI_KEY // Canvas will provide this at runtime for gemini-2.0-flash
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
 
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+      body: JSON.stringify(payload),
+    })
 
-    const result = await response.json();
+    const result = await response.json()
 
-    if (result.candidates && result.candidates.length > 0 &&
-        result.candidates[0].content && result.candidates[0].content.parts &&
-        result.candidates[0].content.parts.length > 0) {
-      const jsonResponse = JSON.parse(result.candidates[0].content.parts[0].text);
+    if (
+      result.candidates &&
+      result.candidates.length > 0 &&
+      result.candidates[0].content &&
+      result.candidates[0].content.parts &&
+      result.candidates[0].content.parts.length > 0
+    ) {
+      const jsonResponse = JSON.parse(result.candidates[0].content.parts[0].text)
 
-      recommendationResult.value = jsonResponse.recommendationText;
-      factorDetails.value = jsonResponse.factorDetails;
-      calculatedMsv.value = jsonResponse.calculatedMsv;
+      recommendationResult.value = jsonResponse.recommendationText
+      factorDetails.value = jsonResponse.factorDetails
+      calculatedMsv.value = jsonResponse.calculatedMsv
 
-      console.log("Recommendation generated:", recommendationResult.value);
-      console.log("Factor Details:", factorDetails.value);
-      console.log("Calculated mSv:", calculatedMsv.value);
+      console.log('Recommendation generated:', recommendationResult.value)
+      console.log('Factor Details:', factorDetails.value)
+      console.log('Calculated mSv:', calculatedMsv.value)
 
       // Save recommendation to Firestore
       if (db && currentUserId.value) {
-        const userIdVal = currentUserId.value;
-        const recommendationsCollectionRef = collection(db, `artifacts/${VITE_APP_ID}/users/${userIdVal}/recommendationHistory`);
+        const userIdVal = currentUserId.value
+        const recommendationsCollectionRef = collection(
+          db,
+          `artifacts/${VITE_APP_ID}/users/${userIdVal}/recommendationHistory`,
+        )
         try {
           await addDoc(recommendationsCollectionRef, {
             patientId: patientId.value,
@@ -224,36 +252,44 @@ const getRecommendations = async () => {
             factorDetails: factorDetails.value,
             calculatedMsv: calculatedMsv.value,
             timestamp: new Date(), // Store current timestamp for ordering
-            language: currentLanguage.value // Store the language of the recommendation
-          });
-          console.log("Recommendation saved to Firestore successfully.");
+            language: currentLanguage.value, // Store the language of the recommendation
+          })
+          console.log('Recommendation saved to Firestore successfully.')
         } catch (saveError) {
-          console.error("Error saving recommendation to Firestore:", saveError);
-          errorMessage.value = currentLanguage.value === 'en' ? 'Failed to save recommendation to history.' : 'فشل حفظ التوصية في السجل.';
+          console.error('Error saving recommendation to Firestore:', saveError)
+          errorMessage.value =
+            currentLanguage.value === 'en'
+              ? 'Failed to save recommendation to history.'
+              : 'فشل حفظ التوصية في السجل.'
         }
       } else {
-        console.warn("Firestore or User ID not available, recommendation not saved.");
+        console.warn('Firestore or User ID not available, recommendation not saved.')
       }
-
     } else {
-      errorMessage.value = currentLanguage.value === 'en' ? 'Could not generate recommendation. Please try again.' : 'تعذر إنشاء التوصية. الرجاء المحاولة مرة أخرى.';
-      console.error('API response structure:', result);
+      errorMessage.value =
+        currentLanguage.value === 'en'
+          ? 'Could not generate recommendation. Please try again.'
+          : 'تعذر إنشاء التوصية. الرجاء المحاولة مرة أخرى.'
+      console.error('API response structure:', result)
     }
   } catch (error) {
-    console.error("Error generating recommendation:", error);
-    errorMessage.value = currentLanguage.value === 'en' ? `An error occurred: ${error.message}` : `حدث خطأ: ${error.message}`;
+    console.error('Error generating recommendation:', error)
+    errorMessage.value =
+      currentLanguage.value === 'en'
+        ? `An error occurred: ${error.message}`
+        : `حدث خطأ: ${error.message}`
   } finally {
-    isLoading.value = false;
+    isLoading.value = false
   }
-};
+}
 
 const goToDashboard = () => {
-  router.push('/dashboard');
-};
+  router.push('/dashboard')
+}
 
 const goToPatientList = () => {
-  router.push('/patients');
-};
+  router.push('/patients')
+}
 </script>
 
 <template>
@@ -264,29 +300,64 @@ const goToPatientList = () => {
           {{ currentLanguage === 'en' ? 'Medical Scan Recommendation' : 'توصية الفحص الطبي' }}
         </h2>
         <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'Enter patient details to receive recommendations for X-ray or CT scans.' : 'أدخل تفاصيل المريض لتلقي توصيات بشأن فحوصات الأشعة السينية أو الأشعة المقطعية.' }}
+          {{
+            currentLanguage === 'en'
+              ? 'Enter patient details to receive recommendations for X-ray or CT scans.'
+              : 'أدخل تفاصيل المريض لتلقي توصيات بشأن فحوصات الأشعة السينية أو الأشعة المقطعية.'
+          }}
         </p>
 
         <!-- Display patient info if available -->
-        <p v-if="patientId && patientName" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" class="patient-info-display">
-          {{ currentLanguage === 'en' ? 'Generating recommendation for Patient:' : 'إنشاء توصية للمريض:' }}
-          <strong>{{ patientName }}</strong> ({{ patientAge }} {{ currentLanguage === 'en' ? 'years old' : 'سنة' }}, {{ currentLanguage === 'en' ? patientGender : (patientGender === 'Male' ? 'ذكر' : 'أنثى') }})
+        <p
+          v-if="patientId && patientName"
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+          class="patient-info-display"
+        >
+          {{
+            currentLanguage === 'en'
+              ? 'Generating recommendation for Patient:'
+              : 'إنشاء توصية للمريض:'
+          }}
+          <strong>{{ patientName }}</strong> ({{ patientAge }}
+          {{ currentLanguage === 'en' ? 'years old' : 'سنة' }},
+          {{
+            currentLanguage === 'en' ? patientGender : patientGender === 'Male' ? 'ذكر' : 'أنثى'
+          }})
         </p>
-        <p v-else :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" class="text-red-600 font-bold mb-4">
-          {{ currentLanguage === 'en' ? 'No patient selected or patient details not loaded. Please select a patient from the Patient List to generate a recommendation for their history.' : 'لم يتم اختيار مريض أو لم يتم تحميل تفاصيل المريض. الرجاء اختيار مريض من قائمة المرضى لإنشاء توصية لسجله.' }}
+        <p
+          v-else
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+          class="text-red-600 font-bold mb-4"
+        >
+          {{
+            currentLanguage === 'en'
+              ? 'No patient selected or patient details not loaded. Please select a patient from the Patient List to generate a recommendation for their history.'
+              : 'لم يتم اختيار مريض أو لم يتم تحميل تفاصيل المريض. الرجاء اختيار مريض من قائمة المرضى لإنشاء توصية لسجله.'
+          }}
           <button @click="goToPatientList" class="inline-link-button">
             {{ currentLanguage === 'en' ? 'Go to Patient List' : 'اذهب إلى قائمة المرضى' }}
           </button>
         </p>
 
         <!-- Disclaimer for non-medical use -->
-        <p class="text-sm font-semibold text-red-600 text-center mb-6" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'Disclaimer: This feature uses AI for informational purposes only and is NOT intended for medical diagnosis, treatment, or any clinical use. Always consult with a qualified medical professional.' : 'إخلاء مسؤولية: تستخدم هذه الميزة الذكاء الاصطناعي لأغراض إعلامية فقط وليست مخصصة للتشخيص الطبي أو العلاج أو أي استخدام سريري. استشر دائمًا أخصائيًا طبيًا مؤهلاً.' }}
+        <p
+          class="text-sm font-semibold text-red-600 text-center mb-6"
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+        >
+          {{
+            currentLanguage === 'en'
+              ? 'Disclaimer: This feature uses AI for informational purposes only and is NOT intended for medical diagnosis, treatment, or any clinical use. Always consult with a qualified medical professional.'
+              : 'إخلاء مسؤولية: تستخدم هذه الميزة الذكاء الاصطناعي لأغراض إعلامية فقط وليست مخصصة للتشخيص الطبي أو العلاج أو أي استخدام سريري. استشر دائمًا أخصائيًا طبيًا مؤهلاً.'
+          }}
         </p>
 
         <form @submit.prevent="getRecommendations" class="recommend-form">
           <div class="form-group">
-            <label for="age" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" :class="{'text-right w-full': currentLanguage === 'ar'}">
+            <label
+              for="age"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+              :class="{ 'text-right w-full': currentLanguage === 'ar' }"
+            >
               {{ currentLanguage === 'en' ? 'Age (Years)' : 'العمر (سنوات)' }}
             </label>
             <input
@@ -301,7 +372,11 @@ const goToPatientList = () => {
           </div>
 
           <div class="form-group">
-            <label for="gender" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" :class="{'text-right w-full': currentLanguage === 'ar'}">
+            <label
+              for="gender"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+              :class="{ 'text-right w-full': currentLanguage === 'ar' }"
+            >
               {{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}
             </label>
             <select
@@ -311,7 +386,9 @@ const goToPatientList = () => {
               required
               class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200 ease-in-out"
             >
-              <option value="" disabled>{{ currentLanguage === 'en' ? 'Select Gender' : 'اختر الجنس' }}</option>
+              <option value="" disabled>
+                {{ currentLanguage === 'en' ? 'Select Gender' : 'اختر الجنس' }}
+              </option>
               <option value="male">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</option>
               <option value="female">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</option>
               <option value="other">{{ currentLanguage === 'en' ? 'Other' : 'آخر' }}</option>
@@ -319,42 +396,76 @@ const goToPatientList = () => {
           </div>
 
           <div class="form-group">
-            <label for="medicalHistory" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" :class="{'text-right w-full': currentLanguage === 'ar'}">
-              {{ currentLanguage === 'en' ? 'Medical History (e.g., chronic conditions, past surgeries)' : 'التاريخ الطبي (مثال: أمراض مزمنة، عمليات سابقة)' }}
+            <label
+              for="medicalHistory"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+              :class="{ 'text-right w-full': currentLanguage === 'ar' }"
+            >
+              {{
+                currentLanguage === 'en'
+                  ? 'Medical History (e.g., chronic conditions, past surgeries)'
+                  : 'التاريخ الطبي (مثال: أمراض مزمنة، عمليات سابقة)'
+              }}
             </label>
             <textarea
               id="medicalHistory"
               v-model="medicalHistory"
               rows="3"
-              :placeholder="currentLanguage === 'en' ? 'e.g., Diabetes, Hypertension, Appendectomy 5 years ago' : 'مثال: السكري، ارتفاع ضغط الدم، استئصال الزائدة الدودية قبل 5 سنوات'"
+              :placeholder="
+                currentLanguage === 'en'
+                  ? 'e.g., Diabetes, Hypertension, Appendectomy 5 years ago'
+                  : 'مثال: السكري، ارتفاع ضغط الدم، استئصال الزائدة الدودية قبل 5 سنوات'
+              "
               :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
               required
             ></textarea>
           </div>
 
           <div class="form-group">
-            <label for="currentSymptoms" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" :class="{'text-right w-full': currentLanguage === 'ar'}">
-              {{ currentLanguage === 'en' ? 'Current Symptoms (reason for scan consideration)' : 'الأعراض الحالية (سبب التفكير في الفحص)' }}
+            <label
+              for="currentSymptoms"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+              :class="{ 'text-right w-full': currentLanguage === 'ar' }"
+            >
+              {{
+                currentLanguage === 'en'
+                  ? 'Current Symptoms (reason for scan consideration)'
+                  : 'الأعراض الحالية (سبب التفكير في الفحص)'
+              }}
             </label>
             <textarea
               id="currentSymptoms"
               v-model="currentSymptoms"
               rows="3"
-              :placeholder="currentLanguage === 'en' ? 'e.g., Persistent cough, abdominal pain, headache' : 'مثال: سعال مستمر، ألم في البطن، صداع'"
+              :placeholder="
+                currentLanguage === 'en'
+                  ? 'e.g., Persistent cough, abdominal pain, headache'
+                  : 'مثال: سعال مستمر، ألم في البطن، صداع'
+              "
               :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
               required
             ></textarea>
           </div>
 
           <div class="form-group">
-            <label for="allergies" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" :class="{'text-right w-full': currentLanguage === 'ar'}">
-              {{ currentLanguage === 'en' ? 'Allergies (e.g., to contrast dye, medications)' : 'الحساسية (مثال: لصبغة التباين، الأدوية)' }}
+            <label
+              for="allergies"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+              :class="{ 'text-right w-full': currentLanguage === 'ar' }"
+            >
+              {{
+                currentLanguage === 'en'
+                  ? 'Allergies (e.g., to contrast dye, medications)'
+                  : 'الحساسية (مثال: لصبغة التباين، الأدوية)'
+              }}
             </label>
             <textarea
               id="allergies"
               v-model="allergies"
               rows="2"
-              :placeholder="currentLanguage === 'en' ? 'e.g., Iodine, Penicillin' : 'مثال: اليود، البنسلين'"
+              :placeholder="
+                currentLanguage === 'en' ? 'e.g., Iodine, Penicillin' : 'مثال: اليود، البنسلين'
+              "
               :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
             ></textarea>
           </div>
@@ -362,7 +473,10 @@ const goToPatientList = () => {
           <div class="form-group" v-if="gender === 'female'">
             <div
               class="flex items-center"
-              :class="{ 'flex-row-reverse': currentLanguage === 'ar', 'justify-end': currentLanguage === 'ar' }"
+              :class="{
+                'flex-row-reverse': currentLanguage === 'ar',
+                'justify-end': currentLanguage === 'ar',
+              }"
             >
               <input
                 type="checkbox"
@@ -370,29 +484,51 @@ const goToPatientList = () => {
                 v-model="isPregnant"
                 class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
               />
-              <label for="isPregnant" class="ml-2 text-gray-700" :class="{ 'mr-2 ml-0': currentLanguage === 'ar' }">
+              <label
+                for="isPregnant"
+                class="ml-2 text-gray-700"
+                :class="{ 'mr-2 ml-0': currentLanguage === 'ar' }"
+              >
                 {{ currentLanguage === 'en' ? 'Is the patient pregnant?' : 'هل المريضة حامل؟' }}
               </label>
             </div>
           </div>
 
           <div class="form-group">
-            <label for="previousRadiationExposure" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" :class="{'text-right w-full': currentLanguage === 'ar'}">
-              {{ currentLanguage === 'en' ? 'Previous Radiation Exposure (Type, Date, and approx. Quantity in mSv if known)' : 'التعرض السابق للإشعاع (النوع، التاريخ، والكمية التقريبية بالملي سيفرت إن أمكن)' }}
+            <label
+              for="previousRadiationExposure"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+              :class="{ 'text-right w-full': currentLanguage === 'ar' }"
+            >
+              {{
+                currentLanguage === 'en'
+                  ? 'Previous Radiation Exposure (Type, Date, and approx. Quantity in mSv if known)'
+                  : 'التعرض السابق للإشعاع (النوع، التاريخ، والكمية التقريبية بالملي سيفرت إن أمكن)'
+              }}
             </label>
             <input
               type="text"
               id="previousRadiationExposure"
               v-model="previousRadiationExposure"
-              :placeholder="currentLanguage === 'en' ? 'e.g., Chest X-ray 6 months ago (2 mSv), CT Head 2 years ago (5 mSv)' : 'مثال: أشعة سينية للصدر قبل 6 أشهر (2 ملي سيفرت)، أشعة مقطعية للرأس قبل سنتين (5 ملي سيفرت)'"
+              :placeholder="
+                currentLanguage === 'en'
+                  ? 'e.g., Chest X-ray 6 months ago (2 mSv), CT Head 2 years ago (5 mSv)'
+                  : 'مثال: أشعة سينية للصدر قبل 6 أشهر (2 ملي سيفرت)، أشعة مقطعية للرأس قبل سنتين (5 ملي سيفرت)'
+              "
               :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
             />
           </div>
 
           <!-- New Form Group for Scan Type Selection -->
           <div class="form-group">
-            <label for="scanType" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'" :class="{'text-right w-full': currentLanguage === 'ar'}">
-              {{ currentLanguage === 'en' ? 'Type of Scan to Consider' : 'نوع الفحص المراد النظر فيه' }}
+            <label
+              for="scanType"
+              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+              :class="{ 'text-right w-full': currentLanguage === 'ar' }"
+            >
+              {{
+                currentLanguage === 'en' ? 'Type of Scan to Consider' : 'نوع الفحص المراد النظر فيه'
+              }}
             </label>
             <select
               id="scanType"
@@ -401,20 +537,33 @@ const goToPatientList = () => {
               required
               class="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition duration-200 ease-in-out"
             >
-              <option value="" disabled>{{ currentLanguage === 'en' ? 'Select Scan Type' : 'اختر نوع الفحص' }}</option>
-              <option value="X-ray">{{ currentLanguage === 'en' ? 'X-ray' : 'الأشعة السينية' }}</option>
-              <option value="CT">{{ currentLanguage === 'en' ? 'CT Scan' : 'الأشعة المقطعية' }}</option>
-              <option value="Both">{{ currentLanguage === 'en' ? 'Both (X-ray and CT)' : 'كلاهما (الأشعة السينية والمقطعية)' }}</option>
+              <option value="" disabled>
+                {{ currentLanguage === 'en' ? 'Select Scan Type' : 'اختر نوع الفحص' }}
+              </option>
+              <option value="X-ray">
+                {{ currentLanguage === 'en' ? 'X-ray' : 'الأشعة السينية' }}
+              </option>
+              <option value="CT">
+                {{ currentLanguage === 'en' ? 'CT Scan' : 'الأشعة المقطعية' }}
+              </option>
+              <option value="Both">
+                {{
+                  currentLanguage === 'en'
+                    ? 'Both (X-ray and CT)'
+                    : 'كلاهما (الأشعة السينية والمقطعية)'
+                }}
+              </option>
             </select>
           </div>
 
-          <button
-            type="submit"
-            class="action-button primary recommend-button"
-          >
+          <button type="submit" class="action-button primary recommend-button">
             <span v-if="isLoading">
-<font-awesome-icon icon="spinner" spin />
-              {{ currentLanguage === 'en' ? 'Getting Recommendations...' : 'جاري الحصول على التوصيات...' }}
+              <font-awesome-icon icon="spinner" spin />
+              {{
+                currentLanguage === 'en'
+                  ? 'Getting Recommendations...'
+                  : 'جاري الحصول على التوصيات...'
+              }}
             </span>
             <span v-else>
               {{ currentLanguage === 'en' ? 'Get Recommendations' : 'الحصول على التوصيات' }}
@@ -422,7 +571,11 @@ const goToPatientList = () => {
           </button>
         </form>
 
-        <div v-if="errorMessage" class="message error-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <div
+          v-if="errorMessage"
+          class="message error-message"
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+        >
           {{ errorMessage }}
         </div>
 
@@ -433,23 +586,43 @@ const goToPatientList = () => {
         >
           <h3>{{ currentLanguage === 'en' ? 'Recommendations:' : 'التوصيات:' }}</h3>
 
-          <div v-if="factorDetails && factorDetails.tubeVoltageKv !== undefined" class="factor-details mt-4">
-            <h4>{{ currentLanguage === 'en' ? 'Predicted Scan Factors:' : 'عوامل الفحص المتوقعة:' }}</h4>
+          <div
+            v-if="factorDetails && factorDetails.tubeVoltageKv !== undefined"
+            class="factor-details mt-4"
+          >
+            <h4>
+              {{ currentLanguage === 'en' ? 'Predicted Scan Factors:' : 'عوامل الفحص المتوقعة:' }}
+            </h4>
             <p>
-              <strong>{{ currentLanguage === 'en' ? 'Tube Voltage:' : 'جهد الأنبوب:' }}</strong> {{ factorDetails.tubeVoltageKv }} kV<br/>
-              <strong>{{ currentLanguage === 'en' ? 'Tube Current:' : 'تيار الأنبوب:' }}</strong> {{ factorDetails.tubeCurrentMa }} mA<br/>
-              <strong>{{ currentLanguage === 'en' ? 'Exposure Time:' : 'وقت التعرض:' }}</strong> {{ factorDetails.exposureTimeMs }} ms
+              <strong>{{ currentLanguage === 'en' ? 'Tube Voltage:' : 'جهد الأنبوب:' }}</strong>
+              {{ factorDetails.tubeVoltageKv }} kV<br />
+              <strong>{{ currentLanguage === 'en' ? 'Tube Current:' : 'تيار الأنبوب:' }}</strong>
+              {{ factorDetails.tubeCurrentMa }} mA<br />
+              <strong>{{ currentLanguage === 'en' ? 'Exposure Time:' : 'وقت التعرض:' }}</strong>
+              {{ factorDetails.exposureTimeMs }} ms
             </p>
           </div>
 
           <div v-if="calculatedMsv !== null" class="msv-details mt-4">
-            <h4>{{ currentLanguage === 'en' ? 'Calculated Effective Dose:' : 'الجرعة الفعالة المحسوبة:' }}</h4>
+            <h4>
+              {{
+                currentLanguage === 'en' ? 'Calculated Effective Dose:' : 'الجرعة الفعالة المحسوبة:'
+              }}
+            </h4>
             <p>
-              {{ currentLanguage === 'en' ? 'Approximate Effective Dose:' : 'الجرعة الفعالة التقريبية:' }}
+              {{
+                currentLanguage === 'en'
+                  ? 'Approximate Effective Dose:'
+                  : 'الجرعة الفعالة التقريبية:'
+              }}
               <strong>{{ calculatedMsv }} mSv</strong>
             </p>
             <p v-if="parseFloat(calculatedMsv) > 5" class="text-red-600 font-semibold">
-              {{ currentLanguage === 'en' ? 'Warning: This calculated dose is relatively high. Further medical consultation is strongly recommended.' : 'تحذير: هذه الجرعة المحسوبة مرتفعة نسبيًا. يوصى بشدة باستشارة طبية إضافية.' }}
+              {{
+                currentLanguage === 'en'
+                  ? 'Warning: This calculated dose is relatively high. Further medical consultation is strongly recommended.'
+                  : 'تحذير: هذه الجرعة المحسوبة مرتفعة نسبيًا. يوصى بشدة باستشارة طبية إضافية.'
+              }}
             </p>
           </div>
 
@@ -496,7 +669,7 @@ const goToPatientList = () => {
 }
 
 .recommend-card h2 {
-  color: #8D99AE;
+  color: #8d99ae;
   margin-bottom: 20px;
   font-size: 2em;
   font-weight: 700;
@@ -518,7 +691,7 @@ const goToPatientList = () => {
 .inline-link-button {
   background: none;
   border: none;
-  color: #8D99AE;
+  color: #8d99ae;
   text-decoration: underline;
   cursor: pointer;
   font-size: 1em;
@@ -556,8 +729,8 @@ const goToPatientList = () => {
   text-align: right;
 }
 
-.form-group input[type="text"],
-.form-group input[type="number"],
+.form-group input[type='text'],
+.form-group input[type='number'],
 .form-group textarea,
 .form-group select {
   width: 100%;
@@ -566,7 +739,9 @@ const goToPatientList = () => {
   border-radius: 8px;
   font-size: 1em;
   color: #333;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
   box-sizing: border-box; /* Include padding and border in the element's total width and height */
 }
 
@@ -574,12 +749,12 @@ const goToPatientList = () => {
 .form-group textarea:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #8D99AE; /* Highlight border on focus */
+  border-color: #8d99ae; /* Highlight border on focus */
   box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2); /* Subtle glow on focus */
 }
 
 .action-button {
-  background-color: #8D99AE;
+  background-color: #8d99ae;
   color: white;
   border: none;
   padding: 15px 30px;
@@ -587,7 +762,9 @@ const goToPatientList = () => {
   cursor: pointer;
   font-size: 1.15em;
   font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   width: 100%; /* Make button full width */
   margin-top: 20px;
@@ -622,7 +799,8 @@ const goToPatientList = () => {
 }
 
 /* Recommendation Result Styling */
-.prediction-result { /* Reusing .prediction-result for consistency */
+.prediction-result {
+  /* Reusing .prediction-result for consistency */
   margin-top: 30px;
   padding: 20px;
   background-color: #e6f7ff; /* Light blue background */
@@ -648,15 +826,15 @@ const goToPatientList = () => {
   text-align: center;
 }
 
-.prediction-result[dir="ltr"] .result-text,
-.prediction-result[dir="ltr"] .factor-details,
-.prediction-result[dir="ltr"] .msv-details {
+.prediction-result[dir='ltr'] .result-text,
+.prediction-result[dir='ltr'] .factor-details,
+.prediction-result[dir='ltr'] .msv-details {
   text-align: left;
 }
 
-.prediction-result[dir="rtl"] .result-text,
-.prediction-result[dir="rtl"] .factor-details,
-.prediction-result[dir="rtl"] .msv-details {
+.prediction-result[dir='rtl'] .result-text,
+.prediction-result[dir='rtl'] .factor-details,
+.prediction-result[dir='rtl'] .msv-details {
   text-align: right;
 }
 
@@ -679,10 +857,15 @@ const goToPatientList = () => {
   line-height: 1.2;
 }
 
-.prediction-result .result-text h1 { font-size: 1.8em; }
-.prediction-result .result-text h2 { font-size: 1.5em; }
-.prediction-result .result-text h3 { font-size: 1.3em; }
-
+.prediction-result .result-text h1 {
+  font-size: 1.8em;
+}
+.prediction-result .result-text h2 {
+  font-size: 1.5em;
+}
+.prediction-result .result-text h3 {
+  font-size: 1.3em;
+}
 
 .prediction-result .result-text ul,
 .prediction-result .result-text ol {
@@ -692,8 +875,8 @@ const goToPatientList = () => {
   padding-right: 0;
 }
 
-.prediction-result[dir="rtl"] .result-text ul,
-.prediction-result[dir="rtl"] .result-text ol {
+.prediction-result[dir='rtl'] .result-text ul,
+.prediction-result[dir='rtl'] .result-text ol {
   padding-right: 25px; /* For RTL */
   padding-left: 0;
 }
@@ -718,7 +901,6 @@ const goToPatientList = () => {
   font-style: italic;
 }
 
-
 /* Switch Link Container */
 .switch-link-container {
   margin-top: 25px;
@@ -727,7 +909,7 @@ const goToPatientList = () => {
 }
 
 .switch-link-container a {
-  color: #8D99AE;
+  color: #8d99ae;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.3s ease;

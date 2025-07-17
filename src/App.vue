@@ -1,33 +1,37 @@
 <!-- App.vue -->
 <script setup>
-import { RouterLink, RouterView } from 'vue-router'
-import { provide, ref, watch } from 'vue'; // Import provide, ref, watch
+import { RouterView } from 'vue-router'
+import { provide, ref, watch } from 'vue' // Import provide, ref, watch
 
 // Global language state
-const currentLanguage = ref('en'); // 'en' for English, 'ar' for Arabic
+const currentLanguage = ref('en') // 'en' for English, 'ar' for Arabic
 
 // Global info modal state
-const showInfoModal = ref(false);
+const showInfoModal = ref(false)
 
 const toggleLanguage = () => {
-  currentLanguage.value = currentLanguage.value === 'en' ? 'ar' : 'en';
+  currentLanguage.value = currentLanguage.value === 'en' ? 'ar' : 'en'
   // Set document direction based on language
-  document.documentElement.dir = currentLanguage.value === 'ar' ? 'rtl' : 'ltr';
-};
+  document.documentElement.dir = currentLanguage.value === 'ar' ? 'rtl' : 'ltr'
+}
 
 const toggleInfoModal = () => {
-  showInfoModal.value = !showInfoModal.value;
-};
+  showInfoModal.value = !showInfoModal.value
+}
 
 // Provide the language state and toggle function to all child components
-provide('currentLanguage', currentLanguage);
-provide('toggleLanguage', toggleLanguage);
-provide('toggleInfoModal', toggleInfoModal); // Provide toggleInfoModal globally
+provide('currentLanguage', currentLanguage)
+provide('toggleLanguage', toggleLanguage)
+provide('toggleInfoModal', toggleInfoModal) // Provide toggleInfoModal globally
 
 // Watch for initial load to set document direction
-watch(currentLanguage, (newLang) => {
-  document.documentElement.dir = newLang === 'ar' ? 'rtl' : 'ltr';
-}, { immediate: true });
+watch(
+  currentLanguage,
+  (newLang) => {
+    document.documentElement.dir = newLang === 'ar' ? 'rtl' : 'ltr'
+  },
+  { immediate: true },
+)
 
 // Information text content (moved from SignupView.vue)
 const infoTextArabic = `
@@ -75,7 +79,7 @@ const infoTextArabic = `
 </ul>
 
 <p>التعرض الإشعاعي ضرورة طبية لا يمكن الاستغناء عنها، ولكن لا ينبغي أبدًا الاستهانة بمخاطره. فالمعرفة والوقاية والتقنيات الحديثة تمثل عناصر أساسية لحماية كل من المرضى والعاملين. التوعية المستمرة والتدريب والرقابة تضمن تحقيق الفائدة من الإشعاع بأقل الأضرار، وتحافظ على بيئة صحية وآمنة للجميع.</p>
-`;
+`
 
 const infoTextEnglish = `
 <p>Radiation exposure is the amount of radiation received by the body when passing through an environment containing ionizing radiation, such as X-rays or CT scans. The radiation dose is measured in "millisieverts" (mSv), a unit that reflects the biological effect of radiation on body tissues.</p>
@@ -122,7 +126,7 @@ According to the recommendations of the International Commission on Radiological
 </ul>
 
 <p>Radiation exposure is a medical necessity that cannot be dispensed with, but its risks should never be underestimated. Knowledge, prevention, and modern technologies are essential elements to protect both patients and workers. Continuous awareness, training, and monitoring ensure that the benefits of radiation are achieved with minimal harm, maintaining a healthy and safe environment for everyone.</p>
-`;
+`
 </script>
 
 <template>
@@ -158,93 +162,174 @@ According to the recommendations of the International Commission on Radiological
     <Transition name="modal-fade">
       <div v-if="showInfoModal" class="modal-overlay" @click.self="toggleInfoModal">
         <div class="modal-content">
-          <button class="close-modal-button" @click="toggleInfoModal">
-            &times;
-          </button>
+          <button class="close-modal-button" @click="toggleInfoModal">&times;</button>
           <h2 class="modal-title">
-            {{ currentLanguage === 'en' ? 'Radiation Exposure Awareness' : 'التوعية بالتعرض الإشعاعي' }}
+            {{
+              currentLanguage === 'en' ? 'Radiation Exposure Awareness' : 'التوعية بالتعرض الإشعاعي'
+            }}
           </h2>
           <!-- Conditionally display Arabic or English content -->
           <div v-if="currentLanguage === 'ar'" class="info-section">
             <h3 class="lang-heading" dir="rtl">العربية (Arabic)</h3>
-            <div class="lang-text arabic-text" v-html="infoTextArabic"></div> <!-- Use v-html here -->
+            <div class="lang-text arabic-text" v-html="infoTextArabic"></div>
+            <!-- Use v-html here -->
             <!-- Arabic table for ICRP limits -->
             <div class="overflow-x-auto mt-4 rounded-lg border border-gray-300">
-              <table class="info-table" dir="rtl"> <!-- Added dir="rtl" here -->
+              <table class="info-table" dir="rtl">
+                <!-- Added dir="rtl" here -->
                 <thead class="bg-gray-50">
                   <tr>
-                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الفئة</th>
-                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">الحد السنوي المسموح به</th>
-                    <th scope="col" class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">ملاحظات</th>
+                    <th
+                      scope="col"
+                      class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      الفئة
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      الحد السنوي المسموح به
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      ملاحظات
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                   <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">العاملون في المجال الطبي</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">20 ميلي سيفرت (mSv)</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">كمتوسط على مدى 5 سنوات، بشرط ألا يتجاوز 50 mSv في سنة واحدة.</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      العاملون في المجال الطبي
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      20 ميلي سيفرت (mSv)
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      كمتوسط على مدى 5 سنوات، بشرط ألا يتجاوز 50 mSv في سنة واحدة.
+                    </td>
                   </tr>
                   <tr>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">المرضى</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">لا يوجد حد صارم</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">يجب تقليل التعرض بقدر الإمكان وفق مبدأ ALARA (As Low As Reasonably Achievable).</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      لا يوجد حد صارم
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      يجب تقليل التعرض بقدر الإمكان وفق مبدأ ALARA (As Low As Reasonably
+                      Achievable).
+                    </td>
                   </tr>
                   <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">النساء الحوامل العاملات</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1 ميلي سيفرت للجنين خلال الحمل</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">يجب ألا تتجاوز الجرعة 1 mSv من تاريخ العلم بالحمل وحتى الولادة.</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      النساء الحوامل العاملات
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      1 ميلي سيفرت للجنين خلال الحمل
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      يجب ألا تتجاوز الجرعة 1 mSv من تاريخ العلم بالحمل وحتى الولادة.
+                    </td>
                   </tr>
                   <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">العامة (غير العاملين بالمجال)</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      العامة (غير العاملين بالمجال)
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1 ميلي سيفرت</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">في الظروف الطبيعية بدون إجراءات طبية.</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      في الظروف الطبيعية بدون إجراءات طبية.
+                    </td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <p class="mt-4 lang-text arabic-text">
-              التعرض الإشعاعي ضرورة طبية لا يمكن الاستغناء عنها، ولكن لا ينبغي أبدًا الاستهانة بمخاطره. فالمعرفة والوقاية والتقنيات الحديثة تمثل عناصر أساسية لحماية كل من المرضى والعاملين. التوعية المستمرة والتدريب والرقابة تضمن تحقيق الفائدة من الإشعاع بأقل الأضرار، وتحافظ على بيئة صحية وآمنة للجميع.
+              التعرض الإشعاعي ضرورة طبية لا يمكن الاستغناء عنها، ولكن لا ينبغي أبدًا الاستهانة
+              بمخاطره. فالمعرفة والوقاية والتقنيات الحديثة تمثل عناصر أساسية لحماية كل من المرضى
+              والعاملين. التوعية المستمرة والتدريب والرقابة تضمن تحقيق الفائدة من الإشعاع بأقل
+              الأضرار، وتحافظ على بيئة صحية وآمنة للجميع.
             </p>
           </div>
           <div v-else class="info-section">
             <h3 class="lang-heading" dir="ltr">English</h3>
-            <div class="lang-text english-text" v-html="infoTextEnglish"></div> <!-- Use v-html here -->
+            <div class="lang-text english-text" v-html="infoTextEnglish"></div>
+            <!-- Use v-html here -->
             <!-- English table for ICRP limits -->
             <div class="overflow-x-auto mt-4 rounded-lg border border-gray-300">
-              <table class="info-table" dir="ltr"> <!-- Added dir="ltr" here for consistency -->
+              <table class="info-table" dir="ltr">
+                <!-- Added dir="ltr" here for consistency -->
                 <thead class="bg-gray-50">
                   <tr>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Annual Permissible Limit</th>
-                    <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
+                    <th
+                      scope="col"
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Category
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Annual Permissible Limit
+                    </th>
+                    <th
+                      scope="col"
+                      class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                    >
+                      Notes
+                    </th>
                   </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
                   <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Medical Professionals</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      Medical Professionals
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">20 mSv</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Averaged over 5 years, not exceeding 50 mSv in any single year.</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      Averaged over 5 years, not exceeding 50 mSv in any single year.
+                    </td>
                   </tr>
                   <tr>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Patients</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">No strict limit</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Exposure should be as low as reasonably achievable (ALARA principle).</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      No strict limit
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      Exposure should be as low as reasonably achievable (ALARA principle).
+                    </td>
                   </tr>
                   <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Pregnant Workers</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1 mSv to the fetus during pregnancy</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Dose should not exceed 1 mSv from the date of knowledge of pregnancy until birth.</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      Pregnant Workers
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      1 mSv to the fetus during pregnancy
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      Dose should not exceed 1 mSv from the date of knowledge of pregnancy until
+                      birth.
+                    </td>
                   </tr>
                   <tr>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">General Public (Non-Occupational)</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      General Public (Non-Occupational)
+                    </td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">1 mSv</td>
-                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">Under normal conditions without medical procedures.</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      Under normal conditions without medical procedures.
+                    </td>
                   </tr>
                 </tbody>
               </table>
             </div>
             <p class="mt-4 lang-text english-text">
-              Radiation exposure is a medical necessity that cannot be dispensed with, but its risks should never be underestimated. Knowledge, prevention, and modern technologies are essential elements to protect both patients and workers. Continuous awareness, training, and monitoring ensure that the benefits of radiation are achieved with minimal harm, maintaining a healthy and safe environment for everyone.
+              Radiation exposure is a medical necessity that cannot be dispensed with, but its risks
+              should never be underestimated. Knowledge, prevention, and modern technologies are
+              essential elements to protect both patients and workers. Continuous awareness,
+              training, and monitoring ensure that the benefits of radiation are achieved with
+              minimal harm, maintaining a healthy and safe environment for everyone.
             </p>
           </div>
         </div>
@@ -276,7 +361,7 @@ body {
 
 /* Global Header Styling (moved from SignupView) */
 .app-header {
-  background-color: #F1E234; /* Bright Yellow */
+  background-color: #f1e234; /* Bright Yellow */
   padding: 20px 30px;
   display: flex;
   justify-content: center; /* Center the title initially */
@@ -302,7 +387,7 @@ body {
   left: 30px; /* Top left corner */
   top: 50%;
   transform: translateY(-50%); /* Vertically center */
-  background-color: #8D99AE; /* Desired accent color */
+  background-color: #8d99ae; /* Desired accent color */
   color: white;
   border: none;
   padding: 12px 25px;
@@ -310,7 +395,9 @@ body {
   cursor: pointer;
   font-size: 1.1em;
   font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -319,12 +406,13 @@ body {
   transform: translateY(-50%) scale(1.03); /* Slight scale effect */
 }
 
-.info-button-global { /* Renamed to avoid conflict with potential local info buttons */
+.info-button-global {
+  /* Renamed to avoid conflict with potential local info buttons */
   position: absolute;
   right: 30px; /* Top right corner */
   top: 50%;
   transform: translateY(-50%); /* Vertically center */
-  background-color: #8D99AE; /* Desired accent color */
+  background-color: #8d99ae; /* Desired accent color */
   color: white;
   border: none;
   padding: 12px 25px;
@@ -332,7 +420,9 @@ body {
   cursor: pointer;
   font-size: 1.1em;
   font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
@@ -376,8 +466,10 @@ body {
   border: none;
   font-size: 2.5em; /* Larger X for easier clicking */
   cursor: pointer;
-  color: #8D99AE; /* Use accent color for consistency */
-  transition: color 0.3s ease, transform 0.2s ease;
+  color: #8d99ae; /* Use accent color for consistency */
+  transition:
+    color 0.3s ease,
+    transform 0.2s ease;
 }
 
 .close-modal-button:hover {
@@ -387,7 +479,7 @@ body {
 
 .modal-title {
   text-align: center;
-  color: #8D99AE;
+  color: #8d99ae;
   margin-bottom: 30px;
   font-size: 2.2em;
   font-weight: 700;
@@ -441,7 +533,6 @@ body {
   /* No specific text-align here, let it inherit or default */
 }
 
-
 .arabic-text {
   direction: rtl; /* Right-to-left for Arabic */
   text-align: justify;
@@ -474,20 +565,19 @@ body {
 }
 
 /* Specific text alignment for Arabic table */
-.info-table[dir="rtl"] th,
-.info-table[dir="rtl"] td {
+.info-table[dir='rtl'] th,
+.info-table[dir='rtl'] td {
   text-align: right; /* Align text to the right for RTL tables */
 }
 
 /* Specific text alignment for English table */
-.info-table[dir="ltr"] th,
-.info-table[dir="ltr"] td {
+.info-table[dir='ltr'] th,
+.info-table[dir='ltr'] td {
   text-align: left; /* Align text to the left for LTR tables */
 }
 
-
 .info-table th {
-  background-color: #8D99AE; /* Accent color for table header */
+  background-color: #8d99ae; /* Accent color for table header */
   color: white;
   font-weight: 600;
   text-transform: uppercase;
@@ -502,7 +592,6 @@ body {
   background-color: #f0f0f0; /* Hover effect */
 }
 
-
 /* Modal Transition Animations */
 .modal-fade-enter-active,
 .modal-fade-leave-active {
@@ -516,7 +605,9 @@ body {
 
 .modal-fade-enter-active .modal-content,
 .modal-fade-leave-active .modal-content {
-  transition: transform 0.4s ease, opacity 0.4s ease;
+  transition:
+    transform 0.4s ease,
+    opacity 0.4s ease;
 }
 
 .modal-fade-enter-from .modal-content {
@@ -587,7 +678,8 @@ body {
     font-size: 1.6em;
   }
 
-  .info-button-global, .language-toggle-button {
+  .info-button-global,
+  .language-toggle-button {
     font-size: 0.9em;
     padding: 8px 15px;
   }

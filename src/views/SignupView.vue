@@ -1,39 +1,40 @@
 <!-- SignupView.vue -->
 <script setup>
-import { ref, inject } from 'vue';
-import { useRouter } from 'vue-router';
-import { useAuthStore } from '../stores/auth'; // Import your auth store
+import { ref, inject } from 'vue'
+import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth' // Import your auth store
 
-const router = useRouter();
-const authStore = useAuthStore(); // Access the auth store
+const router = useRouter()
+const authStore = useAuthStore() // Access the auth store
 
 // Inject the globally provided language state
-const currentLanguage = inject('currentLanguage');
+const currentLanguage = inject('currentLanguage')
 
 // Form fields - these are now local state for the form inputs
 // const name = ref(''); // Removed as per request
-const email = ref('');
-const password = ref('');
-const confirmPassword = ref('');
+const email = ref('')
+const password = ref('')
+const confirmPassword = ref('')
 
 // Function to handle email/password signup
 const handleEmailSignup = async () => {
   if (password.value !== confirmPassword.value) {
-    authStore.error = currentLanguage.value === 'en' ? 'Passwords do not match.' : 'كلمتا المرور غير متطابقتين.';
-    return;
+    authStore.error =
+      currentLanguage.value === 'en' ? 'Passwords do not match.' : 'كلمتا المرور غير متطابقتين.'
+    return
   }
   // Pass an empty string or null for name if it's no longer collected
-  await authStore.signupWithEmail('', email.value, password.value);
-};
+  await authStore.signupWithEmail('', email.value, password.value)
+}
 
 // Function to handle Google signup
 const handleGoogleSignup = async () => {
-  await authStore.signupWithGoogle();
-};
+  await authStore.signupWithGoogle()
+}
 
 const navigateToLogin = () => {
-  router.push('/signin'); // Navigate to the /login path
-};
+  router.push('/signin') // Navigate to the /login path
+}
 </script>
 
 <template>
@@ -44,7 +45,9 @@ const navigateToLogin = () => {
           {{ currentLanguage === 'en' ? 'Welcome! Please Sign Up' : 'أهلاً بك! يرجى التسجيل' }}
         </h2>
         <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{ currentLanguage === 'en' ? 'Create your account to get started.' : 'أنشئ حسابك للبدء.' }}
+          {{
+            currentLanguage === 'en' ? 'Create your account to get started.' : 'أنشئ حسابك للبدء.'
+          }}
         </p>
 
         <form @submit.prevent="handleEmailSignup" class="signup-form">
@@ -120,7 +123,11 @@ const navigateToLogin = () => {
         </form>
 
         <!-- Display error message from store -->
-        <div v-if="authStore.error" class="message error-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <div
+          v-if="authStore.error"
+          class="message error-message"
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+        >
           {{ authStore.error }}
         </div>
         <!-- Success message will trigger redirection, so no explicit display needed here -->
@@ -129,14 +136,37 @@ const navigateToLogin = () => {
           <span>{{ currentLanguage === 'en' ? 'OR' : 'أو' }}</span>
         </div>
 
-        <button @click="handleGoogleSignup" class="action-button google-button" :disabled="authStore.loading">
-          <svg class="google-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M44.5 20H24V28.5H35.5C34.75 31.85 32.5 34.5 29.5 36.5L24 41.5L24 48H32.5C39.5 48 44.5 43.5 44.5 36.5C44.5 35.5 44.3 34.5 44.1 33.5L44.5 20Z" fill="#4285F4"/>
-            <path d="M24 44.5C29.5 44.5 34.25 42.5 37.75 39.25L29.5 36.5C27.25 37.75 24 38.5 24 38.5C18.5 38.5 13.75 34.25 11.75 28.5L6.25 33.5C8.75 38.75 15.5 44.5 24 44.5Z" fill="#34A853"/>
-            <path d="M11.75 28.5C11.25 27.25 11 25.75 11 24C11 22.25 11.25 20.75 11.75 19.5L17.25 14.5C16 17.25 15.25 20.5 15.25 24C15.25 27.5 16 30.75 17.25 33.5L11.75 28.5Z" fill="#FBBC05"/>
-            <path d="M24 9.5C26.75 9.5 29.25 10.5 31.25 12.25L36.5 7C32.5 3 27.25 0 24 0C15.5 0 8.75 5.75 6.25 11L11.75 16C13.75 10.25 18.5 6 24 6C24 6 24 9.5 24 9.5Z" fill="#EA4335"/>
+        <button
+          @click="handleGoogleSignup"
+          class="action-button google-button"
+          :disabled="authStore.loading"
+        >
+          <svg
+            class="google-icon"
+            viewBox="0 0 48 48"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              d="M44.5 20H24V28.5H35.5C34.75 31.85 32.5 34.5 29.5 36.5L24 41.5L24 48H32.5C39.5 48 44.5 43.5 44.5 36.5C44.5 35.5 44.3 34.5 44.1 33.5L44.5 20Z"
+              fill="#4285F4"
+            />
+            <path
+              d="M24 44.5C29.5 44.5 34.25 42.5 37.75 39.25L29.5 36.5C27.25 37.75 24 38.5 24 38.5C18.5 38.5 13.75 34.25 11.75 28.5L6.25 33.5C8.75 38.75 15.5 44.5 24 44.5Z"
+              fill="#34A853"
+            />
+            <path
+              d="M11.75 28.5C11.25 27.25 11 25.75 11 24C11 22.25 11.25 20.75 11.75 19.5L17.25 14.5C16 17.25 15.25 20.5 15.25 24C15.25 27.5 16 30.75 17.25 33.5L11.75 28.5Z"
+              fill="#FBBC05"
+            />
+            <path
+              d="M24 9.5C26.75 9.5 29.25 10.5 31.25 12.25L36.5 7C32.5 3 27.25 0 24 0C15.5 0 8.75 5.75 6.25 11L11.75 16C13.75 10.25 18.5 6 24 6C24 6 24 9.5 24 9.5Z"
+              fill="#EA4335"
+            />
           </svg>
-          <span>{{ currentLanguage === 'en' ? 'Sign Up with Google' : 'التسجيل باستخدام جوجل' }}</span>
+          <span>{{
+            currentLanguage === 'en' ? 'Sign Up with Google' : 'التسجيل باستخدام جوجل'
+          }}</span>
         </button>
 
         <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
@@ -181,7 +211,7 @@ const navigateToLogin = () => {
 }
 
 .signup-card h2 {
-  color: #8D99AE; /* Accent color for headings */
+  color: #8d99ae; /* Accent color for headings */
   margin-bottom: 20px;
   font-size: 2em;
   font-weight: 700;
@@ -220,19 +250,21 @@ const navigateToLogin = () => {
   border-radius: 8px;
   font-size: 1em;
   color: #333;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
   box-sizing: border-box; /* Include padding and border in the element's total width and height */
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #8D99AE; /* Highlight border on focus */
+  border-color: #8d99ae; /* Highlight border on focus */
   box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2); /* Subtle glow on focus */
 }
 
 /* Action button (Create Account) */
 .action-button {
-  background-color: #8D99AE;
+  background-color: #8d99ae;
   color: white;
   border: none;
   padding: 15px 30px;
@@ -240,7 +272,9 @@ const navigateToLogin = () => {
   cursor: pointer;
   font-size: 1.15em;
   font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   width: 100%; /* Make button full width */
   margin-top: 20px; /* Space above the button, if not already handled by form-group gap */
@@ -265,7 +299,7 @@ const navigateToLogin = () => {
 }
 
 .switch-link-container a {
-  color: #8D99AE;
+  color: #8d99ae;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.3s ease;
@@ -294,16 +328,16 @@ const navigateToLogin = () => {
 }
 
 .divider:not(:empty)::before {
-  margin-right: .25em;
+  margin-right: 0.25em;
 }
 
 .divider:not(:empty)::after {
-  margin-left: .25em;
+  margin-left: 0.25em;
 }
 
 /* Google Button Styling */
 .google-button {
-  background-color: #4285F4; /* Google blue */
+  background-color: #4285f4; /* Google blue */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -314,7 +348,9 @@ const navigateToLogin = () => {
   cursor: pointer;
   font-size: 1.05em;
   font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   width: 100%;
   margin-bottom: 20px; /* Space below Google button */
@@ -355,7 +391,6 @@ const navigateToLogin = () => {
 
 /* No explicit success message on this page, as successful signup triggers redirection */
 
-
 /* Responsive Adjustments */
 @media (max-width: 768px) {
   .signup-main-content {
@@ -376,7 +411,8 @@ const navigateToLogin = () => {
     padding: 20px;
   }
 
-  .action-button, .google-button {
+  .action-button,
+  .google-button {
     padding: 12px 20px;
     font-size: 1em;
   }
