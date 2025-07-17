@@ -1,4 +1,3 @@
-<!-- views/RecommendView.vue -->
 <script setup>
 import { ref, inject, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
@@ -30,15 +29,27 @@ const isLoading = ref(false)
 const errorMessage = ref('')
 
 // Patient details from route params
-const patientId = ref(route.params.patientId || '')
+const patientId = ref(null)
 const patientName = ref('')
 const patientAge = ref(null)
 const patientGender = ref('')
+
+// Function to reset the volatile state of the form
+const resetFormState = () => {
+  recommendationResult.value = ''
+  factorDetails.value = null
+  calculatedMsv.value = null
+  errorMessage.value = ''
+  currentSymptoms.value = ''
+  isPregnant.value = false
+  scanType.value = ''
+}
 
 // Function to fetch and pre-fill patient details
 const fetchPatientDetails = async (id) => {
   if (!id || !db || !currentUserId.value) return
 
+  isLoading.value = true
   const userIdVal = currentUserId.value
   const patientDocRef = doc(db, `artifacts/${VITE_APP_ID}/users/${userIdVal}/patients`, id)
 
@@ -60,31 +71,37 @@ const fetchPatientDetails = async (id) => {
     }
   } catch (error) {
     console.error('Error fetching patient details:', error)
+  } finally {
+    isLoading.value = false
   }
 }
 
-// Watch for auth readiness and route changes
+// Watcher to handle data fetching and state clearing
 watch(
   [isAuthReady, () => route.params.patientId],
   ([ready, newPatientId]) => {
-    patientId.value = newPatientId || ''
-    // Clear form when patient changes or is cleared
-    if (!patientId.value) {
-        patientName.value = ''
-        patientAge.value = null
-        patientGender.value = ''
-        age.value = null
-        gender.value = ''
-        medicalHistory.value = ''
-        currentSymptoms.value = ''
-        allergies.value = ''
-        isPregnant.value = false
-        previousRadiationExposure.value = ''
-    } else if (ready) {
-        fetchPatientDetails(patientId.value)
+    resetFormState()
+
+    if (newPatientId !== patientId.value) {
+      // If the patient ID has changed, reset all patient-specific data
+      patientName.value = ''
+      patientAge.value = null
+      patientGender.value = ''
+      age.value = null
+      gender.value = ''
+      medicalHistory.value = ''
+      allergies.value = ''
+      previousRadiationExposure.value = ''
+      patientId.value = newPatientId
+    }
+
+    if (ready && newPatientId && !patientName.value) {
+      // Fetch details if we have an ID but no loaded patient data
+      // This covers initial load, navigation to a new patient, and returning to the same patient.
+      fetchPatientDetails(newPatientId)
     }
   },
-  { immediate: true },
+  { immediate: true, deep: true },
 )
 
 const getRecommendations = async () => {
@@ -94,8 +111,6 @@ const getRecommendations = async () => {
   factorDetails.value = null
   calculatedMsv.value = null
 
-  // ==================== CRITICAL FIX APPLIED HERE ====================
-  // Validation now only checks for age and scanType.
   if (!age.value || !scanType.value) {
     errorMessage.value =
       currentLanguage.value === 'en'
@@ -104,30 +119,43 @@ const getRecommendations = async () => {
     isLoading.value = false
     return
   }
-  // ====================================================================
 
-  const patientIdentifier = patientName.value || (currentLanguage.value === 'en' ? 'Unspecified Patient' : 'مريض غير محدد');
+  const patientIdentifier = patientName.value || (currentLanguage.value === 'en' ? 'Unspecified Patient' : 'مريض غير محدد')
 
-  // Prompt now handles optional fields gracefully by providing defaults.
+  // ====================== FINAL PROMPT FIX ======================
+  // Added an explicit, undeniable command to the AI to respond in the correct language.
   const prompt =
     currentLanguage.value === 'en'
       ? `Based on the following patient details, provide a medical recommendation for an X-ray or CT scan.
-    Also, estimate the typical Tube Voltage (kV), Tube Current (mA), Exposure Time (ms) for the recommended scan, and the approximate Effective Dose (mSv).
-    Patient Name: ${patientIdentifier}
-    Age: ${age.value}
-    Gender: ${gender.value || 'Not specified'}
-    Medical History: ${medicalHistory.value || 'Not provided'}
-    Current Symptoms: ${currentSymptoms.value || 'Not provided'}
-    Allergies: ${allergies.value || 'None specified'}
-    Is Pregnant: ${isPregnant.value ? 'Yes' : 'No'}
-    Previous Radiation Exposure: ${previousRadiationExposure.value || 'None known'}
-    Type of Scan to Consider: ${scanType.value}
+Also, estimate the typical Tube Voltage (kV), Tube Current (mA), Exposure Time (ms) for the recommended scan, and the approximate Effective Dose (mSv).
+Patient Name: ${patientIdentifier}
+Age: ${age.value}
+Gender: ${gender.value || 'Not specified'}
+Medical History: ${medicalHistory.value || 'Not provided'}
+Current Symptoms: ${currentSymptoms.value || 'Not provided'}
+Allergies: ${allergies.value || 'None specified'}
+Is Pregnant: ${isPregnant.value ? 'Yes' : 'No'}
+Previous Radiation Exposure: ${previousRadiationExposure.value || 'None known'}
+Type of Scan to Consider: ${scanType.value}
 
-    The recommendation should be concise and professional. You must provide a numerical estimate for all scan factors.
-    Provide the response in a JSON format with keys: "recommendationText", "factorDetails" (with "tubeVoltageKv", "tubeCurrentMa", "exposureTimeMs"), and "calculatedMsv".`
-      : `بناءً على تفاصيل المريض التالية، قدم توصية طبية ...
-    اسم المريض: ${patientIdentifier}، العمر: ${age.value}، الجنس: ${gender.value || 'غير محدد'}، التاريخ الطبي: ${medicalHistory.value || 'لم يتم تقديمه'}، الأعراض الحالية: ${currentSymptoms.value || 'لم يتم تقديمها'}، الحساسية: ${allergies.value || 'غير محدد'}، هل هي حامل: ${isPregnant.value ? 'نعم' : 'لا'}، التعرض السابق للإشعاع: ${previousRadiationExposure.value || 'لا يوجد'}، نوع الفحص: ${scanType.value}.
-    يجب أن تقدم تقديرًا رقميًا لجميع عوامل الفحص. قدم الاستجابة بتنسيق JSON.`;
+The recommendation should be concise and professional. You must provide a numerical estimate for all scan factors.
+Provide the response in a JSON format with keys: "recommendationText", "factorDetails" (with "tubeVoltageKv", "tubeCurrentMa", "exposureTimeMs"), and "calculatedMsv".
+CRITICAL: The entire "recommendationText" field in the JSON response MUST be in English.`
+      : `بناءً على تفاصيل المريض التالية، قدم توصية طبية لفحص الأشعة السينية أو المقطعية.
+أيضًا، قم بتقدير جهد الأنبوب (kV)، تيار الأنبوب (mA)، ووقت التعرض (ms) النموذجي للفحص الموصى به، والجرعة الفعالة التقريبية (mSv).
+اسم المريض: ${patientIdentifier}
+العمر: ${age.value}
+الجنس: ${gender.value || 'غير محدد'}
+التاريخ الطبي: ${medicalHistory.value || 'لم يتم تقديمه'}
+الأعراض الحالية: ${currentSymptoms.value || 'لم يتم تقديمها'}
+الحساسية: ${allergies.value || 'غير محدد'}
+هل هي حامل: ${isPregnant.value ? 'نعم' : 'لا'}
+التعرض السابق للإشعاع: ${previousRadiationExposure.value || 'لا يوجد'}
+نوع الفحص المطلوب: ${scanType.value}
+
+يجب أن تكون التوصية موجزة واحترافية. يجب أن تقدم تقديرًا رقميًا لجميع عوامل الفحص.
+قدم الاستجابة بتنسيق JSON بالمفاتيح التالية: "recommendationText", "factorDetails" (مع "tubeVoltageKv", "tubeCurrentMa", "exposureTimeMs"), و "calculatedMsv".
+مهم جدًا: حقل "recommendationText" في استجابة JSON يجب أن يكون بالكامل باللغة العربية.`
 
   try {
     const chatHistory = [{ role: 'user', parts: [{ text: prompt }] }]
@@ -146,7 +174,7 @@ const getRecommendations = async () => {
                 tubeCurrentMa: { type: 'NUMBER' },
                 exposureTimeMs: { type: 'NUMBER' },
               },
-              required: ['tubeVoltageKv', 'tubeCurrentMa', 'exposureTimeMs']
+              required: ['tubeVoltageKv', 'tubeCurrentMa', 'exposureTimeMs'],
             },
             calculatedMsv: { type: 'NUMBER' },
           },
@@ -175,26 +203,32 @@ const getRecommendations = async () => {
       calculatedMsv.value = jsonResponse.calculatedMsv
 
       if (db && currentUserId.value) {
-        await addDoc(collection(db, `artifacts/${VITE_APP_ID}/users/${currentUserId.value}/recommendationHistory`), {
-          patientId: patientId.value || null,
-          patientName: patientName.value || null,
-          age: age.value,
-          gender: gender.value || null,
-          medicalHistory: medicalHistory.value || null,
-          currentSymptoms: currentSymptoms.value || null,
-          allergies: allergies.value || null,
-          isPregnant: isPregnant.value,
-          previousRadiationExposure: previousRadiationExposure.value || null,
-          scanType: scanType.value,
-          recommendation: recommendationResult.value,
-          factorDetails: factorDetails.value,
-          calculatedMsv: calculatedMsv.value,
-          timestamp: new Date(),
-          language: currentLanguage.value,
-        })
+        await addDoc(
+          collection(db, `artifacts/${VITE_APP_ID}/users/${currentUserId.value}/recommendationHistory`),
+          {
+            patientId: patientId.value || null,
+            patientName: patientName.value || null,
+            age: age.value,
+            gender: gender.value || null,
+            medicalHistory: medicalHistory.value || null,
+            currentSymptoms: currentSymptoms.value || null,
+            allergies: allergies.value || null,
+            isPregnant: isPregnant.value,
+            previousRadiationExposure: previousRadiationExposure.value || null,
+            scanType: scanType.value,
+            recommendation: recommendationResult.value,
+            factorDetails: factorDetails.value,
+            calculatedMsv: calculatedMsv.value,
+            timestamp: new Date(),
+            language: currentLanguage.value,
+          },
+        )
       }
     } else {
-      errorMessage.value = currentLanguage.value === 'en' ? 'Could not get a valid recommendation.' : 'تعذر الحصول على توصية صالحة.'
+      errorMessage.value =
+        currentLanguage.value === 'en'
+          ? 'Could not get a valid recommendation.'
+          : 'تعذر الحصول على توصية صالحة.'
     }
   } catch (error) {
     console.error('Error generating recommendation:', error)
@@ -205,7 +239,6 @@ const getRecommendations = async () => {
 }
 
 const goToDashboard = () => router.push('/dashboard')
-const goToPatientList = () => router.push('/patients')
 </script>
 
 <template>
