@@ -27,9 +27,18 @@ const handleEmailSignup = async () => {
   await authStore.signupWithEmail('', email.value, password.value)
 }
 
-// Function to handle Google signup
 const handleGoogleSignup = async () => {
-  await authStore.signupWithGoogle()
+  // Use the correctly named action from your store
+  const success = await authStore.signInWithGoogle()
+
+  if (success) {
+    // Optionally, redirect the user after a successful sign-in
+    console.log('Successfully signed in with Google! Redirecting...')
+    // router.push({ name: 'home' }) // Example redirect
+  } else {
+    // The error is already set in the store, you can display it in your template
+    console.error('Google sign-in failed:', authStore.error)
+  }
 }
 
 const navigateToLogin = () => {
