@@ -540,9 +540,8 @@ onUnmounted(() => {
 
         <button
           @click="
-            showAddPatientModal = true
-            resetAddPatientForm()
-          "
+            showAddPatientModal = true;
+            resetAddPatientForm()"
           class="action-button primary add-new-patient-button"
           :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
         >
@@ -661,7 +660,7 @@ onUnmounted(() => {
         v-if="showAddPatientModal"
         class="modal-overlay"
         @click.self="
-          showAddPatientModal = false
+          showAddPatientModal = false;
           resetAddPatientForm()
         "
       >
@@ -669,7 +668,7 @@ onUnmounted(() => {
           <button
             class="close-modal-button"
             @click="
-              showAddPatientModal = false
+              showAddPatientModal = false;
               resetAddPatientForm()
             "
           >
@@ -785,7 +784,7 @@ onUnmounted(() => {
             <button
               type="button"
               @click="
-                showAddPatientModal = false
+                showAddPatientModal = false;
                 resetAddPatientForm()
               "
               class="action-button secondary mt-2"

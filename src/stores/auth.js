@@ -86,7 +86,6 @@ export const useAuthStore = defineStore('auth', {
       try {
         const userCredential = await signInWithEmailAndPassword(this.authInstance, email, password)
         this.user = userCredential.user
-        this.successMessage = 'Signed in successfully!'
         return true
       } catch (err) {
         console.error('Error signing in with email:', err)
@@ -105,7 +104,6 @@ export const useAuthStore = defineStore('auth', {
         const provider = new GoogleAuthProvider()
         const userCredential = await signInWithPopup(this.authInstance, provider)
         this.user = userCredential.user
-        this.successMessage = 'Signed in with Google successfully!'
         return true
       } catch (err) {
         console.error('Error signing in with Google:', err)

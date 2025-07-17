@@ -26,7 +26,7 @@ const handleLogout = async () => {
         <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{
             currentLanguage === 'en'
-              ? 'Welcome to X-Ray Dose Tracker'
+              ? 'Welcome to mSv Dose Tracker'
               : 'مرحبًا بك في متتبع جرعات الأشعة السينية'
           }}
         </h2>

@@ -94,22 +94,3 @@ app.provide('isAuthReady', isAuthReady) // Provide reactive auth status
 app.provide('appId', typeof __app_id !== 'undefined' ? __app_id : 'default-app-id') // Provide appId
 
 app.mount('#app')
-
-// Important: Load Tailwind CSS CDN for styling
-const tailwindScript = document.createElement('script')
-tailwindScript.src = 'https://cdn.tailwindcss.com'
-document.head.appendChild(tailwindScript)
-
-// Configure Tailwind CSS to use the 'Inter' and 'Cairo' fonts
-tailwindScript.onload = () => {
-  window.tailwind.config = {
-    theme: {
-      extend: {
-        fontFamily: {
-          inter: ['Inter', 'sans-serif'],
-          cairo: ['Cairo', 'sans-serif'], // Add Cairo for Arabic
-        },
-      },
-    },
-  }
-}

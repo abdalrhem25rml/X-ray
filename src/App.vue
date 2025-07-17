@@ -143,7 +143,7 @@ According to the recommendations of the International Commission on Radiological
       </button>
 
       <h1 class="project-title">
-        {{ currentLanguage === 'en' ? 'X-Ray Exposure Calculator' : 'حاسبة التعرض للأشعة السينية' }}
+        {{ currentLanguage === 'en' ? 'mSv Exposure Calculator' : 'حاسبة التعرض للأشعة' }}
       </h1>
       <!-- Global Info Button -->
       <button @click="toggleInfoModal" class="info-button-global">
@@ -403,7 +403,6 @@ body {
 
 .language-toggle-button:hover {
   background-color: #6a7483; /* Darker shade on hover */
-  transform: translateY(-50%) scale(1.03); /* Slight scale effect */
 }
 
 .info-button-global {
@@ -428,7 +427,6 @@ body {
 
 .info-button-global:hover {
   background-color: #6a7483; /* Darker shade on hover */
-  transform: translateY(-50%) scale(1.03); /* Slight scale effect */
 }
 
 /* Modal Styling (moved from SignupView) */
