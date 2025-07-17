@@ -17,7 +17,7 @@ const VITE_APP_ID = import.meta.env.VITE_APP_ID;
 const patients = ref([]);
 const isLoadingPatients = ref(false);
 const showMessage = ref(false);
-const messageType = ref('');
+const messageType = ref(''); // e.g., 'success', 'error'
 const message = ref('');
 
 // State for Add Patient Modal
@@ -31,24 +31,23 @@ const newPatientPreviousRadiationExposure = ref('');
 const isAddingPatient = ref(false);
 
 // State for Patient Details/Edit/Delete Modals
-const selectedPatient = ref(null); // Patient currently selected for details/edit/delete
-const showPatientDetailsModal = ref(false); // Controls patient details modal visibility
-const showEditPatientModal = ref(false); // Controls edit patient modal visibility
-const showDeletePatientConfirmation = ref(false); // Controls delete patient confirmation modal
-const editedPatient = ref(null); // Copy of patient data for editing
+const selectedPatient = ref(null);
+const showPatientDetailsModal = ref(false);
+const showEditPatientModal = ref(false);
+const showDeletePatientConfirmation = ref(false);
+const editedPatient = ref(null);
 
 // State for Recommendation History
-const recommendationHistory = ref([]); // History for the selected patient
-let unsubscribeRecommendations = null; // To store the unsubscribe function for real-time history listener
+const recommendationHistory = ref([]);
+let unsubscribeRecommendations = null;
 
 // State for Individual Recommendation Details/Edit/Delete Modals
-const selectedRecommendation = ref(null); // Recommendation currently selected for details/edit/delete
-const showRecommendationDetailsModal = ref(false); // Controls individual recommendation details modal
-const showEditRecommendationModal = ref(false); // Controls edit recommendation modal
-const showDeleteRecommendationConfirmation = ref(false); // Controls delete recommendation confirmation modal
-const editedRecommendation = ref(null); // Copy of recommendation data for editing
+const selectedRecommendation = ref(null);
+const showRecommendationDetailsModal = ref(false);
+const showEditRecommendationModal = ref(false);
+const showDeleteRecommendationConfirmation = ref(false);
+const editedRecommendation = ref(null);
 
-// Declare authReadyWatcher as a ref to ensure it's always initialized
 const authReadyWatcher = ref(null);
 
 // Utility function to display messages
@@ -58,7 +57,7 @@ const displayMessage = (type, text) => {
   showMessage.value = true;
   setTimeout(() => {
     showMessage.value = false;
-  }, 5000); // Message disappears after 5 seconds
+  }, 5000);
 };
 
 // Function to reset the add patient form fields
@@ -83,9 +82,8 @@ const fetchPatients = () => {
 
   isLoadingPatients.value = true;
   const patientsCollectionRef = collection(db, `artifacts/${VITE_APP_ID}/users/${currentUserId.value}/patients`);
-  const q = query(patientsCollectionRef, orderBy('timestamp', 'desc')); // Order by creation date, latest first
+  const q = query(patientsCollectionRef, orderBy('timestamp', 'desc'));
 
-  // onSnapshot provides real-time updates
   onSnapshot(q, (snapshot) => {
     const patientsList = [];
     snapshot.forEach((doc) => {
@@ -103,8 +101,11 @@ const fetchPatients = () => {
 // Add a new patient to Firestore
 const addPatient = async () => {
   displayMessage('', ''); // Clear previous messages
-  if (!newPatientName.value || !newPatientAge.value || !newPatientGender.value || !newPatientMedicalHistory.value) {
-    displayMessage('error', currentLanguage.value === 'en' ? 'Please fill in all required fields.' : 'الرجاء ملء جميع الحقول المطلوبة.');
+
+  // FIX: Validation updated to only require Name, Age, and Gender.
+  if (!newPatientName.value || !newPatientAge.value || !newPatientGender.value) {
+    // FIX: Updated error message to be more specific.
+    displayMessage('error', currentLanguage.value === 'en' ? 'Please fill in the required fields: Name, Age, and Gender.' : 'الرجاء ملء الحقول المطلوبة: الاسم، والعمر، والجنس.');
     return;
   }
 
@@ -114,12 +115,13 @@ const addPatient = async () => {
     return;
   }
 
-  isAddingPatient.value = true;
+  isAddingPatient.value = true; // Provides "in progress" feedback
   try {
     const patientData = {
       name: newPatientName.value,
       age: parseInt(newPatientAge.value),
       gender: newPatientGender.value,
+      // Optional fields are handled correctly, creating empty arrays if no input is provided.
       medicalHistory: newPatientMedicalHistory.value.split(',').map(item => item.trim()).filter(item => item),
       allergies: newPatientAllergies.value.split(',').map(item => item.trim()).filter(item => item),
       previousRadiationExposure: newPatientPreviousRadiationExposure.value.split(',').map(item => item.trim()).filter(item => item),
@@ -134,15 +136,16 @@ const addPatient = async () => {
     console.error("Error adding patient: ", error);
     displayMessage('error', currentLanguage.value === 'en' ? 'Failed to add patient.' : 'فشل إضافة المريض.');
   } finally {
-    isAddingPatient.value = false;
+    isAddingPatient.value = false; // Resets loading state on completion or failure
   }
 };
+
 
 // Open Patient Details Modal
 const openPatientDetails = (patient) => {
   selectedPatient.value = patient;
   showPatientDetailsModal.value = true;
-  fetchRecommendationHistory(patient.id); // Fetch history when details modal opens
+  fetchRecommendationHistory(patient.id);
 };
 
 // Close Patient Details Modal
@@ -150,14 +153,13 @@ const closePatientDetails = () => {
   showPatientDetailsModal.value = false;
   selectedPatient.value = null;
   if (unsubscribeRecommendations) {
-    unsubscribeRecommendations(); // Unsubscribe from history when modal closes
+    unsubscribeRecommendations();
   }
 };
 
 // Open Edit Patient Modal
 const openEditPatientModal = (patient) => {
   selectedPatient.value = patient;
-  // Create a deep copy for editing to avoid direct mutation
   editedPatient.value = {
     ...patient,
     medicalHistory: patient.medicalHistory ? patient.medicalHistory.join(', ') : '',
@@ -169,7 +171,7 @@ const openEditPatientModal = (patient) => {
 
 // Update Patient
 const updatePatient = async () => {
-  displayMessage('', ''); // Clear previous messages
+  displayMessage('', '');
   if (!editedPatient.value.name || !editedPatient.value.age || !editedPatient.value.gender) {
     displayMessage('error', currentLanguage.value === 'en' ? 'Please fill in all required fields.' : 'الرجاء ملء جميع الحقول المطلوبة.');
     return;
@@ -177,11 +179,10 @@ const updatePatient = async () => {
 
   if (!isAuthReady.value || !currentUserId.value || !editedPatient.value.id) {
     displayMessage('error', currentLanguage.value === 'en' ? 'Authentication or patient ID not ready.' : 'المصادقة أو معرف المريض غير جاهز.');
-    console.error("Firestore update attempted before authentication was ready or without patient ID.");
     return;
   }
 
-  isLoadingPatients.value = true; // Use this for general loading feedback
+  isLoadingPatients.value = true;
   try {
     const patientDocRef = doc(db, `artifacts/${VITE_APP_ID}/users/${currentUserId.value}/patients`, editedPatient.value.id);
     await updateDoc(patientDocRef, {
@@ -191,11 +192,10 @@ const updatePatient = async () => {
       medicalHistory: editedPatient.value.medicalHistory.split(',').map(item => item.trim()).filter(item => item),
       allergies: editedPatient.value.allergies.split(',').map(item => item.trim()).filter(item => item),
       previousRadiationExposure: editedPatient.value.previousRadiationExposure.split(',').map(item => item.trim()).filter(item => item),
-      // Do NOT update timestamp here unless you want to change the order
     });
     displayMessage('success', currentLanguage.value === 'en' ? 'Patient updated successfully!' : 'تم تحديث بيانات المريض بنجاح!');
     showEditPatientModal.value = false;
-    selectedPatient.value = null; // Clear selected patient after update
+    selectedPatient.value = null;
   } catch (error) {
     console.error("Error updating patient: ", error);
     displayMessage('error', currentLanguage.value === 'en' ? 'Failed to update patient.' : 'فشل تحديث بيانات المريض.');
@@ -212,10 +212,9 @@ const confirmDeletePatient = (patient) => {
 
 // Delete Patient
 const deletePatient = async () => {
-  displayMessage('', ''); // Clear previous messages
+  displayMessage('', '');
   if (!isAuthReady.value || !currentUserId.value || !selectedPatient.value?.id) {
     displayMessage('error', currentLanguage.value === 'en' ? 'Authentication or patient ID not ready for deletion.' : 'المصادقة أو معرف المريض غير جاهز للحذف.');
-    console.error("Firestore delete attempted before authentication was ready or without patient ID.");
     return;
   }
 
@@ -225,7 +224,7 @@ const deletePatient = async () => {
     await deleteDoc(patientDocRef);
     displayMessage('success', currentLanguage.value === 'en' ? 'Patient deleted successfully!' : 'تم حذف المريض بنجاح!');
     showDeletePatientConfirmation.value = false;
-    selectedPatient.value = null; // Clear selected patient after deletion
+    selectedPatient.value = null;
   } catch (error) {
     console.error("Error deleting patient: ", error);
     displayMessage('error', currentLanguage.value === 'en' ? 'Failed to delete patient.' : 'فشل حذف المريض.');
@@ -236,9 +235,7 @@ const deletePatient = async () => {
 
 // --- Recommendation History Functions ---
 
-// Fetch recommendation history for a specific patient in real-time
 const fetchRecommendationHistory = (patientIdToFetch) => {
-  // Unsubscribe from previous listener if active
   if (unsubscribeRecommendations) {
     unsubscribeRecommendations();
   }
@@ -251,17 +248,12 @@ const fetchRecommendationHistory = (patientIdToFetch) => {
   const recommendationsCollectionRef = collection(db, `artifacts/${VITE_APP_ID}/users/${currentUserId.value}/recommendationHistory`);
   const q = query(
     recommendationsCollectionRef,
-    where('patientId', '==', patientIdToFetch), // Filter by patientId
-    orderBy('timestamp', 'desc') // Order by latest first
+    where('patientId', '==', patientIdToFetch),
+    orderBy('timestamp', 'desc')
   );
 
   unsubscribeRecommendations = onSnapshot(q, (snapshot) => {
-    const historyList = [];
-    snapshot.forEach((doc) => {
-      historyList.push({ id: doc.id, ...doc.data() });
-    });
-    recommendationHistory.value = historyList;
-    console.log("Fetched recommendation history:", recommendationHistory.value);
+    recommendationHistory.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   }, (error) => {
     console.error("Error fetching recommendation history:", error);
     displayMessage('error', currentLanguage.value === 'en' ? 'Failed to load recommendation history.' : 'فشل تحميل سجل التوصيات.');
@@ -269,29 +261,24 @@ const fetchRecommendationHistory = (patientIdToFetch) => {
   });
 };
 
-// Open Individual Recommendation Details Modal
 const openRecommendationDetails = (recommendation) => {
   selectedRecommendation.value = recommendation;
   showRecommendationDetailsModal.value = true;
 };
 
-// Close Individual Recommendation Details Modal
 const closeRecommendationDetails = () => {
   showRecommendationDetailsModal.value = false;
   selectedRecommendation.value = null;
 };
 
-// Open Edit Recommendation Modal
 const openEditRecommendationModal = (recommendation) => {
   selectedRecommendation.value = recommendation;
-  // Create a deep copy for editing
   editedRecommendation.value = { ...recommendation };
   showEditRecommendationModal.value = true;
 };
 
-// Update Recommendation
 const updateRecommendation = async () => {
-  displayMessage('', ''); // Clear previous messages
+  displayMessage('', '');
   if (!editedRecommendation.value.recommendation || !editedRecommendation.value.scanType) {
     displayMessage('error', currentLanguage.value === 'en' ? 'Recommendation text and scan type cannot be empty.' : 'لا يمكن أن يكون نص التوصية ونوع الفحص فارغين.');
     return;
@@ -299,11 +286,10 @@ const updateRecommendation = async () => {
 
   if (!isAuthReady.value || !currentUserId.value || !editedRecommendation.value.id) {
     displayMessage('error', currentLanguage.value === 'en' ? 'Authentication or recommendation ID not ready.' : 'المصادقة أو معرف التوصية غير جاهز.');
-    console.error("Firestore update attempted before authentication was ready or without recommendation ID.");
     return;
   }
 
-  isLoadingPatients.value = true; // Use this for general loading feedback
+  isLoadingPatients.value = true;
   try {
     const recommendationDocRef = doc(db, `artifacts/${VITE_APP_ID}/users/${currentUserId.value}/recommendationHistory`, editedRecommendation.value.id);
     await updateDoc(recommendationDocRef, {
@@ -311,10 +297,8 @@ const updateRecommendation = async () => {
       scanType: editedRecommendation.value.scanType,
       doseValue: editedRecommendation.value.doseValue,
       reason: editedRecommendation.value.reason,
-      // You might also update factorDetails and calculatedMsv if they are editable
       factorDetails: editedRecommendation.value.factorDetails,
       calculatedMsv: editedRecommendation.value.calculatedMsv,
-      // Do NOT update timestamp here unless you want to change the order
     });
     displayMessage('success', currentLanguage.value === 'en' ? 'Recommendation updated successfully!' : 'تم تحديث التوصية بنجاح!');
     showEditRecommendationModal.value = false;
@@ -327,18 +311,15 @@ const updateRecommendation = async () => {
   }
 };
 
-// Open Delete Recommendation Confirmation Modal
 const confirmDeleteRecommendation = (recommendation) => {
   selectedRecommendation.value = recommendation;
   showDeleteRecommendationConfirmation.value = true;
 };
 
-// Delete Recommendation
 const deleteRecommendation = async () => {
-  displayMessage('', ''); // Clear previous messages
+  displayMessage('', '');
   if (!isAuthReady.value || !currentUserId.value || !selectedRecommendation.value?.id) {
     displayMessage('error', currentLanguage.value === 'en' ? 'Authentication or recommendation ID not ready for deletion.' : 'المصادقة أو معرف التوصية غير جاهز للحذف.');
-    console.error("Firestore delete attempted before authentication was ready or without recommendation ID.");
     return;
   }
 
@@ -357,61 +338,13 @@ const deleteRecommendation = async () => {
   }
 };
 
-// Function to convert basic Markdown to HTML (reused from RecommendView)
 const markdownToHtml = (markdown) => {
   if (!markdown) return '';
-
-  let html = markdown;
-
-  // Convert headings (e.g., ## Heading)
-  html = html.replace(/^###\s*(.*)$/gm, '<h3>$1</h3>');
-  html = html.replace(/^##\s*(.*)$/gm, '<h2>$1</h2>');
-  html = html.replace(/^#\s*(.*)$/gm, '<h1>$1</h1>');
-
-  // Convert bold: **text** or __text__ to <strong>text</strong>
-  html = html.replace(/\*\*(.*?)\*\*|__(.*?)__/g, '<strong>$1$2</strong>');
-  // Convert italics: *text* or _text_ to <em>text</em>
-  html = html.replace(/(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)|(?<!_)_(?!_)(.*?)(?<!_)_(?!_)/g, '<em>$1$2</em>');
-
-  // Convert ordered lists (1. Item)
-  html = html.replace(/^(\d+\.\s.*)$/gm, '<li>$1</li>');
-  // Convert unordered lists (- Item or * Item)
-  html = html.replace(/^[*-]\s*(.*)$/gm, '<li>$1</li>');
-
-  // Wrap list items in ul/ol tags if they exist
-  const lines = html.split('\n'); // Split by actual newlines for markdown parsing
-  let inList = false;
-  let listType = '';
-  let processedLines = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i].trim();
-    if (line.match(/^\d+\.\s/) || line.match(/^[*-]\s/)) { // Check for list item start
-      if (!inList) {
-        listType = line.match(/^\d+\./) ? 'ol' : 'ul';
-        processedLines.push(`<${listType}>`);
-        inList = true;
-      }
-      processedLines.push(line);
-    } else {
-      if (inList) {
-        processedLines.push(`</${listType}>`);
-        inList = false;
-      }
-      processedLines.push(line);
-    }
-  }
-  if (inList) { // Close last list if still open
-    processedLines.push(`</${listType}>`);
-  }
-  html = processedLines.join('\n'); // Join with newlines for further processing
-
-  // Convert remaining newlines to <br> (after list processing)
-  html = html.replace(/\n/g, '<br>');
-
-  return html;
+  return markdown
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
 };
-
 
 // --- Navigation ---
 const goToRecommendPage = (patientId) => {
@@ -424,23 +357,17 @@ const goToDashboard = () => {
 
 // --- Lifecycle Hooks ---
 onMounted(() => {
-  // Assign the watcher's unsubscribe function to the ref
   authReadyWatcher.value = watch(isAuthReady, (ready) => {
     if (ready && currentUserId.value) {
       fetchPatients();
-      // No need to unsubscribe here, as onUnmounted will handle it if the component is destroyed.
-      // If you want it to run only once, you can call authReadyWatcher.value() here.
-      // However, for fetching patients, you usually want it to be reactive.
     }
-  }, { immediate: true }); // Run immediately to catch initial state
+  }, { immediate: true });
 });
 
 onUnmounted(() => {
-  // Safely call the unsubscribe function if it exists
   if (authReadyWatcher.value) {
     authReadyWatcher.value();
   }
-  // Clean up Firestore history listener as well
   if (unsubscribeRecommendations) {
     unsubscribeRecommendations();
   }
@@ -458,7 +385,6 @@ onUnmounted(() => {
           {{ currentLanguage === 'en' ? 'Add new patients or view existing records.' : 'أضف مرضى جدد أو اطلع على السجلات الحالية.' }}
         </p>
 
-        <!-- Button to open the Add Patient Modal -->
         <button
           @click="showAddPatientModal = true; resetAddPatientForm();"
           class="action-button primary add-new-patient-button"
@@ -467,7 +393,8 @@ onUnmounted(() => {
           {{ currentLanguage === 'en' ? 'Add New Patient' : 'إضافة مريض جديد' }}
         </button>
 
-        <div v-if="showMessage" :class="['message', messageType]" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <!-- FIX: Class binding corrected to properly display message styles -->
+        <div v-if="showMessage" :class="['message', messageType + '-message']" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{ message }}
         </div>
 
@@ -477,7 +404,7 @@ onUnmounted(() => {
             {{ currentLanguage === 'en' ? 'Existing Patients' : 'المرضى الحاليون' }}
           </h3>
           <div v-if="isLoadingPatients" class="loading-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-<font-awesome-icon icon="spinner" spin />
+            <font-awesome-icon icon="spinner" spin />
             {{ currentLanguage === 'en' ? 'Loading patients...' : 'جاري تحميل المرضى...' }}
           </div>
           <div v-else-if="patients.length === 0" class="no-patients-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
@@ -500,16 +427,16 @@ onUnmounted(() => {
                   <td :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">{{ currentLanguage === 'en' ? patient.gender : (patient.gender === 'male' ? 'ذكر' : (patient.gender === 'female' ? 'أنثى' : 'آخر')) }}</td>
                   <td>
                     <button @click="openPatientDetails(patient)" class="action-button-sm view-button" aria-label="View patient details">
-    <font-awesome-icon icon="eye" />
+                        <font-awesome-icon icon="eye" />
                     </button>
                     <button @click="openEditPatientModal(patient)" class="action-button-sm edit-button" aria-label="Edit patient">
-<font-awesome-icon icon="edit" />
+                        <font-awesome-icon icon="edit" />
                     </button>
                     <button @click="confirmDeletePatient(patient)" class="action-button-sm delete-button" aria-label="Delete patient">
-<font-awesome-icon icon="trash-alt" />
+                        <font-awesome-icon icon="trash-alt" />
                     </button>
                     <button @click="goToRecommendPage(patient.id)" class="action-button-sm recommend-button" aria-label="Generate new recommendation">
-<font-awesome-icon icon="file-medical" />
+                        <font-awesome-icon icon="file-medical" />
                     </button>
                   </td>
                 </tr>
@@ -537,19 +464,19 @@ onUnmounted(() => {
           <form @submit.prevent="addPatient" class="patient-form">
             <div class="form-group">
               <label for="modalNewPatientName" :class="{'text-right w-full': currentLanguage === 'ar'}">
-                {{ currentLanguage === 'en' ? 'Name' : 'الاسم' }}
+                {{ currentLanguage === 'en' ? 'Name' : 'الاسم' }} <span class="text-red-600">*</span>
               </label>
               <input type="text" id="modalNewPatientName" v-model="newPatientName" required />
             </div>
             <div class="form-group">
               <label for="modalNewPatientAge" :class="{'text-right w-full': currentLanguage === 'ar'}">
-                {{ currentLanguage === 'en' ? 'Age' : 'العمر' }}
+                {{ currentLanguage === 'en' ? 'Age' : 'العمر' }} <span class="text-red-600">*</span>
               </label>
               <input type="number" id="modalNewPatientAge" v-model="newPatientAge" required min="0" />
             </div>
             <div class="form-group">
               <label for="modalNewPatientGender" :class="{'text-right w-full': currentLanguage === 'ar'}">
-                {{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}
+                {{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }} <span class="text-red-600">*</span>
               </label>
               <select id="modalNewPatientGender" v-model="newPatientGender" required>
                 <option value="" disabled>{{ currentLanguage === 'en' ? 'Select Gender' : 'اختر الجنس' }}</option>
@@ -579,7 +506,7 @@ onUnmounted(() => {
 
             <button type="submit" class="action-button primary" :disabled="isAddingPatient">
               <span v-if="isAddingPatient">
-<font-awesome-icon icon="spinner" spin />
+                <font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Adding Patient...' : 'جاري إضافة المريض...' }}
               </span>
               <span v-else>
@@ -617,10 +544,9 @@ onUnmounted(() => {
               {{ currentLanguage === 'en' ? 'Recommendation History' : 'سجل التوصيات' }}
             </h4>
             <button @click="goToRecommendPage(selectedPatient.id)" class="action-button primary generate-new-recommendation-button">
-<font-awesome-icon icon="plus" />
+              <font-awesome-icon icon="plus" />
               {{ currentLanguage === 'en' ? 'Generate New Recommendation' : 'إنشاء توصية جديدة' }}
             </button>
-
             <div v-if="recommendationHistory.length === 0" class="no-history-message">
               {{ currentLanguage === 'en' ? 'No recommendations found for this patient yet.' : 'لم يتم العثور على توصيات لهذا المريض بعد.' }}
             </div>
@@ -631,17 +557,16 @@ onUnmounted(() => {
                   {{ rec.timestamp?.toDate().toLocaleString(currentLanguage === 'en' ? 'en-US' : 'ar-SA') || 'N/A' }}
                 </p>
                 <p><strong>{{ currentLanguage === 'en' ? 'Scan Type:' : 'نوع الفحص:' }}</strong> {{ rec.scanType || 'N/A' }}</p>
-                <p><strong>{{ currentLanguage === 'en' ? 'Dose Value:' : 'قيمة الجرعة:' }}</strong> {{ rec.doseValue !== undefined ? rec.doseValue + ' mSv' : 'N/A' }}</p>
-                <p><strong>{{ currentLanguage === 'en' ? 'Reason:' : 'السبب:' }}</strong> {{ rec.reason || 'N/A' }}</p>
+                <p><strong>{{ currentLanguage === 'en' ? 'Calculated Dose:' : 'الجرعة المحسوبة:' }}</strong> {{ rec.calculatedMsv !== undefined ? rec.calculatedMsv + ' mSv' : 'N/A' }}</p>
                 <div class="recommendation-actions">
                   <button @click="openRecommendationDetails(rec)" class="action-button-sm view-button">
-                    <i class="fas fa-eye"></i> <!-- View Icon -->
+                     <font-awesome-icon icon="eye" />
                   </button>
                   <button @click="openEditRecommendationModal(rec)" class="action-button-sm edit-button">
-                    <i class="fas fa-edit"></i> <!-- Edit Icon -->
+                     <font-awesome-icon icon="edit" />
                   </button>
                   <button @click="confirmDeleteRecommendation(rec)" class="action-button-sm delete-button">
-                    <i class="fas fa-trash-alt"></i> <!-- Delete Icon -->
+                    <font-awesome-icon icon="trash-alt" />
                   </button>
                 </div>
               </div>
@@ -703,7 +628,7 @@ onUnmounted(() => {
 
             <button type="submit" class="action-button primary" :disabled="isLoadingPatients">
               <span v-if="isLoadingPatients">
-<font-awesome-icon icon="spinner" spin />
+                <font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Updating...' : 'جاري التحديث...' }}
               </span>
               <span v-else>
@@ -733,7 +658,7 @@ onUnmounted(() => {
           <div class="modal-actions">
             <button @click="deletePatient" class="action-button delete-button-confirm" :disabled="isLoadingPatients">
               <span v-if="isLoadingPatients">
-<font-awesome-icon icon="spinner" spin />
+                <font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Deleting...' : 'جاري الحذف...' }}
               </span>
               <span v-else>
@@ -759,9 +684,7 @@ onUnmounted(() => {
           <div class="details-grid">
             <p><strong>{{ currentLanguage === 'en' ? 'Patient Name:' : 'اسم المريض:' }}</strong> {{ selectedRecommendation.patientName || 'N/A' }}</p>
             <p><strong>{{ currentLanguage === 'en' ? 'Scan Type:' : 'نوع الفحص:' }}</strong> {{ selectedRecommendation.scanType || 'N/A' }}</p>
-            <p><strong>{{ currentLanguage === 'en' ? 'Dose Value:' : 'قيمة الجرعة:' }}</strong> {{ selectedRecommendation.doseValue !== undefined ? selectedRecommendation.doseValue + ' mSv' : 'N/A' }}</p>
-            <p><strong>{{ currentLanguage === 'en' ? 'Reason:' : 'السبب:' }}</strong> {{ selectedRecommendation.reason || 'N/A' }}</p>
-            <p class="full-width"><strong>{{ currentLanguage === 'en' ? 'Date:' : 'التاريخ:' }}</strong> {{ selectedRecommendation.timestamp?.toDate().toLocaleString(currentLanguage === 'en' ? 'en-US' : 'ar-SA') || 'N/A' }}</p>
+            <p><strong>{{ currentLanguage === 'en' ? 'Date:' : 'التاريخ:' }}</strong> {{ selectedRecommendation.timestamp?.toDate().toLocaleString(currentLanguage === 'en' ? 'en-US' : 'ar-SA') || 'N/A' }}</p>
 
             <div v-if="selectedRecommendation.factorDetails" class="factor-details full-width">
               <h4>{{ currentLanguage === 'en' ? 'Predicted Scan Factors:' : 'عوامل الفحص المتوقعة:' }}</h4>
@@ -808,16 +731,10 @@ onUnmounted(() => {
               <input type="text" id="editRecScanType" v-model="editedRecommendation.scanType" required />
             </div>
             <div class="form-group">
-              <label for="editRecDoseValue" :class="{'text-right w-full': currentLanguage === 'ar'}">
-                {{ currentLanguage === 'en' ? 'Dose Value (mSv):' : 'قيمة الجرعة (ملي سيفرت):' }}
+              <label for="editRecCalculatedMsv" :class="{'text-right w-full': currentLanguage === 'ar'}">
+                {{ currentLanguage === 'en' ? 'Calculated Dose (mSv):' : 'الجرعة المحسوبة (ملي سيفرت):' }}
               </label>
-              <input type="number" id="editRecDoseValue" v-model.number="editedRecommendation.doseValue" step="0.001" />
-            </div>
-            <div class="form-group">
-              <label for="editRecReason" :class="{'text-right w-full': currentLanguage === 'ar'}">
-                {{ currentLanguage === 'en' ? 'Reason:' : 'السبب:' }}
-              </label>
-              <textarea id="editRecReason" v-model="editedRecommendation.reason" rows="2"></textarea>
+              <input type="number" id="editRecCalculatedMsv" v-model.number="editedRecommendation.calculatedMsv" step="0.001" />
             </div>
             <div class="form-group">
               <label for="editRecText" :class="{'text-right w-full': currentLanguage === 'ar'}">
@@ -827,7 +744,7 @@ onUnmounted(() => {
             </div>
             <button type="submit" class="action-button primary" :disabled="isLoadingPatients">
               <span v-if="isLoadingPatients">
-<font-awesome-icon icon="spinner" spin />
+                <font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Updating...' : 'جاري التحديث...' }}
               </span>
               <span v-else>
@@ -857,7 +774,7 @@ onUnmounted(() => {
           <div class="modal-actions">
             <button @click="deleteRecommendation" class="action-button delete-button-confirm" :disabled="isLoadingPatients">
               <span v-if="isLoadingPatients">
-<font-awesome-icon icon="spinner" spin />
+                <font-awesome-icon icon="spinner" spin />
                 {{ currentLanguage === 'en' ? 'Deleting...' : 'جاري الحذف...' }}
               </span>
               <span v-else>
@@ -935,10 +852,6 @@ onUnmounted(() => {
   transform: translateY(-2px);
 }
 
-.add-new-patient-button i {
-  margin-right: 8px;
-}
-
 .message {
   padding: 15px;
   border-radius: 8px;
@@ -967,10 +880,6 @@ onUnmounted(() => {
   margin-top: 50px;
 }
 
-.loading-message i {
-  margin-right: 10px;
-}
-
 .patient-list-section h3 {
   color: #8D99AE;
   font-size: 1.6em;
@@ -990,7 +899,6 @@ onUnmounted(() => {
 .patient-table {
   width: 100%;
   border-collapse: collapse;
-  margin-top: 20px;
 }
 
 .patient-table th,
@@ -1001,50 +909,41 @@ onUnmounted(() => {
 }
 
 .patient-table th {
-  background-color: #8D99AE;
-  color: white;
+  background-color: #f7f7f7;
+  color: #555;
   font-weight: 600;
   text-transform: uppercase;
   font-size: 0.9em;
 }
 
 .patient-table tbody tr:nth-child(even) {
-  background-color: #f9f9f9;
+  background-color: #fcfcfc;
 }
 
 .patient-table tbody tr:hover {
-  background-color: #f0f0f0;
+  background-color: #f0f4f8;
 }
 
 .action-button-sm {
-  background-color: #8D99AE;
-  color: white;
+  background: none;
   border: none;
+  color: #8D99AE;
   padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9em;
+  font-size: 1.2em; /* Increase icon size */
   margin: 0 4px;
-  transition: background-color 0.3s ease, transform 0.2s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: color 0.3s ease, transform 0.2s ease;
 }
 
 .action-button-sm:hover {
   transform: translateY(-1px);
 }
 
-.action-button-sm.view-button { background-color: #5bc0de; } /* Info blue */
-.action-button-sm.view-button:hover { background-color: #31b0d5; }
-
-.action-button-sm.edit-button { background-color: #f0ad4e; } /* Warning yellow */
-.action-button-sm.edit-button:hover { background-color: #ec971f; }
-
-.action-button-sm.delete-button { background-color: #d9534f; } /* Danger red */
-.action-button-sm.delete-button:hover { background-color: #c9302c; }
-
-.action-button-sm.recommend-button { background-color: #28a745; } /* Success green */
-.action-button-sm.recommend-button:hover { background-color: #218838; }
-
+.action-button-sm.view-button:hover { color: #5bc0de; }
+.action-button-sm.edit-button:hover { color: #f0ad4e; }
+.action-button-sm.delete-button:hover { color: #d9534f; }
+.action-button-sm.recommend-button:hover { color: #28a745; }
 
 /* Modal Styles */
 .modal-overlay {

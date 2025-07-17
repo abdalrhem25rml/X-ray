@@ -62,6 +62,10 @@ const fetchPatientDetails = async (id) => {
       // Pre-fill form fields if patient data is available and makes sense
       age.value = patientData.age;
       gender.value = patientData.gender.toLowerCase(); // Ensure lowercase for select
+      // Pre-fill other relevant form fields
+      medicalHistory.value = patientData.medicalHistory?.join(', ') || '';
+      allergies.value = patientData.allergies?.join(', ') || '';
+      previousRadiationExposure.value = patientData.previousRadiationExposure?.join(', ') || '';
       console.log("Patient details fetched and form pre-filled:", patientData);
     } else {
       console.warn("Patient not found for ID:", id);
@@ -176,7 +180,7 @@ const getRecommendations = async () => {
       }
     };
 
-    const apiKey = ""; // Canvas will provide this at runtime for gemini-2.0-flash
+    const apiKey = import.meta.env.VITE_GEMINI_KEY // Canvas will provide this at runtime for gemini-2.0-flash
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(apiUrl, {
@@ -407,7 +411,6 @@ const goToPatientList = () => {
           <button
             type="submit"
             class="action-button primary recommend-button"
-            :disabled="isLoading || !patientId || !isAuthReady || !currentUserId || !age || !gender || !medicalHistory || !currentSymptoms || !scanType"
           >
             <span v-if="isLoading">
 <font-awesome-icon icon="spinner" spin />
