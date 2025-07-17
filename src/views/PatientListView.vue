@@ -1534,7 +1534,6 @@ onUnmounted(() => {
   max-width: 800px; /* Wider for details and history */
   max-height: 90vh; /* Allow scrolling for long history */
   overflow-y: auto;
-  text-align: left;
 }
 
 .close-modal-button {
