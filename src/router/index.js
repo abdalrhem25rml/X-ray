@@ -56,6 +56,11 @@ const router = createRouter({
         next()
       },
     },
+    // Catch-all route for 404 (optional, but good practice)
+    {
+      path: '/:catchAll(.*)',
+      redirect: '/dashboard' // Or a specific 404 page if you have one
+    },
     {
       path: '/__/auth/iframe',
       name: 'firebaseAuthIframeHandler',
@@ -68,7 +73,7 @@ const router = createRouter({
         next()
       },
     },
-  ],
+],
 })
 
 // Global navigation guard
