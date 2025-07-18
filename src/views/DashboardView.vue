@@ -81,7 +81,8 @@ onMounted(() => {
 </div>
 
 <!-- Content of the dashboard view -->
-  <div class="dashboard-page">
+  <div class="dashboard-page dashboard-blur-area"
+    :class="{ 'is-blurred': showRoleModal }">
     <main class="dashboard-main-content">
       <section class="dashboard-card">
         <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
@@ -381,5 +382,11 @@ onMounted(() => {
 
 .role-button:hover {
   background-color: #6a7483;
+}
+.dashboard-blur-area.is-blurred {
+  filter: blur(7px);
+  pointer-events: none; /* Optional: Prevent interaction with blurred content */
+  user-select: none;    /* Optional: Prevent text selection in blurred area */
+  transition: filter 0.25s ease;
 }
 </style>
