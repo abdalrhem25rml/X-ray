@@ -1,25 +1,86 @@
 <!-- views/DashboardView.vue -->
 <script setup>
-import { inject } from 'vue'
+import { ref, inject, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-
-const router = useRouter()
+import { getFirestore, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore'
+const appId = import.meta.env.VITE_APP_ID
+const auth = inject('auth')
 const currentLanguage = inject('currentLanguage')
-const auth = inject('auth') // Inject the auth instance from main.js
+const router = useRouter()
 
-// Function to handle logout
+const firestore = getFirestore()
+const showRoleModal = ref(false)
+const selectedRole = ref(null)
+
+const checkUserRole = async () => {
+  const user = auth.currentUser;
+  if (!user) return router.push("/signin");
+  const userDocRef = doc(firestore, "artifacts", appId, "users", user.uid);
+  const userSnapshot = await getDoc(userDocRef);
+
+  if (!userSnapshot.exists()) {
+    // Create minimal user document
+    await setDoc(userDocRef, { email: user.email, createdAt: new Date() });
+    // Optionally trigger the "pick a role" modal here
+    showRoleModal.value = true;
+    return;
+  }
+
+  const userData = userSnapshot.data();
+  if (!userData.role) {
+    showRoleModal.value = true;
+  }
+};
+
+// Handle role selection
+const saveUserRole = async () => {
+  if (!selectedRole.value || !auth.currentUser) return;
+
+  const userRef = doc(firestore, "artifacts", appId, "users", auth.currentUser.uid);
+  await updateDoc(userRef, { role: selectedRole.value });
+
+  showRoleModal.value = false;
+};
+
 const handleLogout = async () => {
   try {
     await auth.signOut()
-    router.push('/signin') // Redirect to login page after logout
+    router.push('/signin')
   } catch (error) {
     console.error('Error logging out:', error)
-    // Optionally display an error message to the user
   }
 }
+
+onMounted(() => {
+  checkUserRole()
+})
 </script>
 
 <template>
+<!-- Role Picker Modal -->
+<div class="role-modal-backdrop" v-if="showRoleModal">
+  <div class="role-modal">
+    <h2>{{ currentLanguage === 'en' ? 'Select Your Role' : 'اختر دورك' }}</h2>
+    <p>{{ currentLanguage === 'en' ? 'Please choose your role:' : 'يرجى اختيار دورك:' }}</p>
+
+    <div class="role-buttons">
+      <button
+        class="role-button"
+        @click="selectedRole = 'doctor'; saveUserRole()"
+      >
+        {{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}
+      </button>
+      <button
+        class="role-button"
+        @click="selectedRole = 'patient'; saveUserRole()"
+      >
+        {{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Content of the dashboard view -->
   <div class="dashboard-page">
     <main class="dashboard-main-content">
       <section class="dashboard-card">
@@ -264,5 +325,61 @@ const handleLogout = async () => {
     padding: 10px 20px;
     font-size: 0.9em;
   }
+}
+.role-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.role-modal {
+  background: white;
+  padding: 30px 40px;
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  text-align: center;
+  max-width: 400px;
+  width: 90%;
+}
+
+.role-modal h2 {
+  margin-bottom: 15px;
+  font-size: 1.8rem;
+  color: #444;
+}
+
+.role-modal p {
+  font-size: 1rem;
+  margin-bottom: 25px;
+  color: #555;
+}
+
+.role-buttons {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.role-button {
+  background-color: #8d99ae;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1em;
+  font-weight: 600;
+  transition: 0.3s ease;
+}
+
+.role-button:hover {
+  background-color: #6a7483;
 }
 </style>
