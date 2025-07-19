@@ -152,10 +152,10 @@ According to the recommendations of the International Commission on Radiological
     </header>
 
     <!-- The router-view will render the component for the current route -->
-    <router-view v-slot="{ Component }">
-      <Transition name="page-fade" mode="out-in">
-        <component :is="Component" />
-      </Transition>
+    <router-view v-slot="{ Component, route }"> <!-- Add 'route' to the slot props -->
+      <transition name="page-fade" mode="out-in">
+        <component :is="Component" :key="route.path" />
+      </transition>
     </router-view>
 
     <!-- Global Information Modal (moved from SignupView.vue) -->

@@ -57,86 +57,96 @@ onMounted(() => {
 </script>
 
 <template>
-<!-- Role Picker Modal -->
-<div class="role-modal-backdrop" v-if="showRoleModal">
-  <div class="role-modal">
-    <h2>{{ currentLanguage === 'en' ? 'Select Your Role' : 'اختر دورك' }}</h2>
-    <p>{{ currentLanguage === 'en' ? 'Please choose your role:' : 'يرجى اختيار دورك:' }}</p>
-
-    <div class="role-buttons">
-      <button
-        class="role-button"
-        @click="selectedRole = 'doctor'; saveUserRole()"
-      >
-        {{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}
-      </button>
-      <button
-        class="role-button"
-        @click="selectedRole = 'patient'; saveUserRole()"
-      >
-        {{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}
-      </button>
-    </div>
-  </div>
-</div>
-
-<!-- Content of the dashboard view -->
-  <div class="dashboard-page dashboard-blur-area"
-    :class="{ 'is-blurred': showRoleModal }">
-    <main class="dashboard-main-content">
-      <section class="dashboard-card">
-        <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{
-            currentLanguage === 'en'
-              ? 'Welcome to mSv Dose Tracker'
-              : 'مرحبًا بك في متتبع جرعات الأشعة السينية'
-          }}
-        </h2>
-        <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-          {{
-            currentLanguage === 'en'
-              ? 'Your comprehensive tool for managing patient radiation exposure and recommendations.'
-              : 'أداتك الشاملة لإدارة تعرض المرضى للإشعاع وتقديم التوصيات.'
-          }}
-        </p>
-
-        <div class="dashboard-features">
-          <div class="feature-item" @click="router.push('/recommend')">
-            <i class="fas fa-file-medical"></i>
-            <!-- Icon for recommendation -->
-            <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-              {{ currentLanguage === 'en' ? 'Get Scan Recommendation' : 'الحصول على توصية' }}
-            </h3>
-            <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-              {{
-                currentLanguage === 'en'
-                  ? 'Receive AI-powered recommendations for X-ray or CT scans based on patient data.'
-                  : 'احصل على توصيات مدعومة بالذكاء الاصطناعي لفحوصات الأشعة السينية أو الأشعة المقطعية بناءً على بيانات المريض.'
-              }}
-            </p>
-          </div>
-
-          <div class="feature-item" @click="router.push('/patients')">
-            <i class="fas fa-users"></i>
-            <!-- Icon for patient management -->
-            <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-              {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
-            </h3>
-            <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-              {{
-                currentLanguage === 'en'
-                  ? 'View, add, and manage patient records securely.'
-                  : 'عرض وإضافة وإدارة سجلات المرضى بأمان.'
-              }}
-            </p>
-          </div>
+  <div>
+    <!-- Role Picker Modal -->
+    <div class="role-modal-backdrop" v-if="showRoleModal">
+      <div class="role-modal">
+        <h2>{{ currentLanguage === 'en' ? 'Select Your Role' : 'اختر دورك' }}</h2>
+        <p>{{ currentLanguage === 'en' ? 'Please choose your role:' : 'يرجى اختيار دورك:' }}</p>
+        <div class="role-buttons">
+          <button class="role-button" @click="selectedRole = 'doctor'; saveUserRole()">
+            {{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}
+          </button>
+          <button class="role-button" @click="selectedRole = 'patient'; saveUserRole()">
+            {{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}
+          </button>
         </div>
+      </div>
+    </div>
 
-        <button @click="handleLogout" class="action-button secondary logout-button">
-          {{ currentLanguage === 'en' ? 'Logout' : 'تسجيل الخروج' }}
-        </button>
-      </section>
-    </main>
+    <!-- Content of the dashboard view -->
+    <div class="dashboard-page dashboard-blur-area" :class="{ 'is-blurred': showRoleModal }">
+      <main class="dashboard-main-content">
+        <section class="dashboard-card">
+          <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+            {{
+              currentLanguage === 'en'
+                ? 'Welcome to mSv Dose Tracker'
+                : 'مرحبًا بك في متتبع جرعات الأشعة السينية'
+            }}
+          </h2>
+          <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+            {{
+              currentLanguage === 'en'
+                ? 'Your comprehensive tool for managing patient radiation exposure and recommendations.'
+                : 'أداتك الشاملة لإدارة تعرض المرضى للإشعاع وتقديم التوصيات.'
+            }}
+          </p>
+
+          <div class="dashboard-features">
+            <!-- Existing: Get Scan Recommendation -->
+            <div class="feature-item" @click="router.push('/recommend')">
+              <i class="fas fa-file-medical"></i>
+              <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                {{ currentLanguage === 'en' ? 'Get Scan Recommendation' : 'الحصول على توصية' }}
+              </h3>
+              <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                {{
+                  currentLanguage === 'en'
+                    ? 'Receive AI-powered recommendations for X-ray or CT scans.'
+                    : 'احصل على توصيات مدعومة بالذكاء الاصطناعي لفحوصات الأشعة.'
+                }}
+              </p>
+            </div>
+
+            <!-- Existing: Manage Patients -->
+            <div class="feature-item" @click="router.push('/patients')">
+              <i class="fas fa-users"></i>
+              <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
+              </h3>
+              <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                {{
+                  currentLanguage === 'en'
+                    ? 'View, add, and manage patient records securely.'
+                    : 'عرض وإضافة وإدارة سجلات المرضى بأمان.'
+                }}
+              </p>
+            </div>
+
+            <!-- ✅ ADD THIS NEW BLOCK FOR HISTORY -->
+            <div class="feature-item" @click="router.push('/history')">
+              <i class="fas fa-history"></i>
+              <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                {{ currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات' }}
+              </h3>
+              <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                {{
+                  currentLanguage === 'en'
+                    ? 'Review past X-ray and CT scan records.'
+                    : 'مراجعة سجلات فحوصات الأشعة السينية والمقطعية السابقة.'
+                }}
+              </p>
+            </div>
+
+          </div>
+
+          <button @click="handleLogout" class="action-button secondary logout-button">
+            {{ currentLanguage === 'en' ? 'Logout' : 'تسجيل الخروج' }}
+          </button>
+        </section>
+      </main>
+    </div>
   </div>
 </template>
 

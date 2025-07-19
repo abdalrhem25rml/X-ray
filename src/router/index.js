@@ -1,14 +1,15 @@
 // router/index.js
 import { createRouter, createWebHistory } from 'vue-router'
 import { h } from 'vue' // Import the 'h' function for creating VNodes
-import SignupView from '../views/SignupView.vue'
-import SigninView from '../views/SigninView.vue' // Ensure this is the correct login view
-import RecommendView from '../views/RecommendView.vue'
-import PatientListView from '../views/PatientListView.vue'
+import SignupView from '@/views/SignupView.vue'
+import SigninView from '@/views/SigninView.vue' // Ensure this is the correct login view
+import RecommendView from '@/views/RecommendView.vue'
+import PatientListView from '@/views/PatientListView.vue'
 import DashboardView from '@/views/DashboardView.vue'
-import ResetPasswordView from '../views/ResetPasswordView.vue' // Import the new component
+import ResetPasswordView from '@/views/ResetPasswordView.vue' // Import the new component
+import HistoryView from "@/views/HistoryView.vue"
 
-import { useAuthStore } from '../stores/auth' // Import the auth store
+import { useAuthStore } from '@/stores/auth' // Import the auth store
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -33,11 +34,19 @@ const router = createRouter({
       path: '/recommend/:patientId?',
       name: 'recommend',
       component: RecommendView,
+      meta: { requiresAuth: true }, // Uncomment this later if you want to protect this route
     },
     {
       path: '/patients',
       name: 'patients',
       component: PatientListView,
+      meta: { requiresAuth: true }, // Uncomment this later if you want to protect this route
+    },
+    {
+      path: '/history',
+      name: 'history',
+      component: HistoryView,
+      meta: { requiresAuth: true }
     },
     {
       path: '/resetpassword',
