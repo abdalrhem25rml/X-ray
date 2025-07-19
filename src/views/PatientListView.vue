@@ -275,7 +275,6 @@ watch(
     transition: color .3s ease;
     font-size: 16.5px;
 }
-
 .switch-link-container{
   margin: 25px;
 }

@@ -10,7 +10,8 @@ import {
   signInWithPopup,
   createUserWithEmailAndPassword,
   updateProfile,
-} from 'firebase/auth' // Import necessary functions
+} from 'firebase/auth'
+import { getFirestore, doc, getDoc } from 'firebase/firestore'
 
 export const useAuthStore = defineStore('auth', {
   state: () => ({
@@ -23,15 +24,37 @@ export const useAuthStore = defineStore('auth', {
   }),
   actions: {
     // Modify initAuth to accept the auth instance
-    initAuth(auth) {
+  initAuth(auth) {
       if (!auth) {
         return
       }
-      this.authInstance = auth // Store the auth instance
+      this.authInstance = auth
 
-      // Set up the listener using the provided auth instance
-      onAuthStateChanged(this.authInstance, (user) => {
-        this.user = user
+      // ✅ 3. The onAuthStateChanged listener is now upgraded
+      onAuthStateChanged(this.authInstance, async (user) => {
+        if (user) {
+          // User is logged in, store their main user object
+          this.user = user
+
+          // NOW, fetch their role from the corresponding Firestore document
+          const db = getFirestore()
+          const appId = import.meta.env.VITE_APP_ID
+          const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid)
+          const userDocSnap = await getDoc(userDocRef)
+
+          if (userDocSnap.exists()) {
+            // If the document exists, set the role in our store
+            this.role = userDocSnap.data().role
+          } else {
+            // No custom user document yet, role is null
+            this.role = null
+          }
+        } else {
+          // User is logged out, clear everything
+          this.user = null
+          this.role = null // Also clear the role
+        }
+        // Signal that the initial auth check is complete
         this.isAuthReady = true
       })
     },

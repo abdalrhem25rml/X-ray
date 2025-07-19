@@ -1,46 +1,57 @@
-<!-- views/DashboardView.vue -->
 <script setup>
-import { ref, inject, onMounted } from 'vue'
+import { ref, inject, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { getFirestore, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore'
+
 const appId = import.meta.env.VITE_APP_ID
 const auth = inject('auth')
 const currentLanguage = inject('currentLanguage')
 const router = useRouter()
-
 const firestore = getFirestore()
+
+// --- State Management ---
 const showRoleModal = ref(false)
+const userRole = ref(null)
+const isCheckingRole = ref(true) // Start in a loading state
 const selectedRole = ref(null)
 
-const checkUserRole = async () => {
-  const user = auth.currentUser;
-  if (!user) return router.push("/signin");
-  const userDocRef = doc(firestore, "artifacts", appId, "users", user.uid);
-  const userSnapshot = await getDoc(userDocRef);
-
-  if (!userSnapshot.exists()) {
-    // Create minimal user document
-    await setDoc(userDocRef, { email: user.email, createdAt: new Date() });
-    // Optionally trigger the "pick a role" modal here
-    showRoleModal.value = true;
-    return;
+// --- Firebase Functions ---
+const checkUserRole = async (user) => {
+  if (!user) {
+    isCheckingRole.value = false // No user, stop loading
+    return
   }
 
-  const userData = userSnapshot.data();
-  if (!userData.role) {
-    showRoleModal.value = true;
-  }
-};
+  try {
+    const userDocRef = doc(firestore, "artifacts", appId, "users", user.uid)
+    const userSnapshot = await getDoc(userDocRef)
 
-// Handle role selection
+    if (!userSnapshot.exists()) {
+      await setDoc(userDocRef, { email: user.email, createdAt: new Date() })
+      showRoleModal.value = true // User needs to pick a role
+    } else {
+      const userData = userSnapshot.data()
+      if (!userData.role) {
+        showRoleModal.value = true // Role field is missing, ask user to pick
+      } else {
+        userRole.value = userData.role // Role exists, store it
+      }
+    }
+  } catch (error) {
+    console.error("Error during role check:", error)
+  } finally {
+    // CRUCIAL: After the check is complete (success or fail), stop loading
+    isCheckingRole.value = false
+  }
+}
+
 const saveUserRole = async () => {
-  if (!selectedRole.value || !auth.currentUser) return;
-
-  const userRef = doc(firestore, "artifacts", appId, "users", auth.currentUser.uid);
-  await updateDoc(userRef, { role: selectedRole.value });
-
-  showRoleModal.value = false;
-};
+  if (!selectedRole.value || !auth.currentUser) return
+  const userRef = doc(firestore, "artifacts", appId, "users", auth.currentUser.uid)
+  await updateDoc(userRef, { role: selectedRole.value })
+  userRole.value = selectedRole.value // Update local state
+  showRoleModal.value = false
+}
 
 const handleLogout = async () => {
   try {
@@ -51,102 +62,108 @@ const handleLogout = async () => {
   }
 }
 
-onMounted(() => {
-  checkUserRole()
-})
+// Watch for auth changes to trigger the role check
+watch(() => auth.currentUser, (newUser) => {
+  isCheckingRole.value = true // Reset loading state for every auth change
+  checkUserRole(newUser)
+}, { immediate: true }) // `immediate: true` runs it on initial load
 </script>
 
 <template>
   <div>
-    <!-- Role Picker Modal -->
-    <div class="role-modal-backdrop" v-if="showRoleModal">
-      <div class="role-modal">
-        <h2>{{ currentLanguage === 'en' ? 'Select Your Role' : 'اختر دورك' }}</h2>
-        <p>{{ currentLanguage === 'en' ? 'Please choose your role:' : 'يرجى اختيار دورك:' }}</p>
-        <div class="role-buttons">
-          <button class="role-button" @click="selectedRole = 'doctor'; saveUserRole()">
-            {{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}
-          </button>
-          <button class="role-button" @click="selectedRole = 'patient'; saveUserRole()">
-            {{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}
-          </button>
+    <!-- Show a loading screen WHILE the role check is happening -->
+    <div v-if="isCheckingRole" class="loading-container">
+      <p>{{ currentLanguage === 'en' ? 'Verifying session...' : 'جار التحقق من الجلسة...' }}</p>
+      <!-- You can add a FontAwesome spinner icon here if you want -->
+    </div>
+
+    <!-- Show the rest of the page ONLY AFTER the check is finished -->
+    <template v-else>
+      <!-- Role Picker Modal -->
+      <div v-if="showRoleModal" class="role-modal-backdrop">
+        <div class="role-modal">
+          <h2>{{ currentLanguage === 'en' ? 'Select Your Role' : 'اختر دورك' }}</h2>
+          <p>{{ currentLanguage === 'en' ? 'Please choose your role:' : 'يرجى اختيار دورك:' }}</p>
+          <div class="role-buttons">
+            <button class="role-button" @click="selectedRole = 'doctor'; saveUserRole()">
+              {{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}
+            </button>
+            <button class="role-button" @click="selectedRole = 'patient'; saveUserRole()">
+              {{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Content of the dashboard view -->
-    <div class="dashboard-page dashboard-blur-area" :class="{ 'is-blurred': showRoleModal }">
-      <main class="dashboard-main-content">
-        <section class="dashboard-card">
-          <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-            {{
-              currentLanguage === 'en'
-                ? 'Welcome to mSv Dose Tracker'
-                : 'مرحبًا بك في متتبع جرعات الأشعة السينية'
-            }}
-          </h2>
-          <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-            {{
-              currentLanguage === 'en'
-                ? 'Your comprehensive tool for managing patient radiation exposure and recommendations.'
-                : 'أداتك الشاملة لإدارة تعرض المرضى للإشعاع وتقديم التوصيات.'
-            }}
-          </p>
+      <!-- Main Dashboard Content -->
+      <div class="dashboard-page dashboard-blur-area" :class="{ 'is-blurred': showRoleModal }">
+        <main class="dashboard-main-content">
+          <section class="dashboard-card">
+            <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              {{ currentLanguage === 'en' ? 'Welcome to mSv Dose Tracker' : 'مرحبًا بك في متتبع جرعات الأشعة السينية' }}
+            </h2>
+            <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+              {{
+                currentLanguage === 'en'
+                  ? 'Your comprehensive tool for managing patient radiation exposure and recommendations.'
+                  : 'أداتك الشاملة لإدارة تعرض المرضى للإشعاع وتقديم التوصيات.'
+              }}
+            </p>
 
-          <div class="dashboard-features">
-            <!-- Existing: Get Scan Recommendation -->
-            <div class="feature-item" @click="router.push('/recommend')">
-              <i class="fas fa-file-medical"></i>
-              <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                {{ currentLanguage === 'en' ? 'Get Scan Recommendation' : 'الحصول على توصية' }}
-              </h3>
-              <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                {{
-                  currentLanguage === 'en'
-                    ? 'Receive AI-powered recommendations for X-ray or CT scans.'
-                    : 'احصل على توصيات مدعومة بالذكاء الاصطناعي لفحوصات الأشعة.'
-                }}
-              </p>
+            <div class="dashboard-features">
+              <!-- Get Scan Recommendation -->
+              <div class="feature-item" @click="router.push('/recommend')">
+                <i class="fas fa-file-medical"></i>
+                <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{ currentLanguage === 'en' ? 'Get Scan Recommendation' : 'الحصول على توصية' }}
+                </h3>
+                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{
+                    currentLanguage === 'en'
+                      ? 'Receive AI-powered recommendations for X-ray or CT scans.'
+                      : 'احصل على توصيات مدعومة بالذكاء الاصطناعي لفحوصات الأشعة.'
+                  }}
+                </p>
+              </div>
+
+              <!-- Manage Patients (Conditional on role) -->
+              <div v-if="userRole === 'doctor'" class="feature-item" @click="router.push('/patients')">
+                <i class="fas fa-users"></i>
+                <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
+                </h3>
+                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{
+                    currentLanguage === 'en'
+                      ? 'View, add, and manage patient records securely.'
+                      : 'عرض وإضافة وإدارة سجلات المرضى بأمان.'
+                  }}
+                </p>
+              </div>
+
+              <!-- View Scan History -->
+              <div class="feature-item" @click="router.push('/history')">
+                <i class="fas fa-history"></i>
+                <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{ currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات' }}
+                </h3>
+                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{
+                    currentLanguage === 'en'
+                      ? 'Review past X-ray and CT scan records.'
+                      : 'مراجعة سجلات فحوصات الأشعة السينية والمقطعية السابقة.'
+                  }}
+                </p>
+              </div>
             </div>
 
-            <!-- Existing: Manage Patients -->
-            <div class="feature-item" @click="router.push('/patients')">
-              <i class="fas fa-users"></i>
-              <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
-              </h3>
-              <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                {{
-                  currentLanguage === 'en'
-                    ? 'View, add, and manage patient records securely.'
-                    : 'عرض وإضافة وإدارة سجلات المرضى بأمان.'
-                }}
-              </p>
-            </div>
-
-            <!-- ✅ ADD THIS NEW BLOCK FOR HISTORY -->
-            <div class="feature-item" @click="router.push('/history')">
-              <i class="fas fa-history"></i>
-              <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                {{ currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات' }}
-              </h3>
-              <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                {{
-                  currentLanguage === 'en'
-                    ? 'Review past X-ray and CT scan records.'
-                    : 'مراجعة سجلات فحوصات الأشعة السينية والمقطعية السابقة.'
-                }}
-              </p>
-            </div>
-
-          </div>
-
-          <button @click="handleLogout" class="action-button secondary logout-button">
-            {{ currentLanguage === 'en' ? 'Logout' : 'تسجيل الخروج' }}
-          </button>
-        </section>
-      </main>
-    </div>
+            <button @click="handleLogout" class="action-button secondary logout-button">
+              {{ currentLanguage === 'en' ? 'Logout' : 'تسجيل الخروج' }}
+            </button>
+          </section>
+        </main>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -188,7 +205,7 @@ onMounted(() => {
 .dashboard-card p {
   color: #555;
   margin-bottom: 30px;
-  font-size: 1.1em;
+  font-size: 1.2em;
 }
 
 .dashboard-features {
@@ -280,63 +297,6 @@ onMounted(() => {
   margin-right: auto;
 }
 
-/* Responsive Adjustments */
-@media (max-width: 768px) {
-  .dashboard-main-content {
-    padding: 15px;
-  }
-  .dashboard-card {
-    padding: 30px;
-  }
-  .dashboard-card h2 {
-    font-size: 1.8em;
-  }
-  .dashboard-card p {
-    font-size: 1em;
-  }
-  .dashboard-features {
-    flex-direction: column;
-    align-items: center;
-    gap: 20px;
-  }
-  .feature-item {
-    min-width: 90%;
-    max-width: 90%;
-    padding: 20px;
-  }
-  .feature-item i {
-    font-size: 3em;
-  }
-  .feature-item h3 {
-    font-size: 1.3em;
-  }
-  .action-button {
-    padding: 12px 25px;
-    font-size: 1em;
-  }
-}
-
-@media (max-width: 480px) {
-  .dashboard-card {
-    padding: 20px;
-  }
-  .dashboard-card h2 {
-    font-size: 1.6em;
-  }
-  .feature-item {
-    padding: 15px;
-  }
-  .feature-item i {
-    font-size: 2.5em;
-  }
-  .feature-item h3 {
-    font-size: 1.2em;
-  }
-  .action-button {
-    padding: 10px 20px;
-    font-size: 0.9em;
-  }
-}
 .role-modal-backdrop {
   position: fixed;
   top: 0;
@@ -398,5 +358,73 @@ onMounted(() => {
   pointer-events: none; /* Optional: Prevent interaction with blurred content */
   user-select: none;    /* Optional: Prevent text selection in blurred area */
   transition: filter 0.25s ease;
+}
+
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: calc(100vh - 80px); /* Adjust for your header height */
+  font-size: 1.5em;
+  color: #8d99ae;
+  background-color: #f8f9fa;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .dashboard-main-content {
+    padding: 15px;
+  }
+  .dashboard-card {
+    padding: 30px;
+  }
+  .dashboard-card h2 {
+    font-size: 1.8em;
+  }
+  .dashboard-card p {
+    font-size: 1.1em;
+  }
+  .dashboard-features {
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+  .feature-item {
+    min-width: 90%;
+    max-width: 90%;
+    padding: 20px;
+  }
+  .feature-item i {
+    font-size: 3em;
+  }
+  .feature-item h3 {
+    font-size: 1.3em;
+  }
+  .action-button {
+    padding: 12px 25px;
+    font-size: 1em;
+  }
+}
+
+@media (max-width: 480px) {
+  .dashboard-card {
+    padding: 20px;
+  }
+  .dashboard-card h2 {
+    font-size: 1.6em;
+  }
+  .feature-item {
+    padding: 15px;
+  }
+  .feature-item i {
+    font-size: 2.5em;
+  }
+  .feature-item h3 {
+    font-size: 1.2em;
+  }
+  .action-button {
+    padding: 10px 20px;
+    font-size: 0.9em;
+  }
 }
 </style>

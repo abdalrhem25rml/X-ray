@@ -1,6 +1,7 @@
 <script setup>
 import { ref, inject, watch } from 'vue'
 import { getFirestore, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { useRouter } from 'vue-router'
 
 // Import the components we will create/reuse
 import HistoryTable from '@/components/HistoryTable.vue'
@@ -12,6 +13,7 @@ const appId = import.meta.env.VITE_APP_ID
 const auth = inject('auth')
 const currentLanguage = inject('currentLanguage')
 const firestore = getFirestore()
+const router = useRouter()
 
 // State Management
 const scans = ref([])
@@ -116,6 +118,11 @@ watch(() => auth.currentUser, (user) => {
           @edit="openEditScanModal"
           @delete="openConfirmDelete"
         />
+        <div class="switch-link-container">
+          <a href="#" @click="router.push('/dashboard')">
+            {{ currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم' }}
+          </a>
+        </div>
       </div>
     </div>
 
@@ -146,4 +153,15 @@ watch(() => auth.currentUser, (user) => {
 .history-card p { color: #555; margin-bottom: 30px; font-size: 1.1em; }
 .action-button { margin-bottom: 30px; background-color: #8d99ae; color: white; border: none; padding: 12px 25px; border-radius: 8px; cursor: pointer; font-size: 1.05em; font-weight: 600; transition: all 0.2s ease; }
 .action-button:hover { background-color: #6a7483; transform: translateY(-2px); }
+.switch-link-container{
+  margin: 25px;
+}
+a{
+    color: #8d99ae;
+    text-decoration: none;
+    font-weight: 600;
+    transition: color .3s ease;
+    font-size: 16.5px;
+}
+
 </style>
