@@ -1,165 +1,124 @@
 <script setup>
-import { reactive, watch, computed, inject } from 'vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { ref, watch, inject } from 'vue'
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+} from 'firebase/firestore'
+import { useAuthStore } from '@/stores/auth'
+import HistoryTable from '@/components/HistoryTable.vue'
+import ScanFormModal from '@/components/ScanFormModal.vue'
 
-// This modal receives props to control it from the parent
 const props = defineProps({
   show: Boolean,
-  patient: Object, // The patient to edit. Will be NULL if we are adding a new one.
-  isSaving: Boolean,
+  patient: Object,
 })
+const emit = defineEmits(['close', 'generateNewRecommendation', 'deleteRecommendation'])
 
-// It tells the parent when to close or when to save the data.
-const emit = defineEmits(['close', 'save'])
+const firestore = getFirestore()
+const authStore = useAuthStore()
+const appId = import.meta.env.VITE_APP_ID
+const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 
-const currentLanguage = inject('currentLanguage')
+const patientScans = ref([])
+const isLoading = ref(false)
+const isSaving = ref(false)
+const showScanForm = ref(false)
 
-// A local "draft" of the patient data.
-const form = reactive({
-  id: null,
-  name: '',
-  age: null,
-  gender: '',
-  medicalHistory: '',
-  allergies: '',
-  previousRadiationExposure: '',
-})
-
-// This is the key part: When the `patient` prop changes (i.e., the modal is opened),
-// we fill our local form with its data. If the prop is null, we reset the form.
-watch(
-  () => props.patient,
-  (newPatient) => {
-    if (newPatient) {
-      // Editing mode
-      form.id = newPatient.id
-      form.name = newPatient.name
-      form.age = newPatient.age
-      form.gender = newPatient.gender
-      // Join arrays into comma-separated strings for the textareas
-      form.medicalHistory = newPatient.medicalHistory?.join(', ') || ''
-      form.allergies = newPatient.allergies?.join(', ') || ''
-      form.previousRadiationExposure = newPatient.previousRadiationExposure?.join(', ') || ''
-    } else {
-      // Adding mode: reset everything
-      form.id = null
-      form.name = ''
-      form.age = null
-      form.gender = ''
-      form.medicalHistory = ''
-      form.allergies = ''
-      form.previousRadiationExposure = ''
-    }
-  },
-)
-
-// Computed properties to change the modal's text based on add/edit mode
-const isEditing = computed(() => !!props.patient)
-const title = computed(() => {
-  const key = isEditing.value ? 'Edit Patient' : 'Add New Patient'
-  return currentLanguage.value === 'en'
-    ? key
-    : { 'Edit Patient': 'تعديل بيانات المريض', 'Add New Patient': 'إضافة مريض جديد' }[key]
-})
-
-// When the form is submitted...
-function handleSubmit() {
-  // Package the data to send to the parent
-  const patientDataToSave = {
-    ...form,
-    // Convert comma-separated strings back into arrays of strings
-    medicalHistory: form.medicalHistory
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-    allergies: form.allergies
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-    previousRadiationExposure: form.previousRadiationExposure
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
+// ✅ NEW: Fetches scans ONLY for the specific patient being viewed
+const fetchPatientScans = async () => {
+  if (!props.patient || !props.patient.id) {
+    patientScans.value = []
+    return
   }
-  // Tell the parent to save this data
-  emit('save', patientDataToSave)
+  isLoading.value = true
+  try {
+    const scansCol = collection(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans')
+    const q = query(scansCol, where('patientId', '==', props.patient.id))
+    const snapshot = await getDocs(q)
+    patientScans.value = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (b.scanDate?.toMillis() || 0) - (a.scanDate?.toMillis() || 0))
+  } catch (err) {
+    console.error('Error fetching patient scans:', err)
+  } finally {
+    isLoading.value = false
+  }
 }
+
+// ✅ NEW: Saves a scan record with the patient's ID pre-filled
+const handleSavePatientScan = async (scanData) => {
+  isSaving.value = true
+  try {
+    const scansCol = collection(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans')
+    const dataToSave = {
+      ...scanData,
+      patientId: props.patient.id, // This is the key change
+      patientName: props.patient.name,
+      scanDate: new Date(scanData.scanDate),
+      timestamp: serverTimestamp(),
+    }
+    const { id, ...docToAdd } = dataToSave
+    await addDoc(scansCol, docToAdd)
+
+    showScanForm.value = false
+    await fetchPatientScans() // Refresh the modal's list
+    await triggerMsvRecalculation() // Refresh the global counter
+  } catch (error) {
+    console.error('Error saving patient scan:', error)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// When the modal is shown, fetch the scans for the selected patient
+watch(() => props.show, (isShown) => {
+  if (isShown) {
+    fetchPatientScans()
+  }
+})
 </script>
 
 <template>
-  <Transition name="modal-fade">
-    <div v-if="show" class="modal-overlay" @click.self="$emit('close')">
-      <div class="modal-content" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-        <button class="close-modal-button" @click="$emit('close')">&times;</button>
-        <h3 class="modal-title">{{ title }}</h3>
-
-        <form @submit.prevent="handleSubmit" class="patient-form">
-          <!-- The form now uses the local 'form' object -->
-          <div class="form-group">
-            <label
-              >{{ currentLanguage === 'en' ? 'Name' : 'الاسم' }}
-              <span class="text-red-600">*</span></label
-            >
-            <input type="text" v-model="form.name" required />
+  <div>
+    <Transition name="modal-fade">
+      <div v-if="show" class="modal-overlay" @click.self="$emit('close')">
+        <div class="modal-content">
+          <button @click="$emit('close')" class="close-button">&times;</button>
+          <div v-if="patient">
+            <h2 class="patient-name">{{ patient.name }}</h2>
+            <div class="patient-details-grid">
+              <p><strong>Age:</strong> {{ patient.age }}</p>
+              <p><strong>Gender:</strong> {{ patient.gender }}</p>
+              <p><strong>Medical History:</strong> {{ patient.medicalHistory?.join(', ') || 'N/A' }}</p>
+              <p><strong>Allergies:</strong> {{ patient.allergies?.join(', ') || 'N/A' }}</p>
+            </div>
+            <hr class="divider" />
+            <div class="history-section">
+              <h3>Scan History</h3>
+              <button @click="showScanForm = true" class="add-scan-button">
+                Add Scan to Patient Record
+              </button>
+              <HistoryTable :scans="patientScans" :is-loading="isLoading" />
+            </div>
           </div>
-          <div class="form-group">
-            <label
-              >{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}
-              <span class="text-red-600">*</span></label
-            >
-            <input type="number" v-model="form.age" required min="0" />
-          </div>
-          <div class="form-group">
-            <label
-              >{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}
-              <span class="text-red-600">*</span></label
-            >
-            <select v-model="form.gender" required>
-              <option value="" disabled>
-                {{ currentLanguage === 'en' ? 'Select Gender' : 'اختر الجنس' }}
-              </option>
-              <option value="male">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</option>
-              <option value="female">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</option>
-              <option value="other">{{ currentLanguage === 'en' ? 'Other' : 'آخر' }}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>{{
-              currentLanguage === 'en'
-                ? 'Medical History (comma-separated)'
-                : 'التاريخ الطبي (مفصولة بفاصلة)'
-            }}</label>
-            <textarea v-model="form.medicalHistory" rows="2"></textarea>
-          </div>
-          <div class="form-group">
-            <label>{{
-              currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية (مفصولة بفاصلة)'
-            }}</label>
-            <textarea v-model="form.allergies" rows="2"></textarea>
-          </div>
-          <div class="form-group">
-            <label>{{
-              currentLanguage === 'en'
-                ? 'Previous Radiation Exposure (comma-separated)'
-                : 'التعرض السابق للإشعاع (مفصولة بفاصلة)'
-            }}</label>
-            <textarea v-model="form.previousRadiationExposure" rows="2"></textarea>
-          </div>
-
-          <button type="submit" class="action-button" :disabled="isSaving">
-            <span v-if="isSaving">
-              <font-awesome-icon icon="spinner" spin />
-              {{ currentLanguage === 'en' ? 'Saving...' : 'جاري الحفظ...' }}
-            </span>
-            <span v-else>{{ currentLanguage === 'en' ? 'Save Patient' : 'حفظ المريض' }}</span>
-          </button>
-          <button type="button" @click="$emit('close')" class="action-button secondary mt-2">
-            {{ currentLanguage === 'en' ? 'Cancel' : 'إلغاء' }}
-          </button>
-        </form>
+        </div>
       </div>
-    </div>
-  </Transition>
+    </Transition>
+
+    <!-- This is the nested modal for adding a scan TO THIS PATIENT -->
+    <ScanFormModal
+      :show="showScanForm"
+      :is-saving="isSaving"
+      :patient="patient"
+      @close="showScanForm = false"
+      @save="handleSavePatientScan"
+    />
+  </div>
 </template>
 
 <style scoped>
@@ -287,5 +246,37 @@ function handleSubmit() {
 }
 .modal-content[dir='rtl'] .patient-form {
   text-align: right;
+}
+.patient-name {
+  text-align: center;
+  font-size: 2.2em;
+  color: #333;
+}
+.patient-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 20px;
+  margin: 20px 0;
+}
+.divider {
+  border: none;
+  border-top: 1px solid #eee;
+  margin: 25px 0;
+}
+.history-section h3 {
+  font-size: 1.5em;
+  margin-bottom: 15px;
+}
+.add-scan-button {
+  /* Style for the new button */
+  display: block;
+  margin-left: auto;
+  margin-bottom: 15px;
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 6px;
+  cursor: pointer;
 }
 </style>

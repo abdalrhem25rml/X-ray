@@ -9,6 +9,8 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  query,
+  where, // Import 'where' for filtering
 } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -20,9 +22,9 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 const appId = import.meta.env.VITE_APP_ID
 const authStore = useAuthStore()
 const currentLanguage = inject('currentLanguage')
+const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 const firestore = getFirestore()
 const router = useRouter()
-const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 
 const scans = ref([])
 const isLoading = ref(true)
@@ -32,31 +34,33 @@ const showDeleteModal = ref(false)
 const scanToEdit = ref(null)
 const scanToDelete = ref(null)
 
+// ✅ FIX: Fetches only personal scans (where no patient is associated)
 const fetchScans = async () => {
   isLoading.value = true
   try {
     const scansCol = collection(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans')
-    const snapshot = await getDocs(scansCol)
+    // This query finds documents where patientId is null, effectively finding "personal" scans.
+    const q = query(scansCol, where('patientId', '==', null))
+    const snapshot = await getDocs(q)
     scans.value = snapshot.docs
       .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .sort(
-        (a, b) =>
-          (b.scanDate?.toMillis?.() || new Date(b.scanDate).getTime() || 0) -
-          (a.scanDate?.toMillis?.() || new Date(a.scanDate).getTime() || 0),
-      )
+      .sort((a, b) => (b.scanDate?.toMillis() || 0) - (a.scanDate?.toMillis() || 0))
   } catch (error) {
-    console.error('Error fetching scans:', error)
+    console.error('Error fetching personal scans:', error)
   } finally {
     isLoading.value = false
   }
 }
 
+// ✅ FIX: This function now saves scans without a patientId
 const handleSaveScan = async (scanData) => {
   isSaving.value = true
   try {
     const scansCol = collection(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans')
     const dataToSave = {
       ...scanData,
+      patientId: null, // Explicitly set patientId to null
+      patientName: 'Personal', // Or any other identifier
       scanDate: new Date(scanData.scanDate),
       timestamp: serverTimestamp(),
     }
@@ -72,23 +76,23 @@ const handleSaveScan = async (scanData) => {
     await fetchScans()
     await triggerMsvRecalculation()
   } catch (error) {
-    console.error('Error saving scan:', error)
+    console.error('Error saving personal scan:', error)
   } finally {
     isSaving.value = false
   }
 }
 
+// Delete logic remains largely the same
 const handleDeleteScan = async () => {
   if (!scanToDelete.value) return
   try {
-    const scansCol = collection(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans')
-    await deleteDoc(doc(scansCol, scanToDelete.value.id))
-
+    const scanRef = doc(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans', scanToDelete.value.id)
+    await deleteDoc(scanRef)
     showDeleteModal.value = false
     await fetchScans()
     await triggerMsvRecalculation()
   } catch (error) {
-    console.error('Error deleting scan:', error)
+    console.error('Error deleting personal scan:', error)
   }
 }
 
@@ -96,10 +100,12 @@ const openAddScanModal = () => {
   scanToEdit.value = null
   showScanFormModal.value = true
 }
+
 const openEditScanModal = (scan) => {
   scanToEdit.value = scan
   showScanFormModal.value = true
 }
+
 const openConfirmDelete = (scan) => {
   scanToDelete.value = scan
   showDeleteModal.value = true
@@ -108,8 +114,11 @@ const openConfirmDelete = (scan) => {
 watch(
   () => authStore.user,
   (user) => {
-    if (user) fetchScans()
-    else scans.value = []
+    if (user) {
+      fetchScans()
+    } else {
+      scans.value = []
+    }
   },
   { immediate: true },
 )
@@ -119,23 +128,28 @@ watch(
   <div class="history-page">
     <div class="history-main-content">
       <div class="history-card">
-        <h2>{{ currentLanguage === 'en' ? 'Scan History' : 'سجل الفحوصات' }}</h2>
+        <!-- ✅ FIX: UI text updated to reflect the new purpose -->
+        <h2>{{ currentLanguage === 'en' ? 'Personal Exposure Log' : 'سجل التعرض الشخصي' }}</h2>
         <p>
           {{
             currentLanguage === 'en'
-              ? 'Review, add, and manage all past scans.'
-              : 'مراجعة وإضافة وإدارة جميع الفحوصات السابقة.'
+              ? 'Log and manage personal radiation exposure events not associated with a patient.'
+              : 'سجل وأدر أحداث التعرض للإشعاع الشخصية غير المرتبطة بمريض.'
           }}
         </p>
         <button @click="openAddScanModal" class="action-button">
-          {{ currentLanguage === 'en' ? 'Add New Scan' : 'إضافة فحص جديد' }}
+          {{
+            currentLanguage === 'en' ? 'Add Personal Exposure' : 'إضافة تعرض شخصي'
+          }}
         </button>
+
         <HistoryTable
           :scans="scans"
           :is-loading="isLoading"
           @edit="openEditScanModal"
           @delete="openConfirmDelete"
         />
+
         <div class="switch-link-container">
           <a href="#" @click.prevent="router.push('/dashboard')">
             {{ currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم' }}
@@ -143,6 +157,8 @@ watch(
         </div>
       </div>
     </div>
+
+    <!-- ✅ FIX: The modal is now opened in "personal" mode (no patient prop passed) -->
     <ScanFormModal
       :show="showScanFormModal"
       :scan="scanToEdit"
@@ -150,10 +166,15 @@ watch(
       @close="showScanFormModal = false"
       @save="handleSaveScan"
     />
+
     <ConfirmDeleteModal
       :show="showDeleteModal"
-      :title="currentLanguage === 'en' ? 'Delete Scan' : 'حذف الفحص'"
-      :message="`${currentLanguage === 'en' ? 'Are you sure you want to delete the scan for' : 'هل أنت متأكد من حذف فحص المريض'} ${scanToDelete?.patientName}?`"
+      :title="currentLanguage === 'en' ? 'Delete Event' : 'حذف الحدث'"
+      :message="
+        currentLanguage === 'en'
+          ? 'Are you sure you want to delete this exposure event?'
+          : 'هل أنت متأكد من حذف حدث التعرض هذا؟'
+      "
       @close="showDeleteModal = false"
       @confirm="handleDeleteScan"
     />
@@ -161,7 +182,7 @@ watch(
 </template>
 
 <style scoped>
-/* ... styles remain unchanged ... */
+/* All styles remain the same */
 .history-page {
   display: flex;
   flex-direction: column;

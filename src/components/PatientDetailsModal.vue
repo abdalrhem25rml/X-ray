@@ -1,274 +1,271 @@
 <script setup>
-import { inject } from 'vue'
-import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { ref, watch, inject } from 'vue'
+import {
+  getFirestore,
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+} from 'firebase/firestore'
+import { useAuthStore } from '@/stores/auth'
+import HistoryTable from '@/components/HistoryTable.vue'
+import ScanFormModal from '@/components/ScanFormModal.vue'
+import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 
-// This component receives the full patient object to display.
-defineProps({
+const props = defineProps({
   show: Boolean,
   patient: Object,
 })
+const emit = defineEmits(['close'])
 
-// It tells the parent what action the user took.
-const emit = defineEmits([
-  'close',
-  'generateNewRecommendation',
-  'viewRecommendation',
-  'deleteRecommendation',
-])
-
+const firestore = getFirestore()
+const authStore = useAuthStore()
+const appId = import.meta.env.VITE_APP_ID
+const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 const currentLanguage = inject('currentLanguage')
 
-// Helper function to format dates nicely.
-const formatDate = (timestamp) => {
-  if (!timestamp || !timestamp.toDate) return 'N/A'
-  return new Date(timestamp.toDate()).toLocaleDateString('en-UK')
+const patientScans = ref([])
+const isLoading = ref(false)
+const isSaving = ref(false)
+
+// State for the nested modals
+const showScanForm = ref(false)
+const showDeleteScanModal = ref(false)
+const scanToEdit = ref(null)
+const scanToDelete = ref(null)
+
+// Fetches scans ONLY for the specific patient being viewed
+const fetchPatientScans = async () => {
+  if (!props.patient || !props.patient.id) {
+    patientScans.value = []
+    return
+  }
+  isLoading.value = true
+  try {
+    const scansCol = collection(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans')
+    const q = query(scansCol, where('patientId', '==', props.patient.id))
+    const snapshot = await getDocs(q)
+    patientScans.value = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (b.scanDate?.toMillis() || 0) - (a.scanDate?.toMillis() || 0))
+  } catch (err) {
+    console.error('Error fetching patient scans:', err)
+  } finally {
+    isLoading.value = false
+  }
 }
+
+// Handles both ADDING and EDITING a scan for this patient
+const handleSavePatientScan = async (scanData) => {
+  isSaving.value = true
+  try {
+    const scansCol = collection(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans')
+    const dataToSave = {
+      ...scanData,
+      patientId: props.patient.id,
+      patientName: props.patient.name,
+      gender: props.patient.gender,
+      scanDate: new Date(scanData.scanDate),
+      timestamp: serverTimestamp(),
+    }
+
+    if (scanData.id) {
+      // Editing existing scan
+      await updateDoc(doc(scansCol, scanData.id), dataToSave)
+    } else {
+      // Adding new scan
+      const { id, ...docToAdd } = dataToSave
+      await addDoc(scansCol, docToAdd)
+    }
+
+    showScanForm.value = false
+    await fetchPatientScans()
+    await triggerMsvRecalculation()
+  } catch (error) {
+    console.error('Error saving patient scan:', error)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// Handles deleting a specific scan from the patient's record
+const handleDeletePatientScan = async () => {
+  if (!scanToDelete.value) return
+  isSaving.value = true
+  try {
+    const scanRef = doc(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans', scanToDelete.value.id)
+    await deleteDoc(scanRef)
+
+    showDeleteScanModal.value = false
+    await fetchPatientScans()
+    await triggerMsvRecalculation()
+  } catch (error) {
+    console.error('Error deleting patient scan:', error)
+  } finally {
+    isSaving.value = false
+  }
+}
+
+// Functions to open the nested modals
+const openAddScanForPatient = () => {
+  scanToEdit.value = null
+  showScanForm.value = true
+}
+
+const openEditScanForPatient = (scan) => {
+  scanToEdit.value = scan
+  showScanForm.value = true
+}
+
+const openConfirmDeleteScan = (scan) => {
+  scanToDelete.value = scan
+  showDeleteScanModal.value = true
+}
+
+watch(
+  () => props.show,
+  (isShown) => {
+    if (isShown) {
+      fetchPatientScans()
+    }
+  },
+)
 </script>
 
 <template>
-  <Transition name="modal-fade">
-    <div v-if="show" class="modal-overlay" @click.self="$emit('close')">
-      <div v-if="patient" class="modal-content patient-details-modal">
-        <button class="close-modal-button" @click="$emit('close')">&times;</button>
-        <h3 class="modal-title">
-          {{ currentLanguage === 'en' ? 'Patient Details' : 'تفاصيل المريض' }}
-        </h3>
-
-        <!-- Patient Info Grid -->
-        <div class="patient-details-grid">
-          <p>
-            <strong>{{ currentLanguage === 'en' ? 'Name:' : 'الاسم:' }}</strong> {{ patient.name }}
-          </p>
-          <p>
-            <strong>{{ currentLanguage === 'en' ? 'Age:' : 'العمر:' }}</strong> {{ patient.age }}
-          </p>
-          <p>
-            <strong>{{ currentLanguage === 'en' ? 'Gender:' : 'الجنس:' }}</strong>
-            {{ patient.gender }}
-          </p>
-          <p class="full-width">
-            <strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ الطبي:' }}</strong>
-            {{ patient.medicalHistory?.join(', ') || 'N/A' }}
-          </p>
-          <p class="full-width">
-            <strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong>
-            {{ patient.allergies?.join(', ') || 'N/A' }}
-          </p>
-        </div>
-
-        <!-- Recommendation History Section -->
-        <div class="recommendation-history-section">
-          <h4 class="history-title">
-            {{ currentLanguage === 'en' ? 'Scan History' : 'سجل الفحوصات' }}
-          </h4>
-          <button
-            @click="$emit('generateNewRecommendation', patient.id)"
-            class="action-button generate-new-recommendation-button"
-          >
-            {{ currentLanguage === 'en' ? 'Get New Recommendation' : 'الحصول على توصية جديدة' }}
-          </button>
-
-          <div
-            v-if="!patient.recommendations || patient.recommendations.length === 0"
-            class="no-history-message"
-          >
-            {{ currentLanguage === 'en' ? 'No scan history found.' : 'لا يوجد سجل فحوصات.' }}
-          </div>
-          <div v-else class="recommendation-list">
-            <div v-for="rec in patient.recommendations" :key="rec.id" class="recommendation-item">
-              <p class="recommendation-date">
-                <strong>{{ currentLanguage === 'en' ? 'Date:' : 'التاريخ:' }}</strong>
-                {{ formatDate(rec.timestamp) }}
-              </p>
-              <p>
-                <strong>{{ currentLanguage === 'en' ? 'Scan Type:' : 'نوع الفحص:' }}</strong>
-                {{ rec.scanType }}
-              </p>
-              <p>
-                <strong>{{ currentLanguage === 'en' ? 'Calculated Dose:' : 'الجرعة:' }}</strong>
-                {{ rec.calculatedMsv }} mSv
-              </p>
-              <div class="recommendation-actions">
-                <button
-                  @click="$emit('viewRecommendation', rec)"
-                  class="action-button-sm view-button"
-                >
-                  <font-awesome-icon icon="eye" /> {{ currentLanguage === 'en' ? 'View' : 'عرض' }}
-                </button>
-                <button
-                  @click="$emit('deleteRecommendation', { patientId: patient.id, recId: rec.id })"
-                  class="action-button-sm delete-button"
-                >
-                  <font-awesome-icon icon="trash-alt" />
-                  {{ currentLanguage === 'en' ? 'Delete' : 'حذف' }}
+  <div>
+    <Transition name="modal-fade">
+      <div v-if="show" class="modal-overlay" @click.self="$emit('close')" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <div class="modal-content">
+          <button @click="$emit('close')" class="close-button">&times;</button>
+          <div v-if="patient">
+            <h2 class="patient-name">{{ patient.name }}</h2>
+            <div class="patient-details-grid">
+              <p><strong>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}:</strong> {{ patient.age }}</p>
+              <p><strong>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}:</strong> {{ patient.gender }}</p>
+              <p><strong>{{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}:</strong> {{ patient.medicalHistory?.join(', ') || 'N/A' }}</p>
+              <p><strong>{{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}:</strong> {{ patient.allergies?.join(', ') || 'N/A' }}</p>
+            </div>
+            <hr class="divider" />
+            <div class="history-section">
+              <div class="history-header">
+                <h3>{{ currentLanguage === 'en' ? 'Scan History' : 'سجل الفحوصات' }}</h3>
+                <button @click="openAddScanForPatient" class="add-scan-button">
+                  {{ currentLanguage === 'en' ? 'Add Scan Record' : 'إضافة سجل فحص' }}
                 </button>
               </div>
+              <HistoryTable
+                :scans="patientScans"
+                :is-loading="isLoading"
+                @edit="openEditScanForPatient"
+                @delete="openConfirmDeleteScan"
+              />
             </div>
           </div>
         </div>
       </div>
-    </div>
-  </Transition>
+    </Transition>
+
+    <ScanFormModal
+      :show="showScanForm"
+      :is-saving="isSaving"
+      :patient="patient"
+      :scan="scanToEdit"
+      @close="showScanForm = false"
+      @save="handleSavePatientScan"
+    />
+
+    <ConfirmDeleteModal
+      :show="showDeleteScanModal"
+      :title="currentLanguage === 'en' ? 'Delete Scan Record' : 'حذف سجل الفحص'"
+      :message="`${currentLanguage === 'en' ? 'Are you sure you want to delete this scan dated' : 'هل أنت متأكد من حذف هذا الفحص بتاريخ'} ${scanToDelete?.scanDate?.toDate().toLocaleDateString()}?`"
+      @close="showDeleteScanModal = false"
+      @confirm="handleDeletePatientScan"
+    />
+  </div>
 </template>
 
 <style scoped>
-/* All styles for the patient details modal and its contents */
 .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.6);
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
-  padding: 20px;
+  z-index: 2000;
 }
 .modal-content {
-  background-color: white;
-  padding: 30px;
+  background: white;
+  padding: 30px 40px;
   border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  position: relative;
-}
-.patient-details-modal {
-  max-width: 800px;
-  width: 100%;
+  max-width: 900px;
+  width: 90%;
   max-height: 90vh;
   overflow-y: auto;
+  position: relative;
 }
-.close-modal-button {
+.close-button {
   position: absolute;
   top: 15px;
-  right: 15px;
+  right: 20px;
   background: none;
   border: none;
   font-size: 2.5em;
   cursor: pointer;
-  color: #8d99ae;
-  transition: all 0.2s ease;
 }
-.close-modal-button:hover {
-  color: #555;
-  transform: rotate(90deg);
-}
-.modal-title {
-  color: #8d99ae;
-  margin-bottom: 25px;
-  font-size: 1.8em;
-  font-weight: 700;
+.patient-name {
   text-align: center;
+  font-size: 2.2em;
+  color: #333;
+  margin-bottom: 15px;
 }
 .patient-details-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  margin-bottom: 30px;
+  gap: 10px 20px;
+  margin: 20px 0;
+  background-color: #f8f9fa;
   padding: 15px;
-  border: 1px solid #e0e0e0;
   border-radius: 8px;
-  background-color: #fefefe;
 }
 .patient-details-grid p {
   margin: 0;
-  color: #333;
 }
-.patient-details-grid strong {
-  color: #6a7483;
-}
-.patient-details-grid .full-width {
-  grid-column: 1 / -1;
-}
-.recommendation-history-section {
-  margin-top: 30px;
-  border-top: 1px solid #eee;
-  padding-top: 25px;
-}
-.history-title {
-  color: #8d99ae;
-  font-size: 1.6em;
-  font-weight: 700;
-  margin-bottom: 20px;
-  text-align: center;
-}
-.action-button {
+.divider {
   border: none;
-  padding: 12px 25px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 1em;
-  font-weight: 600;
+  border-top: 1px solid #eee;
+  margin: 25px 0;
 }
-.generate-new-recommendation-button {
-  display: block;
-  margin: 0 auto 25px auto;
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+}
+.history-header h3 {
+  font-size: 1.5em;
+  margin: 0;
+}
+.add-scan-button {
   background-color: #28a745;
   color: white;
-}
-.generate-new-recommendation-button:hover {
-  background-color: #218838;
-}
-.no-history-message {
-  color: #777;
-  text-align: center;
-  padding: 20px;
-  background-color: #f0f0f0;
-  border-radius: 8px;
-}
-.recommendation-list {
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-}
-.recommendation-item {
-  background-color: #eef2f6;
-  padding: 20px;
-  border-radius: 10px;
-  border: 1px solid #dee2e6;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-}
-.recommendation-item p {
-  margin-bottom: 8px;
-  color: #495057;
-}
-.recommendation-date {
-  font-size: 0.9em;
-  color: #777;
-  margin-bottom: 15px;
-  border-bottom: 1px dashed #cfd8e3;
-  padding-bottom: 5px;
-}
-.recommendation-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 10px;
-}
-.action-button-sm {
-  background: none;
   border: none;
-  padding: 8px 12px;
+  padding: 10px 15px;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 0.9em;
-  display: flex;
-  align-items: center;
-  gap: 5px;
+  font-weight: 600;
+  transition: background-color 0.2s ease;
 }
-.action-button-sm.view-button {
-  color: #5bc0de;
-}
-.action-button-sm.delete-button {
-  color: #d9534f;
-}
-.modal-fade-enter-active,
-.modal-fade-leave-active {
-  transition: opacity 0.4s ease;
-}
-.modal-fade-enter-from,
-.modal-fade-leave-to {
-  opacity: 0;
+.add-scan-button:hover {
+  background-color: #218838;
 }
 </style>
