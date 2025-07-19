@@ -1,19 +1,23 @@
 <script setup>
 import { ref, inject, watch, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { collection, addDoc, doc, getDoc } from 'firebase/firestore'
+import { doc, getDoc } from 'firebase/firestore'
 import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
-const route = useRoute()
+const route = useRoute() // Get the current route object
 const authStore = useAuthStore()
 
 const currentLanguage = inject('currentLanguage')
 const db = inject('db')
 const VITE_APP_ID = import.meta.env.VITE_APP_ID
+const currentTotalMsv = inject('currentMsv')
+const yearlyLimit = inject('yearlyLimit')
+
+// --- ✅ FIX: Use route.query instead of route.params ---
+const patientId = ref(route.query.patientId || null)
 
 // --- Reactive State ---
-const patientId = ref(route.params.patientId || null)
 const patientName = ref('')
 const age = ref(null)
 const gender = ref('')
@@ -23,8 +27,6 @@ const allergies = ref('')
 const isPregnant = ref(false)
 const previousRadiationExposure = ref('')
 const scanType = ref('')
-
-// ✅ FIX: Replaced multiple doctor inputs with a single context field
 const doctorAdditionalContext = ref('')
 
 // UI and AI State
@@ -34,6 +36,7 @@ const patientCalculatedMsv = ref(null)
 const doctorOccupationalMsv = ref(null)
 const isLoading = ref(false)
 const errorMessage = ref('')
+const warningMessage = ref('')
 
 const userRole = computed(() => authStore.role)
 
@@ -63,10 +66,14 @@ const fetchPatientDetails = async (id) => {
   }
 }
 
+// --- ✅ FIX: Watch route.query.patientId for changes ---
 watch(
-  () => route.params.patientId,
+  () => route.query.patientId,
   (newId) => {
-    if (newId) fetchPatientDetails(newId)
+    patientId.value = newId
+    if (newId) {
+      fetchPatientDetails(newId)
+    }
   },
   { immediate: true },
 )
@@ -78,6 +85,7 @@ const getRecommendations = async () => {
   patientCalculatedMsv.value = null
   doctorOccupationalMsv.value = null
   factorDetails.value = null
+  warningMessage.value = ''
 
   if (!age.value || !scanType.value) {
     errorMessage.value =
@@ -92,13 +100,23 @@ const getRecommendations = async () => {
   let responseSchema = {}
 
   if (userRole.value === 'doctor') {
-    // ✅ FIX: The prompt now correctly uses the single, flexible context field
     prompt = `A doctor is requesting a recommendation for a patient scan.
-      Patient Details: Age: ${age.value}, Gender: ${gender.value}, Medical History: ${medicalHistory.value || 'None'}, Symptoms: ${currentSymptoms.value || 'None'}, Pregnant: ${isPregnant.value ? 'Yes' : 'No'}, Previous Radiation: ${previousRadiationExposure.value || 'None'}, Scan Type to consider: ${scanType.value}.
-
-      Doctor's Additional Context for Occupational Exposure: ${doctorAdditionalContext.value || 'No additional context provided.'}
-
-      Tasks: 1. Provide a concise professional recommendation for the patient. 2. Estimate the scan factors (tubeVoltageKv, tubeCurrentMa, exposureTimeMs). 3. Estimate the patient's effective dose (patientCalculatedMsv). 4. Estimate the doctor's occupational dose (doctorOccupationalMsv) based on all provided details.
+      User's Current State: The doctor's current total annual occupational dose is ${currentTotalMsv.value.toFixed(
+        2,
+      )} mSv. The recommended yearly limit for a doctor is ${yearlyLimit.value} mSv.
+      Patient Details: Age: ${age.value}, Gender: ${gender.value}, Medical History: ${
+        medicalHistory.value || 'None'
+      }, Symptoms: ${currentSymptoms.value || 'None'}, Pregnant: ${
+        isPregnant.value ? 'Yes' : 'No'
+      }, Previous Radiation: ${
+        previousRadiationExposure.value || 'None'
+      }, Scan Type to consider: ${scanType.value}.
+      Doctor's Additional Context for Occupational Exposure: ${
+        doctorAdditionalContext.value || 'No additional context provided.'
+      }
+      Tasks: 1. Provide a concise professional recommendation for the patient. 2. Estimate the scan factors (tubeVoltageKv, tubeCurrentMa, exposureTimeMs). 3. Estimate the patient's effective dose (patientCalculatedMsv). 4. Estimate the doctor's occupational dose (doctorOccupationalMsv) from this single procedure. 5. Based on the doctor's current dose and the estimated occupational dose from this scan, add a specific, clear "Warning" field in your response if their new total will exceed the ${
+        yearlyLimit.value
+      } mSv limit. This field MUST contain a warning message. If it does not exceed the limit, this field should be an empty string.
       The entire response MUST be in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
 
     responseSchema = {
@@ -115,19 +133,32 @@ const getRecommendations = async () => {
         },
         patientCalculatedMsv: { type: 'NUMBER' },
         doctorOccupationalMsv: { type: 'NUMBER' },
+        Warning: { type: 'STRING' },
       },
       required: [
         'recommendationText',
         'factorDetails',
         'patientCalculatedMsv',
         'doctorOccupationalMsv',
+        'Warning',
       ],
     }
   } else {
     // Patient prompt
     prompt = `A patient is requesting information about a potential scan.
-      Patient Details: Age: ${age.value}, Gender: ${gender.value}, Medical History: ${medicalHistory.value || 'None'}, Symptoms: ${currentSymptoms.value || 'None'}, Pregnant: ${isPregnant.value ? 'Yes' : 'No'}, Previous Radiation: ${previousRadiationExposure.value || 'None'}, Scan Type to consider: ${scanType.value}.
-      Tasks: 1. Provide a simple, easy-to-understand recommendation. 2. Give general advice regarding radiation exposure. 3. Estimate the patient's effective dose (patientCalculatedMsv).
+      User's Current State: The patient's current total annual dose is ${currentTotalMsv.value.toFixed(
+        2,
+      )} mSv. The recommended yearly limit is ${yearlyLimit.value} mSv.
+      Patient Details: Age: ${age.value}, Gender: ${gender.value}, Medical History: ${
+        medicalHistory.value || 'None'
+      }, Symptoms: ${currentSymptoms.value || 'None'}, Pregnant: ${
+        isPregnant.value ? 'Yes' : 'No'
+      }, Previous Radiation: ${
+        previousRadiationExposure.value || 'None'
+      }, Scan Type to consider: ${scanType.value}.
+      Tasks: 1. Provide a simple, easy-to-understand recommendation. 2. Give general advice regarding radiation exposure. 3. Estimate the patient's effective dose (patientCalculatedMsv) from this single procedure. 4. Based on the patient's current dose and the estimated dose from this scan, add a specific, clear "Warning" field in your response if their new total will exceed the ${
+        yearlyLimit.value
+      } mSv limit. This field MUST contain a warning message. If it does not exceed the limit, this field should be an empty string.
       The entire response MUST be in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
 
     responseSchema = {
@@ -135,8 +166,9 @@ const getRecommendations = async () => {
       properties: {
         recommendationText: { type: 'STRING' },
         patientCalculatedMsv: { type: 'NUMBER' },
+        Warning: { type: 'STRING' },
       },
-      required: ['recommendationText', 'patientCalculatedMsv'],
+      required: ['recommendationText', 'patientCalculatedMsv', 'Warning'],
     }
   }
 
@@ -145,10 +177,8 @@ const getRecommendations = async () => {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: 'application/json', responseSchema: responseSchema },
     }
-
     const apiKey = import.meta.env.VITE_GEMINI_KEY
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
-
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -168,6 +198,9 @@ const getRecommendations = async () => {
     if (jsonResponse.factorDetails) {
       factorDetails.value = jsonResponse.factorDetails
     }
+    if (jsonResponse.Warning) {
+      warningMessage.value = jsonResponse.Warning
+    }
   } catch (error) {
     console.error('Error getting recommendation:', error)
     errorMessage.value = `An error occurred: ${error.message}`
@@ -180,13 +213,13 @@ const goToDashboard = () => router.push('/dashboard')
 </script>
 
 <template>
-  <div class="recommend-page">
+  <div class="recommend-page" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
     <main class="recommend-main-content">
       <section class="recommend-card">
-        <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <h2>
           {{ currentLanguage === 'en' ? 'Medical Scan Recommendation' : 'توصية الفحص الطبي' }}
         </h2>
-        <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <p>
           {{
             userRole === 'doctor'
               ? currentLanguage === 'en'
@@ -198,11 +231,7 @@ const goToDashboard = () => router.push('/dashboard')
           }}
         </p>
 
-        <div
-          v-if="patientId && patientName"
-          class="patient-info-display"
-          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
-        >
+        <div v-if="patientId && patientName" class="patient-info-display">
           {{ currentLanguage === 'en' ? 'For Patient:' : 'للمريض:' }}
           <strong>{{ patientName }}</strong>
         </div>
@@ -210,17 +239,17 @@ const goToDashboard = () => router.push('/dashboard')
         <form @submit.prevent="getRecommendations" class="recommend-form">
           <!-- Common Patient Fields -->
           <div class="form-group">
-            <label
-              >{{ currentLanguage === 'en' ? 'Age (Years)' : 'العمر (سنوات)'
-              }}<span class="required-indicator">*</span></label
-            >
+            <label>
+              {{ currentLanguage === 'en' ? 'Age (Years)' : 'العمر (سنوات)' }}
+              <span class="required-indicator">*</span>
+            </label>
             <input type="number" v-model="age" required />
           </div>
           <div class="form-group">
-            <label
-              >{{ currentLanguage === 'en' ? 'Gender' : 'الجنس'
-              }}<span class="required-indicator">*</span></label
-            >
+            <label>
+              {{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}
+              <span class="required-indicator">*</span>
+            </label>
             <select v-model="gender" required>
               <option value="male">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</option>
               <option value="female">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</option>
@@ -247,7 +276,6 @@ const goToDashboard = () => router.push('/dashboard')
             <input type="text" v-model="previousRadiationExposure" />
           </div>
 
-          <!-- ✅ FIX: Doctor-only section now has a single textarea -->
           <div v-if="userRole === 'doctor'" class="doctor-exposure-section">
             <h3 class="section-title">
               {{
@@ -279,10 +307,10 @@ const goToDashboard = () => router.push('/dashboard')
 
           <!-- Scan Type and Submit Button -->
           <div class="form-group">
-            <label
-              >{{ currentLanguage === 'en' ? 'Type of Scan to Consider' : 'نوع الفحص'
-              }}<span class="required-indicator">*</span></label
-            >
+            <label>
+              {{ currentLanguage === 'en' ? 'Type of Scan to Consider' : 'نوع الفحص' }}
+              <span class="required-indicator">*</span>
+            </label>
             <select v-model="scanType" required>
               <option value="" disabled>
                 {{ currentLanguage === 'en' ? 'Select Scan Type' : 'اختر نوع الفحص' }}
@@ -310,11 +338,12 @@ const goToDashboard = () => router.push('/dashboard')
 
         <div v-if="errorMessage" class="message error-message">{{ errorMessage }}</div>
 
-        <div
-          v-if="recommendationResult"
-          class="prediction-result"
-          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
-        >
+        <div v-if="warningMessage" class="message warning-message">
+          <h4>{{ currentLanguage === 'en' ? 'Important Warning' : 'تحذير هام' }}</h4>
+          <p>{{ warningMessage }}</p>
+        </div>
+
+        <div v-if="recommendationResult" class="prediction-result">
           <h3>
             {{
               currentLanguage === 'en'
@@ -403,10 +432,11 @@ const goToDashboard = () => router.push('/dashboard')
   border-radius: 8px;
   background-color: #e9ecef;
   margin-bottom: 20px;
+  text-align: start;
 }
 .required-indicator {
   color: #d32f2f;
-  margin-left: 4px;
+  margin-inline-start: 4px;
 }
 .recommend-form {
   display: flex;
@@ -426,6 +456,7 @@ const goToDashboard = () => router.push('/dashboard')
   border: 1px solid #ddd;
   border-radius: 8px;
   font-size: 1em;
+  box-sizing: border-box;
 }
 .form-group .checkbox-label {
   display: flex;
@@ -461,12 +492,23 @@ const goToDashboard = () => router.push('/dashboard')
 }
 .message {
   margin-top: 20px;
-  padding: 10px;
+  padding: 15px;
   border-radius: 8px;
+  border: 1px solid;
 }
 .error-message {
-  background-color: #ffe0e0;
-  color: #d32f2f;
+  background-color: #ffebee;
+  color: #c62828;
+  border-color: #ef9a9a;
+}
+.warning-message {
+  background-color: #fff3e0;
+  color: #e65100;
+  border-color: #ffcc80;
+}
+.warning-message h4 {
+  margin-top: 0;
+  font-weight: 700;
 }
 .prediction-result {
   margin-top: 30px;

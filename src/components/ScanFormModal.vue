@@ -1,4 +1,5 @@
 <script setup>
+// --- SCRIPT REMAINS THE SAME ---
 import { reactive, watch, computed, inject } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
@@ -21,7 +22,8 @@ const form = reactive({
   pregnancyMonth: null,
   scanType: 'X-ray',
   scanDate: '',
-  dose: null,
+  dose: null, // Patient's dose
+  doctorDose: null, // Doctor's dose
   reason: '',
   notes: '',
   doctorAdditionalContext: '',
@@ -45,6 +47,7 @@ watch(
             : ''
         : ''
       form.dose = newScan.dose
+      form.doctorDose = newScan.doctorDose || null // Handle new field
       form.reason = newScan.reason
       form.notes = newScan.notes
       form.doctorAdditionalContext = newScan.doctorAdditionalContext || ''
@@ -58,6 +61,7 @@ watch(
         scanType: 'X-ray',
         scanDate: '',
         dose: null,
+        doctorDose: null, // Reset new field
         reason: '',
         notes: '',
         doctorAdditionalContext: '',
@@ -79,6 +83,76 @@ watch(
   },
 )
 
+const estimateDose = async (doseFor) => {
+  let prompt = ''
+  if (doseFor === 'patient') {
+    prompt =
+      currentLanguage.value === 'en'
+        ? `Estimate the effective dose (in mSv) for a patient undergoing a ${form.scanType} scan.
+Reason: ${form.reason || 'No reason provided'}
+Symptoms: ${form.notes || 'No additional notes'}
+
+Respond only with a number.`
+        : `قدر الجرعة الفعالة (mSv) لمريض يخضع لفحص ${form.scanType}.
+السبب: ${form.reason || 'لا يوجد سبب'}
+ملاحظات إضافية: ${form.notes || 'لا يوجد'}
+
+الرجاء الرد فقط بالرقم.`
+  } else if (doseFor === 'doctor') {
+    prompt =
+      currentLanguage.value === 'en'
+        ? `Estimate the effective occupational dose (in mSv) for a doctor during a patient's ${form.scanType} scan.
+Doctor's context: ${form.doctorAdditionalContext || 'No additional context from doctor.'}
+
+The typical occupational dose is a fraction of the patient dose. Respond only with a number.`
+        : `قدر الجرعة المهنية الفعالة (mSv) لطبيب أثناء فحص ${form.scanType} لمريض.
+سياق الطبيب: ${form.doctorAdditionalContext || 'لا يوجد سياق إضافي من الطبيب.'}
+
+الجرعة المهنية عادة ما تكون جزءًا صغيرًا من جرعة المريض. الرجاء الرد فقط بالرقم.`
+  }
+
+  try {
+    const payload = {
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'text/plain' },
+    }
+    const apiKey = import.meta.env.VITE_GEMINI_KEY
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
+    const res = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    if (!res.ok) throw new Error(`Failed to estimate dose for ${doseFor}.`)
+
+    const result = await res.json()
+    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    const estimated = parseFloat(aiText.match(/[\d.]+/))
+
+    if (!isNaN(estimated)) {
+      if (doseFor === 'patient') form.dose = estimated
+      else if (doseFor === 'doctor') form.doctorDose = estimated
+      return true // Success
+    } else {
+      alert(
+        currentLanguage.value === 'en'
+          ? `Could not estimate the ${doseFor} dose. Please provide it manually.`
+          : `لم نتمكن من تقدير جرعة ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يرجى إدخالها يدوياً.`,
+      )
+      return false // Failure
+    }
+  } catch (err) {
+    console.error('Dose estimate failed:', err)
+    alert(
+      currentLanguage.value === 'en'
+        ? `An error occurred while estimating the ${doseFor} dose.`
+        : `حدث خطأ أثناء تقدير جرعة ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}.`,
+    )
+    return false // Failure
+  }
+}
+
 const handleSubmit = async () => {
   if (!form.patientName || !form.scanDate) {
     alert(
@@ -90,61 +164,13 @@ const handleSubmit = async () => {
   }
 
   if (form.dose == null || form.dose === '') {
-    // Estimate dose using AI
-    try {
-      const prompt =
-        currentLanguage.value === 'en'
-          ? `Estimate the effective dose (in mSv) for a ${form.scanType} scan.
-Reason: ${form.reason || 'No reason provided'}
-Symptoms: ${form.notes || 'No additional notes'}
+    const patientDoseOk = await estimateDose('patient')
+    if (!patientDoseOk) return
+  }
 
-Respond only with a number.`
-          : `قدر الجرعة الفعالة (mSv) لفحص ${form.scanType}.
-السبب: ${form.reason || 'لا يوجد سبب'}
-ملاحظات إضافية: ${form.notes || 'لا يوجد'}
-
-الرجاء الرد فقط بالرقم.`
-
-      const payload = {
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseMimeType: 'text/plain',
-        },
-      }
-
-      const apiKey = import.meta.env.VITE_GEMINI_KEY
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
-      const res = await fetch(apiUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-
-      if (!res.ok) throw new Error('Failed to estimate dose.')
-
-      const result = await res.json()
-      const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || ''
-      const estimated = parseFloat(aiText.match(/[\d.]+/)) // extract number
-
-      if (!isNaN(estimated)) {
-        form.dose = estimated
-      } else {
-        alert(
-          currentLanguage.value === 'en'
-            ? 'Could not estimate the dose. Please provide it manually.'
-            : 'لم نتمكن من تقدير الجرعة. يرجى إدخالها يدوياً.',
-        )
-        return
-      }
-    } catch (err) {
-      console.error('Dose estimate failed:', err)
-      alert(
-        currentLanguage.value === 'en'
-          ? 'An error occurred while estimating dose.'
-          : 'حدث خطأ أثناء تقدير الجرعة.',
-      )
-      return
-    }
+  if (userRole.value === 'doctor' && (form.doctorDose == null || form.doctorDose === '')) {
+    const doctorDoseOk = await estimateDose('doctor')
+    if (!doctorDoseOk) return
   }
 
   emit('save', { ...form })
@@ -168,18 +194,19 @@ Respond only with a number.`
           }}
         </h3>
         <form @submit.prevent="handleSubmit" class="scan-form">
+          <!-- ... other form fields ... -->
           <div class="form-row">
             <div class="form-group">
               <label>
                 {{ currentLanguage === 'en' ? 'Patient Name' : 'اسم المريض' }}
-                <span class="text-red-600">*</span>
+                <span class="required-asterisk">*</span>
               </label>
               <input type="text" v-model="form.patientName" required />
             </div>
             <div class="form-group">
               <label>
                 {{ currentLanguage === 'en' ? 'Sex' : 'الجنس' }}
-                <span class="text-red-600">*</span>
+                <span class="required-asterisk">*</span>
               </label>
               <select v-model="form.sex" required>
                 <option value="male">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</option>
@@ -187,6 +214,8 @@ Respond only with a number.`
               </select>
             </div>
           </div>
+
+          <!-- --- FIXED: PREGNANCY SECTION --- -->
           <div v-if="form.sex === 'female'" class="form-row pregnancy-section">
             <div class="form-group checkbox-group">
               <label>
@@ -194,32 +223,36 @@ Respond only with a number.`
                 <span>{{ currentLanguage === 'en' ? 'Is Pregnant?' : 'هل المريضة حامل؟' }}</span>
               </label>
             </div>
+            <!-- The "Month of Pregnancy" group is now always in the DOM. -->
+            <!-- Its visibility is controlled by CSS classes. -->
             <div class="form-group">
-              <label v-if="form.isPregnant">
-                {{ currentLanguage === 'en' ? 'Month of Pregnancy' : 'شهر الحمل' }}
-              </label>
-              <input
-                v-if="form.isPregnant"
-                type="number"
-                v-model="form.pregnancyMonth"
-                min="1"
-                max="9"
-                placeholder="1-9"
-              />
+              <div class="visibility-container" :class="{ 'is-visible': form.isPregnant }">
+                <label>
+                  {{ currentLanguage === 'en' ? 'Month of Pregnancy' : 'شهر الحمل' }}
+                </label>
+                <input
+                  type="number"
+                  v-model="form.pregnancyMonth"
+                  min="1"
+                  max="9"
+                  placeholder="1-9"
+                />
+              </div>
             </div>
           </div>
+
           <div class="form-row">
             <div class="form-group">
               <label>
                 {{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}
-                <span class="text-red-600">*</span>
+                <span class="required-asterisk">*</span>
               </label>
               <select v-model="form.scanType" required>
                 <option value="X-ray">
                   {{ currentLanguage === 'en' ? 'X-ray' : 'أشعة سينية' }}
                 </option>
                 <option value="CT">{{ currentLanguage === 'en' ? 'CT' : 'أشعة مقطعية' }}</option>
-                <option value="CT">
+                <option value="X-ray and CT">
                   {{ currentLanguage === 'en' ? 'X-ray and CT' : 'أشعة سينية ومقطعية' }}
                 </option>
               </select>
@@ -227,16 +260,24 @@ Respond only with a number.`
             <div class="form-group">
               <label>
                 {{ currentLanguage === 'en' ? 'Scan Date' : 'تاريخ الفحص' }}
-                <span class="text-red-600">*</span>
+                <span class="required-asterisk">*</span>
               </label>
               <input type="date" v-model="form.scanDate" required />
             </div>
           </div>
-          <div class="form-group">
-            <label>
-              {{ currentLanguage === 'en' ? 'Dose (mSv)' : 'الجرعة (mSv)' }}
-            </label>
-            <input type="number" step="0.01" v-model="form.dose" />
+          <div class="form-row">
+            <div class="form-group">
+              <label>
+                {{ currentLanguage === 'en' ? "Patient's Dose (mSv)" : 'جرعة المريض (mSv)' }}
+              </label>
+              <input type="number" step="0.01" v-model="form.dose" />
+            </div>
+            <div v-if="userRole === 'doctor'" class="form-group">
+              <label>
+                {{ currentLanguage === 'en' ? "Doctor's Dose (mSv)" : 'جرعة الطبيب (mSv)' }}
+              </label>
+              <input type="number" step="0.01" v-model="form.doctorDose" />
+            </div>
           </div>
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Reason for Scan' : 'أسباب الفحص' }}</label>
@@ -246,13 +287,12 @@ Respond only with a number.`
             <label>{{ currentLanguage === 'en' ? 'Additional Notes' : 'ملاحظات إضافية' }}</label>
             <textarea v-model="form.notes" rows="3"></textarea>
           </div>
-          <!-- Doctor-only field -->
           <div v-if="userRole === 'doctor'" class="form-group">
             <label>
               {{
                 currentLanguage === 'en'
                   ? 'Additional details affecting your exposure (optional)'
-                  : 'تفاصيل إضافية  على تعرضك (اختياري)'
+                  : 'تفاصيل إضافية على تعرضك (اختياري)'
               }}
             </label>
             <textarea
@@ -261,11 +301,9 @@ Respond only with a number.`
               :placeholder="
                 currentLanguage === 'en'
                   ? 'e.g., Stood 2 meters from the machine, used a lead apron and thyroid shield...etc'
-                  : 'مثال: وقفت على  بعد 2 متر من الجهاز، استخدمت مريول رصاص وواقي للغدة الدرقية...إلخ'
+                  : 'مثال: وقفت على بعد 2 متر من الجهاز، استخدمت مريول رصاص وواقي للغدة الدرقية...إلخ'
               "
-            >
-              ></textarea
-            >
+            ></textarea>
           </div>
           <button type="submit" class="action-button" :disabled="isSaving">
             {{
@@ -288,7 +326,7 @@ Respond only with a number.`
 </template>
 
 <style scoped>
-/* Reusing styles from PatientFormModal */
+/* --- STYLES --- */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -296,10 +334,12 @@ Respond only with a number.`
   width: 100%;
   height: 100%;
   background-color: rgba(0, 0, 0, 0.7);
+  z-index: 1000;
   display: flex;
   justify-content: center;
-  align-items: center;
-  z-index: 1000;
+  overflow-y: auto;
+  padding: 50px 20px;
+  box-sizing: border-box;
 }
 .modal-content {
   background-color: white;
@@ -308,6 +348,12 @@ Respond only with a number.`
   max-width: 600px;
   width: 100%;
   position: relative;
+  margin: auto 0;
+  height: fit-content;
+}
+.required-asterisk {
+  color: #dc2626;
+  margin-inline-start: 2px;
 }
 .close-modal-button {
   position: absolute;
@@ -317,6 +363,7 @@ Respond only with a number.`
   border: none;
   font-size: 2.5em;
   cursor: pointer;
+  line-height: 1;
 }
 .modal-title {
   text-align: center;
@@ -332,6 +379,16 @@ Respond only with a number.`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 15px;
+  /* --- FIXED: Ensure alignment in all grid rows --- */
+  align-items: center;
+}
+.form-group {
+  /* Let single items span the full width */
+  grid-column: span 2 / span 2;
+}
+.form-row > .form-group {
+  /* But items in a .form-row should take up one column */
+  grid-column: span 1 / span 1;
 }
 .form-group label {
   display: block;
@@ -345,6 +402,7 @@ Respond only with a number.`
   padding: 10px;
   border: 1px solid #ccc;
   border-radius: 8px;
+  box-sizing: border-box;
 }
 .modal-actions {
   display: flex;
@@ -376,20 +434,16 @@ Respond only with a number.`
   padding: 15px;
   border-radius: 8px;
   border: 1px solid #e9ecef;
-  align-items: center;
 }
-
 .checkbox-group label {
   display: flex;
   align-items: center;
   cursor: pointer;
   font-weight: normal;
 }
-
 .checkbox-group input[type='checkbox'] {
   width: auto;
-  margin-right: 10px;
-  /* For better styling, you can hide the default and use a custom one */
+  margin-inline-end: 10px;
   appearance: none;
   -webkit-appearance: none;
   height: 20px;
@@ -400,7 +454,6 @@ Respond only with a number.`
   display: grid;
   place-content: center;
 }
-
 .checkbox-group input[type='checkbox']::before {
   content: '';
   width: 12px;
@@ -411,19 +464,19 @@ Respond only with a number.`
   transform-origin: bottom left;
   clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
 }
-
 .checkbox-group input[type='checkbox']:checked::before {
   transform: scale(1);
 }
+
+/* --- FIX: These classes control the visibility without affecting layout --- */
 .visibility-container {
   /* Start invisible and non-interactive, but taking up space */
   visibility: hidden;
   opacity: 0;
   transition: opacity 0.3s ease-in-out;
 }
-
 .visibility-container.is-visible {
-  /* Become visible when the class is applied */
+  /* Become visible and interactive when the class is applied */
   visibility: visible;
   opacity: 1;
 }

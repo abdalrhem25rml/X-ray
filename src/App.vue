@@ -3,16 +3,13 @@ import { RouterView } from 'vue-router'
 import { provide, ref, watch, computed, inject } from 'vue'
 import { useAuthStore } from './stores/auth'
 import { collection, getDocs } from 'firebase/firestore'
-
-// Import new child components
 import TheHeader from './components/TheHeader.vue'
 import InfoModal from './components/InfoModal.vue'
 
 // --- Injections and Setup ---
 const db = inject('db')
-const auth = inject('auth')
-const appId = import.meta.env.VITE_APP_ID
 const authStore = useAuthStore()
+const appId = import.meta.env.VITE_APP_ID
 
 // --- Global State & Toggles ---
 const currentLanguage = ref('en')
@@ -21,7 +18,6 @@ const showInfoModal = ref(false)
 const toggleLanguage = () => {
   currentLanguage.value = currentLanguage.value === 'en' ? 'ar' : 'en'
 }
-
 const toggleInfoModal = () => {
   showInfoModal.value = !showInfoModal.value
 }
@@ -30,12 +26,12 @@ provide('currentLanguage', currentLanguage)
 provide('toggleLanguage', toggleLanguage)
 provide('toggleInfoModal', toggleInfoModal)
 
-
-// --- mSv Counter Logic (remains in App.vue as it's global user data) ---
+// --- mSv Counter Logic ---
 const currentMsv = ref(0)
 const userRole = computed(() => authStore.role)
 const yearlyLimit = computed(() => (userRole.value === 'doctor' ? 20 : 1))
 
+// --- CORRECTED: fetchYearlyMsv now isolates the dose based on role ---
 const fetchYearlyMsv = async () => {
   const user = authStore.user
   if (!user || !userRole.value) {
@@ -51,8 +47,19 @@ const fetchYearlyMsv = async () => {
     snapshot.forEach((doc) => {
       const data = doc.data()
       const scanDate = data.scanDate?.toDate ? data.scanDate.toDate() : new Date(data.scanDate)
-      if (scanDate instanceof Date && !isNaN(scanDate) && scanDate >= yearStart && typeof data.dose === 'number') {
-        sum += data.dose
+      if (scanDate instanceof Date && !isNaN(scanDate) && scanDate >= yearStart) {
+        // ** THE FIX IS HERE **
+        if (userRole.value === 'doctor') {
+          // For doctors, ONLY sum their personal occupational dose.
+          if (typeof data.doctorDose === 'number') {
+            sum += data.doctorDose
+          }
+        } else {
+          // For all other users (patients), sum the patient dose.
+          if (typeof data.dose === 'number') {
+            sum += data.dose
+          }
+        }
       }
     })
     currentMsv.value = sum
@@ -61,23 +68,25 @@ const fetchYearlyMsv = async () => {
   }
 }
 
-// Watch for auth state changes to fetch data
+provide('triggerMsvRecalculation', fetchYearlyMsv)
+provide('currentMsv', currentMsv)
+provide('yearlyLimit', yearlyLimit)
+
 watch(
-  [() => authStore.user, userRole],
-  ([user, role]) => {
-    if (user && role) {
+  () => authStore.user,
+  (user) => {
+    if (user) {
       fetchYearlyMsv()
     } else {
-      currentMsv.value = 0 // Reset on logout
+      currentMsv.value = 0
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 </script>
 
 <template>
   <div id="app" class="min-h-screen bg-gray-100 flex flex-col font-inter">
-    <!-- Use the new Header component and pass data via props -->
     <TheHeader
       :current-language="currentLanguage"
       :user="authStore.user"
@@ -85,25 +94,17 @@ watch(
       @toggle-language="toggleLanguage"
       @toggle-info-modal="toggleInfoModal"
     />
-
-    <!-- Router View remains the same -->
     <router-view v-slot="{ Component, route }">
       <transition name="page-fade" mode="out-in">
         <component :is="Component" :key="route.path" />
       </transition>
     </router-view>
-
-    <!-- Use the new Info Modal component -->
-    <InfoModal
-      :show="showInfoModal"
-      :current-language="currentLanguage"
-      @close="toggleInfoModal"
-    />
+    <InfoModal :show="showInfoModal" :current-language="currentLanguage" @close="toggleInfoModal" />
   </div>
 </template>
 
 <style>
-/* Keep your global styles here, especially for fonts and page transitions */
+/* ... global styles remain unchanged ... */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
 body {

@@ -8,9 +8,7 @@ import {
   doc,
   updateDoc,
   deleteDoc,
-  getDoc,
   serverTimestamp,
-  runTransaction,
 } from 'firebase/firestore'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -24,6 +22,7 @@ const authStore = useAuthStore()
 const currentLanguage = inject('currentLanguage')
 const firestore = getFirestore()
 const router = useRouter()
+const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 
 const scans = ref([])
 const isLoading = ref(true)
@@ -32,22 +31,6 @@ const showScanFormModal = ref(false)
 const showDeleteModal = ref(false)
 const scanToEdit = ref(null)
 const scanToDelete = ref(null)
-
-// --- Update user's total mSv ---
-const updateUserMsv = async (delta) => {
-  if (!authStore.user) return
-  const userDocRef = doc(firestore, 'artifacts', appId, 'users', authStore.user.uid)
-  await runTransaction(firestore, async (tx) => {
-    const snapshot = await tx.get(userDocRef)
-    if (!snapshot.exists()) {
-      // Set initial attribute if missing
-      tx.set(userDocRef, { totalMsv: Math.max(0, delta) }, { merge: true })
-    } else {
-      const current = snapshot.data().totalMsv || 0
-      tx.update(userDocRef, { totalMsv: Math.max(0, current + delta) })
-    }
-  })
-}
 
 const fetchScans = async () => {
   isLoading.value = true
@@ -78,25 +61,16 @@ const handleSaveScan = async (scanData) => {
       timestamp: serverTimestamp(),
     }
 
-    let msvChange = 0
-
     if (dataToSave.id) {
-      // Editing: Find the old scan's dose for delta calculation
-      const origDocRef = doc(scansCol, dataToSave.id)
-      const origSnap = await getDoc(origDocRef)
-      const origDose =
-        origSnap.exists() && typeof origSnap.data().dose === 'number' ? origSnap.data().dose : 0
-      msvChange = Number(dataToSave.dose) - Number(origDose)
-      await updateDoc(origDocRef, dataToSave)
+      await updateDoc(doc(scansCol, dataToSave.id), dataToSave)
     } else {
-      msvChange = Number(dataToSave.dose)
       const { id, ...docToAdd } = dataToSave
       await addDoc(scansCol, docToAdd)
     }
 
-    await updateUserMsv(msvChange)
     showScanFormModal.value = false
     await fetchScans()
+    await triggerMsvRecalculation()
   } catch (error) {
     console.error('Error saving scan:', error)
   } finally {
@@ -108,13 +82,11 @@ const handleDeleteScan = async () => {
   if (!scanToDelete.value) return
   try {
     const scansCol = collection(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans')
-    const scanRef = doc(scansCol, scanToDelete.value.id)
-    const scanDose = typeof scanToDelete.value.dose === 'number' ? scanToDelete.value.dose : 0
+    await deleteDoc(doc(scansCol, scanToDelete.value.id))
 
-    await deleteDoc(scanRef)
-    await updateUserMsv(-scanDose)
     showDeleteModal.value = false
     await fetchScans()
+    await triggerMsvRecalculation()
   } catch (error) {
     console.error('Error deleting scan:', error)
   }
@@ -165,7 +137,7 @@ watch(
           @delete="openConfirmDelete"
         />
         <div class="switch-link-container">
-          <a href="#" @click="router.push('/dashboard')">
+          <a href="#" @click.prevent="router.push('/dashboard')">
             {{ currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم' }}
           </a>
         </div>
@@ -189,7 +161,7 @@ watch(
 </template>
 
 <style scoped>
-/* Page layout styles, similar to PatientListView */
+/* ... styles remain unchanged ... */
 .history-page {
   display: flex;
   flex-direction: column;

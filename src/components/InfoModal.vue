@@ -38,7 +38,9 @@ According to the recommendations of the International Commission on Radiological
       <div class="modal-content" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
         <button class="close-modal-button" @click="$emit('close')">&times;</button>
         <h2 class="modal-title">
-          {{ currentLanguage === 'en' ? 'Radiation Exposure Awareness' : 'التوعية بالتعرض الإشعاعي' }}
+          {{
+            currentLanguage === 'en' ? 'Radiation Exposure Awareness' : 'التوعية بالتعرض الإشعاعي'
+          }}
         </h2>
 
         <!-- English Content -->
@@ -123,30 +125,55 @@ According to the recommendations of the International Commission on Radiological
 
 <style scoped>
 .modal-overlay {
-  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-  background-color: rgba(0, 0, 0, 0.75); display: flex;
-  justify-content: center; align-items: center; z-index: 1000; padding: 20px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.75);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  padding: 20px;
 }
 .modal-content {
-  background-color: white; padding: 30px 40px; border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2); max-width: 900px;
-  width: 100%; max-height: 90vh; overflow-y: auto; position: relative;
+  background-color: white;
+  padding: 30px 40px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  max-width: 900px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
 }
-.modal-content[dir="rtl"] {
+.modal-content[dir='rtl'] {
   font-family: 'Cairo', sans-serif;
 }
 .close-modal-button {
-  position: absolute; top: 15px; right: 15px; background: none; border: none;
-  font-size: 2.5em; cursor: pointer; color: #aaa;
-  transition: color 0.2s ease, transform 0.2s ease;
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  background: none;
+  border: none;
+  font-size: 2.5em;
+  cursor: pointer;
+  color: #aaa;
+  transition:
+    color 0.2s ease,
+    transform 0.2s ease;
 }
 .close-modal-button:hover {
   color: #333;
   transform: rotate(90deg);
 }
 .modal-title {
-  text-align: center; color: #8d99ae; margin-bottom: 30px;
-  font-size: 2.2em; font-weight: 700;
+  text-align: center;
+  color: #8d99ae;
+  margin-bottom: 30px;
+  font-size: 2.2em;
+  font-weight: 700;
 }
 
 /* Container for v-html content */
@@ -171,18 +198,18 @@ According to the recommendations of the International Commission on Radiological
   margin-bottom: 1.2em;
 }
 /* Indentation for LTR (English) */
-.info-text-content[dir="ltr"] :deep(ul) {
+.info-text-content[dir='ltr'] :deep(ul) {
   padding-left: 25px;
 }
 /* Indentation for RTL (Arabic) */
-.info-text-content[dir="rtl"] :deep(ul) {
+.info-text-content[dir='rtl'] :deep(ul) {
   padding-right: 25px;
 }
 .info-text-content :deep(li) {
   margin-bottom: 0.6em;
   padding-left: 5px;
 }
-.info-text-content[dir="rtl"] :deep(li) {
+.info-text-content[dir='rtl'] :deep(li) {
   padding-left: 0;
   padding-right: 5px;
 }
@@ -194,14 +221,15 @@ According to the recommendations of the International Commission on Radiological
   margin-top: 1.5rem;
   font-size: 0.95em;
 }
-.info-table th, .info-table td {
+.info-table th,
+.info-table td {
   border: 1px solid #e0e0e0;
   padding: 12px 15px;
   text-align: left;
   vertical-align: middle;
 }
-.modal-content[dir="rtl"] .info-table th,
-.modal-content[dir="rtl"] .info-table td {
+.modal-content[dir='rtl'] .info-table th,
+.modal-content[dir='rtl'] .info-table td {
   text-align: right;
 }
 .info-table th {
@@ -220,6 +248,12 @@ According to the recommendations of the International Commission on Radiological
 }
 
 /* Modal transition styles */
-.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.3s ease; }
-.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
+.modal-fade-enter-active,
+.modal-fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.modal-fade-enter-from,
+.modal-fade-leave-to {
+  opacity: 0;
+}
 </style>

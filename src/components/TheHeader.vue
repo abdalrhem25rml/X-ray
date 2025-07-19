@@ -55,13 +55,33 @@ defineEmits(['toggle-language', 'toggle-info-modal'])
   min-width: 200px;
 }
 .project-title {
-  color: #000;
-  font-size: 2.8em;
+  /* 1. Typography */
+  font-family: 'Inter', sans-serif;
+  font-size: 2.6em;
   font-weight: 800;
   text-align: center;
-  margin-bottom: 5px;
+  letter-spacing: -1px;
+
+  /* 2. Modern Color */
+  /* Instead of harsh black, this is a softer, dark slate gray that's easier on the eyes. */
+  color: #2d3748;
+
+  /* 3. Subtle Depth */
+  /* A very light shadow 'lifts' the text off the background, making it feel more intentional. */
+  text-shadow: 1px 1px 4px rgba(45, 55, 72, 0.15);
+
+  /* 4. Spacing */
+  margin-bottom: 20px;
 }
-.language-toggle-button, .info-button-global {
+
+/* 5. Responsive Adjustments */
+@media (max-width: 600px) {
+  .project-title {
+    font-size: 2.1em;
+  }
+}
+.language-toggle-button,
+.info-button-global {
   background-color: #8d99ae;
   color: white;
   border: none;
@@ -70,10 +90,13 @@ defineEmits(['toggle-language', 'toggle-info-modal'])
   cursor: pointer;
   font-size: 1.1em;
   font-weight: 600;
-  transition: background-color 0.3s ease, transform 0.2s ease;
+  transition:
+    background-color 0.3s ease,
+    transform 0.2s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
-.language-toggle-button:hover, .info-button-global:hover {
+.language-toggle-button:hover,
+.info-button-global:hover {
   background-color: #6a7483;
 }
 @media (max-width: 768px) {
@@ -86,11 +109,18 @@ defineEmits(['toggle-language', 'toggle-info-modal'])
     margin-bottom: 15px;
     order: 2;
   }
-  .language-toggle-button, .info-button-global {
+  .language-toggle-button,
+  .info-button-global {
     width: 80%;
     max-width: 300px;
   }
-  .language-toggle-button { order: 1; margin-bottom: 10px; }
-  .info-button-global { order: 3; margin-top: 10px; }
+  .language-toggle-button {
+    order: 1;
+    margin-bottom: 10px;
+  }
+  .info-button-global {
+    order: 3;
+    margin-top: 10px;
+  }
 }
 </style>

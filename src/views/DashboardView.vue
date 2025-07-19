@@ -93,7 +93,7 @@ watch(
               class="role-button"
               @click="
                 selectedRole = 'doctor';
-                saveUserRole()
+                saveUserRole();
               "
             >
               {{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}
@@ -102,7 +102,7 @@ watch(
               class="role-button"
               @click="
                 selectedRole = 'patient';
-                saveUserRole()
+                saveUserRole();
               "
             >
               {{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}

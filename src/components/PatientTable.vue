@@ -4,7 +4,7 @@ import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 defineProps({
   patients: Array,
-  isLoading: Boolean, // Correct prop name is 'isLoading'
+  isLoading: Boolean,
 })
 
 const emit = defineEmits(['view', 'edit', 'delete', 'recommend'])
@@ -13,20 +13,17 @@ const currentLanguage = inject('currentLanguage')
 </script>
 
 <template>
-  <div class="patient-list-section mt-8">
-    <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+  <!-- ✅ FIX: 'dir' is now on the top-level container to apply to all children -->
+  <div class="patient-list-section mt-8" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+    <!-- Redundant 'dir' attributes removed from children -->
+    <h3>
       {{ currentLanguage === 'en' ? 'Existing Patients' : 'المرضى الحاليون' }}
     </h3>
-    <!-- Corrected v-if to use 'isLoading' -->
-    <div v-if="isLoading" class="loading-message" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+    <div v-if="isLoading" class="loading-message">
       <font-awesome-icon icon="spinner" spin />
       {{ currentLanguage === 'en' ? 'Loading patients...' : 'جاري تحميل المرضى...' }}
     </div>
-    <div
-      v-else-if="patients.length === 0"
-      class="no-patients-message"
-      :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
-    >
+    <div v-else-if="patients.length === 0" class="no-patients-message">
       {{ currentLanguage === 'en' ? 'No patients added yet.' : 'لم يتم إضافة أي مرضى بعد.' }}
     </div>
     <div v-else class="patient-table-container">
@@ -46,14 +43,13 @@ const currentLanguage = inject('currentLanguage')
             <td>
               {{
                 currentLanguage === 'en'
-                  ? patient.gender
+                  ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) // Capitalize
                   : patient.gender === 'male'
                     ? 'ذكر'
                     : 'أنثى'
               }}
             </td>
             <td>
-              <!-- Corrected buttons to EMIT events -->
               <button @click="$emit('view', patient)" class="action-button-sm view-button">
                 <font-awesome-icon icon="eye" />
               </button>
@@ -78,7 +74,6 @@ const currentLanguage = inject('currentLanguage')
 </template>
 
 <style scoped>
-/* Styles remain the same */
 .patient-list-section {
   margin-top: 2rem;
 }
@@ -114,7 +109,8 @@ const currentLanguage = inject('currentLanguage')
 .patient-table th,
 .patient-table td {
   padding: 15px;
-  text-align: left;
+  /* ✅ FIX: Use 'start' for proper RTL/LTR text alignment */
+  text-align: start;
   border-bottom: 1px solid #eee;
   vertical-align: middle;
 }
