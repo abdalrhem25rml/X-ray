@@ -23,7 +23,7 @@ const checkUserRole = async (user) => {
   }
 
   try {
-    const userDocRef = doc(firestore, "artifacts", appId, "users", user.uid)
+    const userDocRef = doc(firestore, 'artifacts', appId, 'users', user.uid)
     const userSnapshot = await getDoc(userDocRef)
 
     if (!userSnapshot.exists()) {
@@ -38,7 +38,7 @@ const checkUserRole = async (user) => {
       }
     }
   } catch (error) {
-    console.error("Error during role check:", error)
+    console.error('Error during role check:', error)
   } finally {
     // CRUCIAL: After the check is complete (success or fail), stop loading
     isCheckingRole.value = false
@@ -47,7 +47,7 @@ const checkUserRole = async (user) => {
 
 const saveUserRole = async () => {
   if (!selectedRole.value || !auth.currentUser) return
-  const userRef = doc(firestore, "artifacts", appId, "users", auth.currentUser.uid)
+  const userRef = doc(firestore, 'artifacts', appId, 'users', auth.currentUser.uid)
   await updateDoc(userRef, { role: selectedRole.value })
   userRole.value = selectedRole.value // Update local state
   showRoleModal.value = false
@@ -63,10 +63,14 @@ const handleLogout = async () => {
 }
 
 // Watch for auth changes to trigger the role check
-watch(() => auth.currentUser, (newUser) => {
-  isCheckingRole.value = true // Reset loading state for every auth change
-  checkUserRole(newUser)
-}, { immediate: true }) // `immediate: true` runs it on initial load
+watch(
+  () => auth.currentUser,
+  (newUser) => {
+    isCheckingRole.value = true // Reset loading state for every auth change
+    checkUserRole(newUser)
+  },
+  { immediate: true },
+) // `immediate: true` runs it on initial load
 </script>
 
 <template>
@@ -85,10 +89,22 @@ watch(() => auth.currentUser, (newUser) => {
           <h2>{{ currentLanguage === 'en' ? 'Select Your Role' : 'اختر دورك' }}</h2>
           <p>{{ currentLanguage === 'en' ? 'Please choose your role:' : 'يرجى اختيار دورك:' }}</p>
           <div class="role-buttons">
-            <button class="role-button" @click="selectedRole = 'doctor'; saveUserRole()">
+            <button
+              class="role-button"
+              @click="
+                selectedRole = 'doctor';
+                saveUserRole()
+              "
+            >
               {{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}
             </button>
-            <button class="role-button" @click="selectedRole = 'patient'; saveUserRole()">
+            <button
+              class="role-button"
+              @click="
+                selectedRole = 'patient';
+                saveUserRole()
+              "
+            >
               {{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}
             </button>
           </div>
@@ -100,7 +116,11 @@ watch(() => auth.currentUser, (newUser) => {
         <main class="dashboard-main-content">
           <section class="dashboard-card">
             <h2 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-              {{ currentLanguage === 'en' ? 'Welcome to mSv Dose Tracker' : 'مرحبًا بك في متتبع جرعات الأشعة السينية' }}
+              {{
+                currentLanguage === 'en'
+                  ? 'Welcome to mSv Dose Tracker'
+                  : 'مرحبًا بك في متتبع جرعات الأشعة السينية'
+              }}
             </h2>
             <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
               {{
@@ -127,7 +147,11 @@ watch(() => auth.currentUser, (newUser) => {
               </div>
 
               <!-- Manage Patients (Conditional on role) -->
-              <div v-if="userRole === 'doctor'" class="feature-item" @click="router.push('/patients')">
+              <div
+                v-if="userRole === 'doctor'"
+                class="feature-item"
+                @click="router.push('/patients')"
+              >
                 <i class="fas fa-users"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
@@ -356,7 +380,7 @@ watch(() => auth.currentUser, (newUser) => {
 .dashboard-blur-area.is-blurred {
   filter: blur(7px);
   pointer-events: none; /* Optional: Prevent interaction with blurred content */
-  user-select: none;    /* Optional: Prevent text selection in blurred area */
+  user-select: none; /* Optional: Prevent text selection in blurred area */
   transition: filter 0.25s ease;
 }
 

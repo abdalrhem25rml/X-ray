@@ -24,7 +24,7 @@ export const useAuthStore = defineStore('auth', {
   }),
   actions: {
     // Modify initAuth to accept the auth instance
-  initAuth(auth) {
+    initAuth(auth) {
       if (!auth) {
         return
       }

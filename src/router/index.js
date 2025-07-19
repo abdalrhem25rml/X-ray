@@ -7,7 +7,7 @@ import RecommendView from '@/views/RecommendView.vue'
 import PatientListView from '@/views/PatientListView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import ResetPasswordView from '@/views/ResetPasswordView.vue' // Import the new component
-import HistoryView from "@/views/HistoryView.vue"
+import HistoryView from '@/views/HistoryView.vue'
 
 import { useAuthStore } from '@/stores/auth' // Import the auth store
 
@@ -46,7 +46,7 @@ const router = createRouter({
       path: '/history',
       name: 'history',
       component: HistoryView,
-      meta: { requiresAuth: true }
+      meta: { requiresAuth: true },
     },
     {
       path: '/resetpassword',
@@ -68,7 +68,7 @@ const router = createRouter({
     // Catch-all route for 404 (optional, but good practice)
     {
       path: '/:catchAll(.*)',
-      redirect: '/dashboard' // Or a specific 404 page if you have one
+      redirect: '/dashboard', // Or a specific 404 page if you have one
     },
     {
       path: '/__/auth/iframe',
@@ -82,7 +82,7 @@ const router = createRouter({
         next()
       },
     },
-],
+  ],
 })
 
 // Global navigation guard

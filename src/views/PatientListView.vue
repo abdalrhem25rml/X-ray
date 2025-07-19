@@ -1,7 +1,17 @@
 <script setup>
 import { ref, inject, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { getFirestore, collection, getDocs, addDoc, doc, updateDoc, deleteDoc, serverTimestamp, arrayRemove } from 'firebase/firestore'
+import {
+  getFirestore,
+  collection,
+  getDocs,
+  addDoc,
+  doc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  arrayRemove,
+} from 'firebase/firestore'
 
 // Import components
 import PatientTable from '@/components/PatientTable.vue'
@@ -36,10 +46,18 @@ const recToDelete = ref(null)
 const fetchPatients = async () => {
   isLoadingPatients.value = true
   try {
-    const patientsCol = collection(firestore, 'artifacts', appId, 'users', auth.currentUser.uid, 'patients')
+    const patientsCol = collection(
+      firestore,
+      'artifacts',
+      appId,
+      'users',
+      auth.currentUser.uid,
+      'patients',
+    )
     const snapshot = await getDocs(patientsCol)
-    patients.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }))
-      .sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
+    patients.value = snapshot.docs
+      .map((doc) => ({ id: doc.id, ...doc.data() }))
+      .sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0))
   } catch (error) {
     console.error('Error fetching patients:', error)
   } finally {
@@ -50,12 +68,19 @@ const fetchPatients = async () => {
 const handleSavePatient = async (patientData) => {
   isSavingPatient.value = true
   try {
-    const patientsCol = collection(firestore, 'artifacts', appId, 'users', auth.currentUser.uid, 'patients')
+    const patientsCol = collection(
+      firestore,
+      'artifacts',
+      appId,
+      'users',
+      auth.currentUser.uid,
+      'patients',
+    )
     if (patientData.id) {
       const patientRef = doc(patientsCol, patientData.id)
       await updateDoc(patientRef, { ...patientData, timestamp: serverTimestamp() })
     } else {
-      const { id, ...dataToSave } = patientData; // Don't save the null id
+      const { id, ...dataToSave } = patientData // Don't save the null id
       await addDoc(patientsCol, { ...dataToSave, timestamp: serverTimestamp() })
     }
     showAddEditModal.value = false
@@ -70,7 +95,15 @@ const handleSavePatient = async (patientData) => {
 const handleDeletePatient = async () => {
   if (!patientToDelete.value) return
   try {
-    const patientRef = doc(firestore, 'artifacts', appId, 'users', auth.currentUser.uid, 'patients', patientToDelete.value.id)
+    const patientRef = doc(
+      firestore,
+      'artifacts',
+      appId,
+      'users',
+      auth.currentUser.uid,
+      'patients',
+      patientToDelete.value.id,
+    )
     await deleteDoc(patientRef)
     showDeletePatientModal.value = false
     await fetchPatients()
@@ -84,13 +117,21 @@ const handleDeleteRecommendation = async () => {
   try {
     const { patientId, recId } = recToDelete.value
     // Find the recommendation to remove it from the patient's array
-    const patientWithRec = patients.value.find(p => p.id === patientId)
-    const recommendationObject = patientWithRec?.recommendations.find(r => r.id === recId)
+    const patientWithRec = patients.value.find((p) => p.id === patientId)
+    const recommendationObject = patientWithRec?.recommendations.find((r) => r.id === recId)
 
     if (patientId && recommendationObject) {
-      const patientRef = doc(firestore, 'artifacts', appId, 'users', auth.currentUser.uid, 'patients', patientId)
+      const patientRef = doc(
+        firestore,
+        'artifacts',
+        appId,
+        'users',
+        auth.currentUser.uid,
+        'patients',
+        patientId,
+      )
       await updateDoc(patientRef, {
-        recommendations: arrayRemove(recommendationObject)
+        recommendations: arrayRemove(recommendationObject),
       })
       showDeleteRecModal.value = false
       await fetchPatients() // Refresh data
@@ -142,7 +183,7 @@ watch(
       patients.value = []
     }
   },
-  { immediate: true } // This option makes the watcher run immediately on component load
+  { immediate: true }, // This option makes the watcher run immediately on component load
 )
 </script>
 
@@ -151,9 +192,13 @@ watch(
     <div class="patient-list-main-content">
       <div class="patient-list-card">
         <h2>{{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}</h2>
-          <p>
-          {{currentLanguage === 'en' ? 'Add new patients or view existing records' : 'أضف مرضى جدد أو اطلع على السجلات الحالية.'}}
-          </p>
+        <p>
+          {{
+            currentLanguage === 'en'
+              ? 'Add new patients or view existing records'
+              : 'أضف مرضى جدد أو اطلع على السجلات الحالية.'
+          }}
+        </p>
         <button @click="handleOpenAddModal" class="add-new-patient-button">
           {{ currentLanguage === 'en' ? 'Add New Patient' : 'إضافة مريض جديد' }}
         </button>
@@ -205,12 +250,15 @@ watch(
     <ConfirmDeleteModal
       :show="showDeleteRecModal"
       :title="currentLanguage === 'en' ? 'Delete Recommendation' : 'حذف التوصية'"
-      :message="currentLanguage === 'en' ? 'Are you sure you want to delete this scan record?' : 'هل أنت متأكد من حذف سجل الفحص هذا؟'"
+      :message="
+        currentLanguage === 'en'
+          ? 'Are you sure you want to delete this scan record?'
+          : 'هل أنت متأكد من حذف سجل الفحص هذا؟'
+      "
       @close="showDeleteRecModal = false"
       @confirm="handleDeleteRecommendation"
     />
   </div>
-
 </template>
 
 <style scoped>
@@ -268,14 +316,14 @@ watch(
   transform: translateY(-2px);
 }
 
-.patient-list-card a{
-    color: #8d99ae;
-    text-decoration: none;
-    font-weight: 600;
-    transition: color .3s ease;
-    font-size: 16.5px;
+.patient-list-card a {
+  color: #8d99ae;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s ease;
+  font-size: 16.5px;
 }
-.switch-link-container{
+.switch-link-container {
   margin: 25px;
 }
 </style>
