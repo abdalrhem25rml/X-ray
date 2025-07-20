@@ -71,11 +71,97 @@ watch(
   },
 )
 
+// ✅ NEW: Reusable AI dose estimation function
+const estimateDose = async (doseFor) => {
+  let prompt = ''
+  let validationRules = {}
+
+  // 1. Better Prompt Engineering & Defining Validation Rules
+  if (doseFor === 'patient') {
+    if (form.scanType === 'CT') {
+      prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic CT scan.
+Context: Age: ${props.patient?.age || 'N/A'}, Reason: ${form.reason || 'Not provided'}.
+IMPORTANT: The plausible range for a single diagnostic CT is 1-30 mSv. Respond ONLY with a number in this range.`
+      validationRules = { min: 0.5, max: 40 } // Allow a slightly wider buffer for validation
+    } else { // X-ray
+      prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic X-ray.
+Context: Age: ${props.patient?.age || 'N/A'}, Reason: ${form.reason || 'Not provided'}.
+IMPORTANT: The plausible range for a single diagnostic X-ray is 0.01-5 mSv. Respond ONLY with a number in this range.`
+      validationRules = { min: 0.001, max: 10 }
+    }
+  } else if (doseFor === 'doctor') {
+    prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a patient's ${form.scanType} scan.
+Context: ${form.doctorAdditionalContext || 'No shielding or distance context provided.'}
+IMPORTANT: Occupational dose is a small fraction of the patient dose, typically under 0.5 mSv. Respond ONLY with a number.`
+    validationRules = { min: 0, max: 2 } // Hard limit for a single occupational dose
+  }
+
+  try {
+    const payload = {
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: 'text/plain' },
+    }
+    const apiKey = import.meta.env.VITE_GEMINI_KEY
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
+
+    const result = await response.json()
+    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || ''
+    const estimated = parseFloat(aiText.match(/[\d.]+/))
+
+    if (isNaN(estimated)) {
+      throw new Error('AI did not return a valid number.')
+    }
+
+    // 2. Client-Side Validation Guardrail
+    if (estimated < validationRules.min || estimated > validationRules.max) {
+      throw new Error(
+        `AI returned an out-of-range value: ${estimated}. Expected between ${validationRules.min} and ${validationRules.max}.`,
+      )
+    }
+
+    // If validation passes, update the form
+    if (doseFor === 'patient') form.dose = estimated
+    else if (doseFor === 'doctor') form.doctorDose = estimated
+    return true
+  } catch (error) {
+    console.error(`Dose estimation failed for ${doseFor}:`, error)
+    alert(
+      currentLanguage.value === 'en'
+        ? `The AI returned an unlikely value for the ${doseFor} dose. Please review and enter it manually.`
+        : `أعاد الذكاء الاصطناعي قيمة غير محتملة لجرعة ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يرجى مراجعتها وإدخالها يدويًا.`,
+    )
+    return false
+  }
+}
+
+
 const handleSubmit = async () => {
   if (!form.scanDate) {
     alert(currentLanguage.value === 'en' ? 'Please provide the scan date.' : 'يرجى إدخال تاريخ الفحص.')
     return
   }
+
+  // Check if patient dose needs estimation
+  if (props.patient && (form.dose === null || form.dose === '')) {
+    const success = await estimateDose('patient')
+    if (!success) return // Stop submission if estimation fails
+  }
+
+  // Check if doctor dose needs estimation
+  if (form.doctorDose === null || form.doctorDose === '') {
+    const success = await estimateDose('doctor')
+    if (!success) return // Stop submission if estimation fails
+  }
+
+  // If all checks pass, emit the save event with the completed form
   emit('save', { ...form })
 }
 </script>

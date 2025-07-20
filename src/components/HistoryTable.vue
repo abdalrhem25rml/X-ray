@@ -38,6 +38,7 @@ const formatDose = (dose) => {
           <th>{{ currentLanguage === 'en' ? 'Patient Name' : 'اسم المريض' }}</th>
           <th>{{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}</th>
           <th>{{ currentLanguage === 'en' ? 'Scan Date' : 'تاريخ الفحص' }}</th>
+          <th class="reason-column">{{ currentLanguage === 'en' ? 'Reason' : 'السبب' }}</th>
           <th>{{ currentLanguage === 'en' ? "Patient's Dose" : 'جرعة المريض' }}</th>
           <th v-if="userRole === 'doctor'">
             {{ currentLanguage === 'en' ? "Doctor's Dose" : 'جرعة الطبيب' }}
@@ -52,6 +53,7 @@ const formatDose = (dose) => {
           <td>{{ scan.patientName }}</td>
           <td>{{ scan.scanType }}</td>
           <td>{{ formatDate(scan.scanDate) }}</td>
+          <td class="reason-column">{{ scan.reason || 'N/A' }}</td>
           <td>{{ formatDose(scan.dose) }}</td>
           <td v-if="userRole === 'doctor'">{{ formatDose(scan.doctorDose) }}</td>
           <td>
@@ -93,10 +95,15 @@ const formatDose = (dose) => {
 .history-table td {
   padding: 16px 20px;
   border-bottom: 1px solid #e9ecef;
-  white-space: nowrap; /* Prevents long text from wrapping */
   vertical-align: middle;
+  /* ✅ FIX: Allow text to wrap by default for better responsiveness */
+  white-space: normal;
 }
-
+/* ✅ NEW: Special styles for the reason column to handle long text */
+.reason-column {
+  min-width: 200px; /* Give it some minimum space */
+  max-width: 350px; /* Prevent it from taking over the table */
+}
 /* Give the actions column a minimum width so it doesn't get too squished */
 .history-table th.actions-column {
   min-width: 200px;
@@ -151,5 +158,9 @@ const formatDose = (dose) => {
 
 .action-button-sm.delete-button {
   background-color: #d9534f;
+}
+table {
+  table-layout: fixed;
+  width: 100%;
 }
 </style>

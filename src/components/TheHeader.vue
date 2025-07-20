@@ -4,7 +4,7 @@ import MsvCounter from './MsvCounter.vue'
 defineProps({
   currentLanguage: String,
   user: Object,
-  msvData: Object, // { current: Number, limit: Number }
+  msvData: Object, // Now expects { current, limit, isLoading }
 })
 
 defineEmits(['toggle-language', 'toggle-info-modal'])
@@ -20,10 +20,12 @@ defineEmits(['toggle-language', 'toggle-info-modal'])
       <h1 class="project-title">
         {{ currentLanguage === 'en' ? 'mSv Exposure Calculator' : 'حاسبة التعرض للأشعة' }}
       </h1>
+      <!-- This component now receives the isLoading prop -->
       <MsvCounter
         v-if="user"
         :current-msv="msvData.current"
         :yearly-limit="msvData.limit"
+        :is-loading="msvData.isLoading"
         :current-language="currentLanguage"
       />
     </div>
@@ -35,6 +37,7 @@ defineEmits(['toggle-language', 'toggle-info-modal'])
 </template>
 
 <style scoped>
+/* All existing styles remain the same */
 .app-header {
   background-color: #f1e234;
   padding: 20px 30px;
@@ -55,30 +58,14 @@ defineEmits(['toggle-language', 'toggle-info-modal'])
   min-width: 200px;
 }
 .project-title {
-  /* 1. Typography */
   font-family: 'Inter', sans-serif;
   font-size: 2.6em;
   font-weight: 800;
   text-align: center;
   letter-spacing: -1px;
-
-  /* 2. Modern Color */
-  /* Instead of harsh black, this is a softer, dark slate gray that's easier on the eyes. */
   color: #2d3748;
-
-  /* 3. Subtle Depth */
-  /* A very light shadow 'lifts' the text off the background, making it feel more intentional. */
   text-shadow: 1px 1px 4px rgba(45, 55, 72, 0.15);
-
-  /* 4. Spacing */
   margin-bottom: 20px;
-}
-
-/* 5. Responsive Adjustments */
-@media (max-width: 600px) {
-  .project-title {
-    font-size: 2.1em;
-  }
 }
 .language-toggle-button,
 .info-button-global {
@@ -121,6 +108,11 @@ defineEmits(['toggle-language', 'toggle-info-modal'])
   .info-button-global {
     order: 3;
     margin-top: 10px;
+  }
+}
+@media (max-width: 600px) {
+  .project-title {
+    font-size: 2.1em;
   }
 }
 </style>

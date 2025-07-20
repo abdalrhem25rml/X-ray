@@ -5,9 +5,9 @@ const props = defineProps({
   currentMsv: { type: Number, default: 0 },
   yearlyLimit: { type: Number, default: 1 },
   currentLanguage: String,
+  isLoading: { type: Boolean, default: true }, // ✅ NEW: Prop to control loading state
 })
 
-// Uses CSS classes instead of inline styles for cleaner template
 const statusClass = computed(() => {
   const percentage = props.yearlyLimit > 0 ? (props.currentMsv / props.yearlyLimit) * 100 : 0
   if (percentage < 50) return 'status-safe'
@@ -17,21 +17,27 @@ const statusClass = computed(() => {
 </script>
 
 <template>
+  <!-- ✅ MODIFIED: Conditionally render based on the isLoading prop -->
   <div class="msv-counter" :class="statusClass">
-    <span class="counter-label">
-      {{ currentLanguage === 'en' ? 'Annual Dose:' : 'الجرعة السنوية:' }}
-    </span>
-    <div class="progress-details">
-      <div class="counter-bar-container">
-        <div
-          class="counter-bar"
-          :style="{
-            width: Math.min((currentMsv / yearlyLimit) * 100, 100) + '%',
-          }"
-        ></div>
-      </div>
-      <span class="counter-value"> {{ currentMsv.toFixed(2) }} mSv </span>
+    <div v-if="isLoading" class="loading-state">
+      {{ currentLanguage === 'en' ? 'Calculating...' : 'جاري الحساب...' }}
     </div>
+    <template v-else>
+      <span class="counter-label">
+        {{ currentLanguage === 'en' ? 'Annual Dose:' : 'الجرعة السنوية:' }}
+      </span>
+      <div class="progress-details">
+        <div class="counter-bar-container">
+          <div
+            class="counter-bar"
+            :style="{
+              width: Math.min((currentMsv / yearlyLimit) * 100, 100) + '%',
+            }"
+          ></div>
+        </div>
+        <span class="counter-value"> {{ currentMsv.toFixed(2) }} mSv </span>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -42,15 +48,25 @@ const statusClass = computed(() => {
   gap: 12px;
   background-color: #f7f9fc;
   padding: 8px 12px;
-  border-radius: 20px; /* Pill shape */
+  border-radius: 20px;
   border: 1px solid #eef2f7;
   min-width: 250px;
+  transition: background-color 0.4s ease;
+}
+/* ✅ NEW: Style for the loading state text */
+.loading-state {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: #5a6e8a;
+  width: 100%;
+  text-align: center;
+  font-style: italic;
 }
 .counter-label {
   font-size: 0.85em;
   font-weight: 600;
   color: #5a6e8a;
-  white-space: nowrap; /* Prevents the label from breaking into two lines */
+  white-space: nowrap;
 }
 .progress-details {
   display: flex;
@@ -64,10 +80,10 @@ const statusClass = computed(() => {
   font-weight: 700;
   color: #334155;
   white-space: nowrap;
-  transition: color 0.4s ease; /* Animate color change */
+  transition: color 0.4s ease;
 }
 .counter-bar-container {
-  flex-grow: 1; /* Allows the bar to take up all available horizontal space */
+  flex-grow: 1;
   height: 10px;
   background-color: #e2e8f0;
   border-radius: 5px;
@@ -81,19 +97,17 @@ const statusClass = computed(() => {
     background-color 0.4s ease;
 }
 
-/* --- Status Colors using CSS Classes --- */
+/* Status Colors using CSS Classes */
 .status-safe .counter-bar {
-  background-color: #34d399; /* Green */
+  background-color: #34d399;
 }
 .status-warning .counter-bar {
-  background-color: #fbbf24; /* Yellow */
+  background-color: #fbbf24;
 }
 .status-danger .counter-bar {
-  background-color: #f87171; /* Red */
+  background-color: #f87171;
 }
-
-/* Only change text color to red when in danger to draw attention */
 .status-danger .counter-value {
-  color: #b91c1c; /* Dark Red */
+  color: #b91c1c;
 }
 </style>

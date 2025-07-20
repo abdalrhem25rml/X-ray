@@ -11,7 +11,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from 'firebase/firestore'
-import { useAuthStore } from '@/stores/auth' // Assuming you have this in your project
+import { useAuthStore } from '@/stores/auth'
 
 // Import all necessary components
 import PatientTable from '@/components/PatientTable.vue'
@@ -32,7 +32,7 @@ const isLoadingPatients = ref(true)
 const isSavingPatient = ref(false)
 
 // Modal state
-const showAddEditModal = ref(false)
+const showPatientFormModal = ref(false)
 const showDetailsModal = ref(false)
 const showDeleteModal = ref(false)
 
@@ -83,7 +83,7 @@ const handleSavePatient = async (patientData) => {
       const { id, ...dataToSave } = patientData
       await addDoc(patientsCol, { ...dataToSave, timestamp: serverTimestamp() })
     }
-    showAddEditModal.value = false
+    showPatientFormModal.value = false
     await fetchPatients()
   } catch (error) {
     console.error('Error saving patient:', error)
@@ -115,12 +115,12 @@ const handleDeletePatient = async () => {
 // --- Modal Control Functions ---
 function openAddModal() {
   patientToEdit.value = null
-  showAddEditModal.value = true
+  showPatientFormModal.value = true
 }
 
 function openEditModal(patient) {
   patientToEdit.value = patient
-  showAddEditModal.value = true
+  showPatientFormModal.value = true
 }
 
 function openDetailsModal(patient) {
@@ -185,10 +185,10 @@ watch(
 
     <!-- Modals -->
     <PatientFormModal
-      :show="showAddEditModal"
+      :show="showPatientFormModal"
       :patient="patientToEdit"
       :is-saving="isSavingPatient"
-      @close="showAddEditModal = false"
+      @close="showPatientFormModal = false"
       @save="handleSavePatient"
     />
 
@@ -196,7 +196,6 @@ watch(
       :show="showDetailsModal"
       :patient="selectedPatient"
       @close="showDetailsModal = false"
-      @generateNewRecommendation="handleGoToRecommend"
     />
 
     <ConfirmDeleteModal

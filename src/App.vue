@@ -6,12 +6,10 @@ import { collection, getDocs } from 'firebase/firestore'
 import TheHeader from './components/TheHeader.vue'
 import InfoModal from './components/InfoModal.vue'
 
-// --- Injections and Setup ---
 const db = inject('db')
 const authStore = useAuthStore()
 const appId = import.meta.env.VITE_APP_ID
 
-// --- Global State & Toggles ---
 const currentLanguage = ref('en')
 const showInfoModal = ref(false)
 
@@ -28,16 +26,19 @@ provide('toggleInfoModal', toggleInfoModal)
 
 // --- mSv Counter Logic ---
 const currentMsv = ref(0)
+const isMsvLoading = ref(true)
 const userRole = computed(() => authStore.role)
 const yearlyLimit = computed(() => (userRole.value === 'doctor' ? 20 : 1))
 
-// --- CORRECTED: fetchYearlyMsv now isolates the dose based on role ---
 const fetchYearlyMsv = async () => {
   const user = authStore.user
   if (!user || !userRole.value) {
     currentMsv.value = 0
+    isMsvLoading.value = false
     return
   }
+
+  isMsvLoading.value = true
   try {
     const now = new Date()
     const yearStart = new Date(now.getFullYear(), 0, 1)
@@ -48,23 +49,18 @@ const fetchYearlyMsv = async () => {
       const data = doc.data()
       const scanDate = data.scanDate?.toDate ? data.scanDate.toDate() : new Date(data.scanDate)
       if (scanDate instanceof Date && !isNaN(scanDate) && scanDate >= yearStart) {
-        // ** THE FIX IS HERE **
         if (userRole.value === 'doctor') {
-          // For doctors, ONLY sum their personal occupational dose.
-          if (typeof data.doctorDose === 'number') {
-            sum += data.doctorDose
-          }
+          if (typeof data.doctorDose === 'number') sum += data.doctorDose
         } else {
-          // For all other users (patients), sum the patient dose.
-          if (typeof data.dose === 'number') {
-            sum += data.dose
-          }
+          if (typeof data.dose === 'number') sum += data.dose
         }
       }
     })
     currentMsv.value = sum
   } catch (err) {
     console.error('[App.vue] Failed to fetch current mSv:', err)
+  } finally {
+    isMsvLoading.value = false
   }
 }
 
@@ -72,17 +68,41 @@ provide('triggerMsvRecalculation', fetchYearlyMsv)
 provide('currentMsv', currentMsv)
 provide('yearlyLimit', yearlyLimit)
 
+// ✅ FIX: This is the new, robust logic that replaces the old watcher.
+// It waits for the 'isAuthReady' signal from your auth store.
 watch(
-  () => authStore.user,
-  (user) => {
-    if (user) {
-      fetchYearlyMsv()
-    } else {
-      currentMsv.value = 0
+  () => authStore.isAuthReady,
+  (isReady) => {
+    // This code only runs when the auth state is definitively known.
+    if (isReady) {
+      console.log('[App.vue] Auth store is now ready.');
+      if (authStore.user) {
+        console.log('[App.vue] User is logged in. Fetching mSv.');
+        fetchYearlyMsv();
+      } else {
+        console.log('[App.vue] No user is logged in. Resetting mSv counter.');
+        currentMsv.value = 0;
+        isMsvLoading.value = false;
+      }
     }
   },
-  { immediate: true },
-)
+  { immediate: true } // This ensures it runs on initial load.
+);
+
+// This secondary watcher handles dynamic logins/logouts that happen AFTER the initial load.
+watch(() => authStore.user, (newUser, oldUser) => {
+    // Only run if the user has actually changed (e.g. from a user object to null, or vice-versa)
+    if (authStore.isAuthReady && newUser?.uid !== oldUser?.uid) {
+        console.log('[App.vue] User state changed after initial load (login/logout).');
+        if (newUser) {
+            fetchYearlyMsv();
+        } else {
+            currentMsv.value = 0;
+            isMsvLoading.value = false;
+        }
+    }
+});
+
 </script>
 
 <template>
@@ -90,7 +110,7 @@ watch(
     <TheHeader
       :current-language="currentLanguage"
       :user="authStore.user"
-      :msv-data="{ current: currentMsv, limit: yearlyLimit }"
+      :msv-data="{ current: currentMsv, limit: yearlyLimit, isLoading: isMsvLoading }"
       @toggle-language="toggleLanguage"
       @toggle-info-modal="toggleInfoModal"
     />
@@ -104,7 +124,6 @@ watch(
 </template>
 
 <style>
-/* ... global styles remain unchanged ... */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
 body {

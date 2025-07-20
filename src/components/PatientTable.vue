@@ -13,9 +13,7 @@ const currentLanguage = inject('currentLanguage')
 </script>
 
 <template>
-  <!-- ✅ FIX: 'dir' is now on the top-level container to apply to all children -->
   <div class="patient-list-section mt-8" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-    <!-- Redundant 'dir' attributes removed from children -->
     <h3>
       {{ currentLanguage === 'en' ? 'Existing Patients' : 'المرضى الحاليون' }}
     </h3>
@@ -33,6 +31,9 @@ const currentLanguage = inject('currentLanguage')
             <th>{{ currentLanguage === 'en' ? 'Name' : 'الاسم' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</th>
+            <!-- ✅ NEW: Headers for Medical History and Allergies -->
+            <th class="details-column">{{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}</th>
+            <th class="details-column">{{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}</th>
           </tr>
         </thead>
@@ -43,28 +44,38 @@ const currentLanguage = inject('currentLanguage')
             <td>
               {{
                 currentLanguage === 'en'
-                  ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1) // Capitalize
+                  ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1)
                   : patient.gender === 'male'
                     ? 'ذكر'
                     : 'أنثى'
               }}
             </td>
+            <!-- ✅ NEW: Cells to display the new data -->
+            <td class="details-column">
+              {{ patient.medicalHistory?.join(', ') || (currentLanguage === 'en' ? 'None' : 'لا يوجد') }}
+            </td>
+            <td class="details-column">
+              {{ patient.allergies?.join(', ') || (currentLanguage === 'en' ? 'None' : 'لا يوجد') }}
+            </td>
             <td>
-              <button @click="$emit('view', patient)" class="action-button-sm view-button">
-                <font-awesome-icon icon="eye" />
-              </button>
-              <button @click="$emit('edit', patient)" class="action-button-sm edit-button">
-                <font-awesome-icon icon="edit" />
-              </button>
-              <button @click="$emit('delete', patient)" class="action-button-sm delete-button">
-                <font-awesome-icon icon="trash-alt" />
-              </button>
-              <button
-                @click="$emit('recommend', patient.id)"
-                class="action-button-sm recommend-button"
-              >
-                <font-awesome-icon icon="file-medical" />
-              </button>
+              <div class="action-buttons-wrapper">
+                <!-- This button opens the Scan History (PatientDetailsModal) -->
+                <button @click="$emit('view', patient)" class="action-button-sm view-button" :title="currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات'">
+                  <font-awesome-icon icon="eye" />
+                </button>
+                <!-- This button opens the Patient Details Editor (PatientFormModal) -->
+                <button @click="$emit('edit', patient)" class="action-button-sm edit-button" :title="currentLanguage === 'en' ? 'Edit Patient Details' : 'تعديل تفاصيل المريض'">
+                  <font-awesome-icon icon="edit" />
+                </button>
+                <!-- This button opens the Delete Confirmation -->
+                <button @click="$emit('delete', patient)" class="action-button-sm delete-button" :title="currentLanguage === 'en' ? 'Delete Patient' : 'حذف المريض'">
+                  <font-awesome-icon icon="trash-alt" />
+                </button>
+                <!-- This button opens the Recommendation page -->
+                <button @click="$emit('recommend', patient.id)" class="action-button-sm recommend-button" :title="currentLanguage === 'en' ? 'Get Recommendation' : 'الحصول على توصية'">
+                  <font-awesome-icon icon="file-medical" />
+                </button>
+              </div>
             </td>
           </tr>
         </tbody>
@@ -109,30 +120,43 @@ const currentLanguage = inject('currentLanguage')
 .patient-table th,
 .patient-table td {
   padding: 15px;
-  /* ✅ FIX: Use 'start' for proper RTL/LTR text alignment */
   text-align: start;
   border-bottom: 1px solid #eee;
   vertical-align: middle;
 }
+
+/* ✅ NEW: Styling to handle long text in the new columns */
+.details-column {
+  white-space: normal; /* Allow text to wrap */
+  max-width: 250px; /* Prevent column from getting too wide */
+  overflow: hidden;
+  text-overflow: ellipsis; /* Add '...' if content still overflows */
+}
+
 .patient-table th {
   background-color: #f7f7f7;
   color: #555;
   font-weight: 600;
   text-transform: uppercase;
   font-size: 0.9em;
+  white-space: nowrap; /* Keep headers on one line */
 }
 .patient-table tbody tr:hover {
   background-color: #f0f4f8;
+}
+.action-buttons-wrapper {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 8px;
 }
 .action-button-sm {
   background: none;
   border: none;
   color: #8d99ae;
-  padding: 8px 12px;
+  padding: 8px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 1.2em;
-  margin: 0 4px;
   transition: all 0.2s ease;
 }
 .action-button-sm:hover {
