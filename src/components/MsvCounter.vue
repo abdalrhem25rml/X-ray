@@ -18,7 +18,8 @@ const statusClass = computed(() => {
 
 <template>
   <!-- ✅ MODIFIED: Conditionally render based on the isLoading prop -->
-  <div class="msv-counter" :class="statusClass">
+  <div class="msv-counter" :class="statusClass"
+    :dir="currentLanguage === 'en' ? 'ltr' : 'rtl'">
     <div v-if="isLoading" class="loading-state">
       {{ currentLanguage === 'en' ? 'Calculating...' : 'جاري الحساب...' }}
     </div>
