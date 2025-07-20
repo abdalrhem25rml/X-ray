@@ -5,7 +5,8 @@ const props = defineProps({
   show: Boolean,
   scan: Object,
   isSaving: Boolean,
-  patient: { // This is optional.
+  patient: {
+    // This is optional.
     type: Object,
     default: null,
   },
@@ -83,7 +84,8 @@ const estimateDose = async (doseFor) => {
 Context: Age: ${props.patient?.age || 'N/A'}, Reason: ${form.reason || 'Not provided'}.
 IMPORTANT: The plausible range for a single diagnostic CT is 1-30 mSv. Respond ONLY with a number in this range.`
       validationRules = { min: 0.5, max: 40 } // Allow a slightly wider buffer for validation
-    } else { // X-ray
+    } else {
+      // X-ray
       prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic X-ray.
 Context: Age: ${props.patient?.age || 'N/A'}, Reason: ${form.reason || 'Not provided'}.
 IMPORTANT: The plausible range for a single diagnostic X-ray is 0.01-5 mSv. Respond ONLY with a number in this range.`
@@ -142,10 +144,11 @@ IMPORTANT: Occupational dose is a small fraction of the patient dose, typically 
   }
 }
 
-
 const handleSubmit = async () => {
   if (!form.scanDate) {
-    alert(currentLanguage.value === 'en' ? 'Please provide the scan date.' : 'يرجى إدخال تاريخ الفحص.')
+    alert(
+      currentLanguage.value === 'en' ? 'Please provide the scan date.' : 'يرجى إدخال تاريخ الفحص.',
+    )
     return
   }
 
@@ -174,14 +177,19 @@ const handleSubmit = async () => {
         <h3>
           {{
             scan
-              ? (currentLanguage === 'en' ? 'Edit Scan Record' : 'تعديل سجل الفحص')
-              : (currentLanguage === 'en' ? 'Add New Scan Record' : 'إضافة سجل فحص جديد')
+              ? currentLanguage === 'en'
+                ? 'Edit Scan Record'
+                : 'تعديل سجل الفحص'
+              : currentLanguage === 'en'
+                ? 'Add New Scan Record'
+                : 'إضافة سجل فحص جديد'
           }}
         </h3>
 
         <!-- If a patient prop is passed, display their name as context -->
         <div v-if="patient" class="patient-context-display">
-          {{ currentLanguage === 'en' ? 'For Patient' : 'للمريض' }}: <strong>{{ patient.name }}</strong>
+          {{ currentLanguage === 'en' ? 'For Patient' : 'للمريض' }}:
+          <strong>{{ patient.name }}</strong>
         </div>
 
         <form @submit.prevent="handleSubmit" class="scan-form">
@@ -215,7 +223,9 @@ const handleSubmit = async () => {
             <div class="form-group">
               <label>{{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}</label>
               <select v-model="form.scanType" required>
-                <option value="X-ray">{{ currentLanguage === 'en' ? 'X-ray' : 'أشعة سينية' }}</option>
+                <option value="X-ray">
+                  {{ currentLanguage === 'en' ? 'X-ray' : 'أشعة سينية' }}
+                </option>
                 <option value="CT">{{ currentLanguage === 'en' ? 'CT' : 'أشعة مقطعية' }}</option>
               </select>
             </div>
@@ -226,11 +236,15 @@ const handleSubmit = async () => {
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>{{ currentLanguage === 'en' ? "Patient's Dose (mSv)" : 'جرعة المريض (mSv)' }}</label>
+              <label>{{
+                currentLanguage === 'en' ? "Patient's Dose (mSv)" : 'جرعة المريض (mSv)'
+              }}</label>
               <input type="number" step="0.01" v-model="form.dose" />
             </div>
             <div class="form-group">
-              <label>{{ currentLanguage === 'en' ? "Doctor's Dose (mSv)" : 'جرعة الطبيب (mSv)' }}</label>
+              <label>{{
+                currentLanguage === 'en' ? "Doctor's Dose (mSv)" : 'جرعة الطبيب (mSv)'
+              }}</label>
               <input type="number" step="0.01" v-model="form.doctorDose" />
             </div>
           </div>
@@ -244,13 +258,25 @@ const handleSubmit = async () => {
           </div>
           <div class="form-group">
             <label>
-              {{ currentLanguage === 'en' ? 'Additional details affecting your exposure (optional)' : 'تفاصيل إضافية على تعرضك (اختياري)' }}
+              {{
+                currentLanguage === 'en'
+                  ? 'Additional details affecting your exposure (optional)'
+                  : 'تفاصيل إضافية على تعرضك (اختياري)'
+              }}
             </label>
             <textarea v-model="form.doctorAdditionalContext" rows="2"></textarea>
           </div>
           <div class="modal-actions">
             <button type="submit" class="action-button" :disabled="isSaving">
-              {{ isSaving ? (currentLanguage === 'en' ? 'Saving...' : 'جار الحفظ...') : (currentLanguage === 'en' ? 'Save' : 'حفظ') }}
+              {{
+                isSaving
+                  ? currentLanguage === 'en'
+                    ? 'Saving...'
+                    : 'جار الحفظ...'
+                  : currentLanguage === 'en'
+                    ? 'Save'
+                    : 'حفظ'
+              }}
             </button>
             <button type="button" @click="$emit('close')" class="action-button secondary">
               {{ currentLanguage === 'en' ? 'Cancel' : 'إلغاء' }}

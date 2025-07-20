@@ -86,7 +86,15 @@ const handleSaveScan = async (scanData) => {
 const handleDeleteScan = async () => {
   if (!scanToDelete.value) return
   try {
-    const scanRef = doc(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans', scanToDelete.value.id)
+    const scanRef = doc(
+      firestore,
+      'artifacts',
+      appId,
+      'users',
+      authStore.user.uid,
+      'scans',
+      scanToDelete.value.id,
+    )
     await deleteDoc(scanRef)
     showDeleteModal.value = false
     await fetchScans()
@@ -138,9 +146,7 @@ watch(
           }}
         </p>
         <button @click="openAddScanModal" class="action-button">
-          {{
-            currentLanguage === 'en' ? 'Add Personal Exposure' : 'إضافة تعرض شخصي'
-          }}
+          {{ currentLanguage === 'en' ? 'Add Personal Exposure' : 'إضافة تعرض شخصي' }}
         </button>
 
         <HistoryTable

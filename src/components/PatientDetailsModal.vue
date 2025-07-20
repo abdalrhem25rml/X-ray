@@ -98,7 +98,15 @@ const handleDeletePatientScan = async () => {
   if (!scanToDelete.value) return
   isSaving.value = true
   try {
-    const scanRef = doc(firestore, 'artifacts', appId, 'users', authStore.user.uid, 'scans', scanToDelete.value.id)
+    const scanRef = doc(
+      firestore,
+      'artifacts',
+      appId,
+      'users',
+      authStore.user.uid,
+      'scans',
+      scanToDelete.value.id,
+    )
     await deleteDoc(scanRef)
 
     showDeleteScanModal.value = false
@@ -140,16 +148,34 @@ watch(
 <template>
   <div>
     <Transition name="modal-fade">
-      <div v-if="show" class="modal-overlay" @click.self="$emit('close')" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+      <div
+        v-if="show"
+        class="modal-overlay"
+        @click.self="$emit('close')"
+        :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+      >
         <div class="modal-content">
           <button @click="$emit('close')" class="close-button">&times;</button>
           <div v-if="patient">
             <h2 class="patient-name">{{ patient.name }}</h2>
             <div class="patient-details-grid">
-              <p><strong>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}:</strong> {{ patient.age }}</p>
-              <p><strong>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}:</strong> {{ patient.gender }}</p>
-              <p><strong>{{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}:</strong> {{ patient.medicalHistory?.join(', ') || 'N/A' }}</p>
-              <p><strong>{{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}:</strong> {{ patient.allergies?.join(', ') || 'N/A' }}</p>
+              <p>
+                <strong>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}:</strong> {{ patient.age }}
+              </p>
+              <p>
+                <strong>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}:</strong>
+                {{ patient.gender }}
+              </p>
+              <p>
+                <strong
+                  >{{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}:</strong
+                >
+                {{ patient.medicalHistory?.join(', ') || 'N/A' }}
+              </p>
+              <p>
+                <strong>{{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}:</strong>
+                {{ patient.allergies?.join(', ') || 'N/A' }}
+              </p>
             </div>
             <hr class="divider" />
             <div class="history-section">

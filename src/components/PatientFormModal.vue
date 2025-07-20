@@ -30,7 +30,9 @@ watch(
       form.name = newPatient.name
       form.age = newPatient.age
       form.gender = newPatient.gender
-      form.medicalHistory = Array.isArray(newPatient.medicalHistory) ? newPatient.medicalHistory.join(', ') : ''
+      form.medicalHistory = Array.isArray(newPatient.medicalHistory)
+        ? newPatient.medicalHistory.join(', ')
+        : ''
       form.allergies = Array.isArray(newPatient.allergies) ? newPatient.allergies.join(', ') : ''
     } else {
       // Add mode: reset form
@@ -47,15 +49,23 @@ watch(
 
 const handleSubmit = () => {
   if (!form.name || !form.age) {
-    alert(currentLanguage.value === 'en' ? 'Name and Age are required.' : 'الاسم والعمر حقول مطلوبة.')
+    alert(
+      currentLanguage.value === 'en' ? 'Name and Age are required.' : 'الاسم والعمر حقول مطلوبة.',
+    )
     return
   }
 
   // Convert comma-separated strings back to arrays
   const dataToSave = {
     ...form,
-    medicalHistory: form.medicalHistory.split(',').map(s => s.trim()).filter(Boolean),
-    allergies: form.allergies.split(',').map(s => s.trim()).filter(Boolean),
+    medicalHistory: form.medicalHistory
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    allergies: form.allergies
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
   }
 
   emit('save', dataToSave)
@@ -70,8 +80,12 @@ const handleSubmit = () => {
         <h3 class="modal-title">
           {{
             patient
-              ? (currentLanguage === 'en' ? 'Edit Patient' : 'تعديل بيانات المريض')
-              : (currentLanguage === 'en' ? 'Add New Patient' : 'إضافة مريض جديد')
+              ? currentLanguage === 'en'
+                ? 'Edit Patient'
+                : 'تعديل بيانات المريض'
+              : currentLanguage === 'en'
+                ? 'Add New Patient'
+                : 'إضافة مريض جديد'
           }}
         </h3>
         <form @submit.prevent="handleSubmit" class="patient-form">
@@ -91,16 +105,30 @@ const handleSubmit = () => {
             </select>
           </div>
           <div class="form-group">
-            <label>{{ currentLanguage === 'en' ? 'Medical History (comma-separated)' : 'التاريخ الطبي (مفصول بفاصلة)' }}</label>
+            <label>{{
+              currentLanguage === 'en'
+                ? 'Medical History (comma-separated)'
+                : 'التاريخ الطبي (مفصول بفاصلة)'
+            }}</label>
             <textarea v-model="form.medicalHistory" rows="3"></textarea>
           </div>
           <div class="form-group">
-            <label>{{ currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية (مفصولة بفاصلة)' }}</label>
+            <label>{{
+              currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية (مفصولة بفاصلة)'
+            }}</label>
             <textarea v-model="form.allergies" rows="3"></textarea>
           </div>
           <div class="modal-actions">
             <button type="submit" class="action-button" :disabled="isSaving">
-              {{ isSaving ? (currentLanguage === 'en' ? 'Saving...' : 'جار الحفظ...') : (currentLanguage === 'en' ? 'Save' : 'حفظ') }}
+              {{
+                isSaving
+                  ? currentLanguage === 'en'
+                    ? 'Saving...'
+                    : 'جار الحفظ...'
+                  : currentLanguage === 'en'
+                    ? 'Save'
+                    : 'حفظ'
+              }}
             </button>
             <button type="button" @click="$emit('close')" class="action-button secondary">
               {{ currentLanguage === 'en' ? 'Cancel' : 'إلغاء' }}

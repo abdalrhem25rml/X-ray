@@ -32,8 +32,12 @@ const currentLanguage = inject('currentLanguage')
             <th>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</th>
             <!-- ✅ NEW: Headers for Medical History and Allergies -->
-            <th class="details-column">{{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}</th>
-            <th class="details-column">{{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}</th>
+            <th class="details-column">
+              {{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}
+            </th>
+            <th class="details-column">
+              {{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}
+            </th>
             <th>{{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}</th>
           </tr>
         </thead>
@@ -52,7 +56,10 @@ const currentLanguage = inject('currentLanguage')
             </td>
             <!-- ✅ NEW: Cells to display the new data -->
             <td class="details-column">
-              {{ patient.medicalHistory?.join(', ') || (currentLanguage === 'en' ? 'None' : 'لا يوجد') }}
+              {{
+                patient.medicalHistory?.join(', ') ||
+                (currentLanguage === 'en' ? 'None' : 'لا يوجد')
+              }}
             </td>
             <td class="details-column">
               {{ patient.allergies?.join(', ') || (currentLanguage === 'en' ? 'None' : 'لا يوجد') }}
@@ -60,19 +67,35 @@ const currentLanguage = inject('currentLanguage')
             <td>
               <div class="action-buttons-wrapper">
                 <!-- This button opens the Scan History (PatientDetailsModal) -->
-                <button @click="$emit('view', patient)" class="action-button-sm view-button" :title="currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات'">
+                <button
+                  @click="$emit('view', patient)"
+                  class="action-button-sm view-button"
+                  :title="currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات'"
+                >
                   <font-awesome-icon icon="eye" />
                 </button>
                 <!-- This button opens the Patient Details Editor (PatientFormModal) -->
-                <button @click="$emit('edit', patient)" class="action-button-sm edit-button" :title="currentLanguage === 'en' ? 'Edit Patient Details' : 'تعديل تفاصيل المريض'">
+                <button
+                  @click="$emit('edit', patient)"
+                  class="action-button-sm edit-button"
+                  :title="currentLanguage === 'en' ? 'Edit Patient Details' : 'تعديل تفاصيل المريض'"
+                >
                   <font-awesome-icon icon="edit" />
                 </button>
                 <!-- This button opens the Delete Confirmation -->
-                <button @click="$emit('delete', patient)" class="action-button-sm delete-button" :title="currentLanguage === 'en' ? 'Delete Patient' : 'حذف المريض'">
+                <button
+                  @click="$emit('delete', patient)"
+                  class="action-button-sm delete-button"
+                  :title="currentLanguage === 'en' ? 'Delete Patient' : 'حذف المريض'"
+                >
                   <font-awesome-icon icon="trash-alt" />
                 </button>
                 <!-- This button opens the Recommendation page -->
-                <button @click="$emit('recommend', patient.id)" class="action-button-sm recommend-button" :title="currentLanguage === 'en' ? 'Get Recommendation' : 'الحصول على توصية'">
+                <button
+                  @click="$emit('recommend', patient.id)"
+                  class="action-button-sm recommend-button"
+                  :title="currentLanguage === 'en' ? 'Get Recommendation' : 'الحصول على توصية'"
+                >
                   <font-awesome-icon icon="file-medical" />
                 </button>
               </div>

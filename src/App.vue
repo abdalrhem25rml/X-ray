@@ -75,34 +75,36 @@ watch(
   (isReady) => {
     // This code only runs when the auth state is definitively known.
     if (isReady) {
-      console.log('[App.vue] Auth store is now ready.');
+      console.log('[App.vue] Auth store is now ready.')
       if (authStore.user) {
-        console.log('[App.vue] User is logged in. Fetching mSv.');
-        fetchYearlyMsv();
+        console.log('[App.vue] User is logged in. Fetching mSv.')
+        fetchYearlyMsv()
       } else {
-        console.log('[App.vue] No user is logged in. Resetting mSv counter.');
-        currentMsv.value = 0;
-        isMsvLoading.value = false;
+        console.log('[App.vue] No user is logged in. Resetting mSv counter.')
+        currentMsv.value = 0
+        isMsvLoading.value = false
       }
     }
   },
-  { immediate: true } // This ensures it runs on initial load.
-);
+  { immediate: true }, // This ensures it runs on initial load.
+)
 
 // This secondary watcher handles dynamic logins/logouts that happen AFTER the initial load.
-watch(() => authStore.user, (newUser, oldUser) => {
+watch(
+  () => authStore.user,
+  (newUser, oldUser) => {
     // Only run if the user has actually changed (e.g. from a user object to null, or vice-versa)
     if (authStore.isAuthReady && newUser?.uid !== oldUser?.uid) {
-        console.log('[App.vue] User state changed after initial load (login/logout).');
-        if (newUser) {
-            fetchYearlyMsv();
-        } else {
-            currentMsv.value = 0;
-            isMsvLoading.value = false;
-        }
+      console.log('[App.vue] User state changed after initial load (login/logout).')
+      if (newUser) {
+        fetchYearlyMsv()
+      } else {
+        currentMsv.value = 0
+        isMsvLoading.value = false
+      }
     }
-});
-
+  },
+)
 </script>
 
 <template>

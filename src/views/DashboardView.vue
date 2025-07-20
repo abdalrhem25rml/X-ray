@@ -82,8 +82,14 @@ const saveUserProfile = async () => {
         birthDate,
         gender,
         isPregnant: gender === 'female' ? isPregnant : false,
-        allergies: allergies.split(',').map((s) => s.trim()).filter(Boolean),
-        medicalHistory: medicalHistory.split(',').map((s) => s.trim()).filter(Boolean), // ✅ NEW: Save medical history as array
+        allergies: allergies
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+        medicalHistory: medicalHistory
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean), // ✅ NEW: Save medical history as array
         email: auth.currentUser.email,
         displayName: auth.currentUser.displayName,
         createdAt: serverTimestamp(),
@@ -179,7 +185,7 @@ watch(
             <textarea
               v-model="userProfile.medicalHistory"
               rows="2"
-              :placeholder="currentLanguage === 'en' ? 'e.g., Diabetes, Asthma' : 'مثال: مرض السكري، الربو'"
+              :placeholder="currentLanguage === 'en' ? 'e.g., Diabetes, Asthma' : 'مثال: مرض السكري, الربو'"
             ></textarea>
           </div>
 
@@ -237,16 +243,17 @@ watch(
                 </p>
               </div>
 
-              <div class="feature-item" @click="router.push('/history')">
-                <i class="fas fa-history"></i>
+              <!-- ✅ MODIFIED: Replaced with "View Profile" -->
+              <div class="feature-item" @click="router.push('/profile')">
+                <i class="fas fa-user"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                  {{ currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات' }}
+                  {{ currentLanguage === 'en' ? 'View Profile' : 'عرض الملف الشخصي' }}
                 </h3>
                 <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{
                     currentLanguage === 'en'
-                      ? 'Review your past scan records.'
-                      : 'مراجعة سجلات الفحوصات السابقة.'
+                      ? 'View your profile and scan history.'
+                      : 'عرض ملفك الشخصي وسجل الفحوصات.'
                   }}
                 </p>
               </div>
@@ -451,8 +458,8 @@ watch(
   background-color: #f8f9fa;
 }
 
-.checkbox-label input[type='checkbox']{
-    width: auto;
-    margin: 5px;
+.checkbox-label input[type='checkbox'] {
+  width: auto;
+  margin: 5px;
 }
 </style>
