@@ -1,17 +1,21 @@
 <script setup>
 import { RouterView } from 'vue-router'
-import { provide, ref, watch, computed, inject } from 'vue'
+import { provide, ref, watchEffect } from 'vue'
 import { useAuthStore } from './stores/auth'
-import { collection, getDocs } from 'firebase/firestore'
+import { useDatabaseStore } from './stores/database'
 import TheHeader from './components/TheHeader.vue'
 import InfoModal from './components/InfoModal.vue'
 
-const db = inject('db')
+// --- Pinia Stores ---
 const authStore = useAuthStore()
-const appId = import.meta.env.VITE_APP_ID
+const databaseStore = useDatabaseStore()
 
+// --- Local State ---
 const currentLanguage = ref('en')
 const showInfoModal = ref(false)
+const currentMsv = ref(0)
+const doseLimit = ref(20) // Default to the highest possible limit, will be adjusted
+const isMsvLoading = ref(true)
 
 const toggleLanguage = () => {
   currentLanguage.value = currentLanguage.value === 'en' ? 'ar' : 'en'
@@ -20,91 +24,95 @@ const toggleInfoModal = () => {
   showInfoModal.value = !showInfoModal.value
 }
 
-provide('currentLanguage', currentLanguage)
-provide('toggleLanguage', toggleLanguage)
-provide('toggleInfoModal', toggleInfoModal)
-
-// --- mSv Counter Logic ---
-const currentMsv = ref(0)
-const isMsvLoading = ref(true)
-const userRole = computed(() => authStore.role)
-const yearlyLimit = computed(() => (userRole.value === 'doctor' ? 20 : 1))
-
-const fetchYearlyMsv = async () => {
-  const user = authStore.user
-  if (!user || !userRole.value) {
+/**
+ * The final, robust dose calculation engine. It now correctly handles concurrent
+ * occupational and fetal dose limits, always enforcing the more restrictive one.
+ */
+const updateDoseCalculation = async () => {
+  if (!authStore.user || !authStore.role) {
     currentMsv.value = 0
+    doseLimit.value = 1 // Reset to patient default
     isMsvLoading.value = false
     return
   }
-
   isMsvLoading.value = true
+
+  const userId = authStore.user.uid
+  const role = authStore.role
+  let calculatedDose = 0
+
   try {
-    const now = new Date()
-    const yearStart = new Date(now.getFullYear(), 0, 1)
-    const scansCol = collection(db, 'artifacts', appId, 'users', user.uid, 'scans')
-    const snapshot = await getDocs(scansCol)
-    let sum = 0
-    snapshot.forEach((doc) => {
-      const data = doc.data()
-      const scanDate = data.scanDate?.toDate ? data.scanDate.toDate() : new Date(data.scanDate)
-      if (scanDate instanceof Date && !isNaN(scanDate) && scanDate >= yearStart) {
-        if (userRole.value === 'doctor') {
-          if (typeof data.doctorDose === 'number') sum += data.doctorDose
-        } else {
-          if (typeof data.dose === 'number') sum += data.dose
-        }
+    const allUserScans =
+      role === 'doctor'
+        ? await databaseStore.fetchDoctorCreatedScans()
+        : await databaseStore.fetchScansForPatient(userId)
+
+    const yearStart = new Date(new Date().getFullYear(), 0, 1)
+    const scansThisYear = allUserScans.filter((scan) => scan.scanDate.toDate() >= yearStart)
+
+    if (role === 'doctor') {
+      // --- DOCTOR LOGIC: Always calculate the standard annual dose first ---
+      const occupationalDoseThisYear = scansThisYear.reduce(
+        (sum, scan) => sum + (scan.doctorDose || 0),
+        0,
+      )
+      const remainingAnnualLimit = 20 - occupationalDoseThisYear
+
+      const pregnancies = await databaseStore.fetchPregnancyHistory()
+      const activePregnancy = pregnancies?.find((p) => p.status === 'active')
+
+      if (activePregnancy) {
+        // --- PREGNANCY LOGIC: A second, concurrent limit applies ---
+        console.log('[App.vue] Active pregnancy detected. Calculating dual limits.')
+
+        const scansSinceDeclaration = allUserScans.filter(
+          (scan) => scan.scanDate.toDate() >= activePregnancy.declarationDate.toDate(),
+        )
+        const doseSinceDeclaration = scansSinceDeclaration.reduce(
+          (sum, scan) => sum + (scan.doctorDose || 0),
+          0,
+        )
+        const remainingPregnancyLimit = 0.5 - doseSinceDeclaration
+
+        // The UI limit is the MORE RESTRICTIVE (lower) of the two remaining limits.
+        doseLimit.value = Math.min(remainingAnnualLimit, remainingPregnancyLimit)
+        calculatedDose = occupationalDoseThisYear // The progress bar still reflects the total for the year
+
+        console.log(`[App.vue] Remaining Annual Limit: ${remainingAnnualLimit.toFixed(3)}, Remaining Pregnancy Limit: ${remainingPregnancyLimit.toFixed(3)}. Effective Limit: ${doseLimit.value.toFixed(3)}`)
+      } else {
+        // --- STANDARD DOCTOR LOGIC ---
+        doseLimit.value = 20
+        calculatedDose = occupationalDoseThisYear
       }
-    })
-    currentMsv.value = sum
+    } else {
+      // --- PATIENT LOGIC ---
+      doseLimit.value = 1
+      calculatedDose = scansThisYear.reduce((sum, scan) => sum + (scan.patientDose || 0), 0)
+    }
+
+    currentMsv.value = parseFloat(calculatedDose.toFixed(3))
   } catch (err) {
-    console.error('[App.vue] Failed to fetch current mSv:', err)
+    console.error('[App.vue] Failed to update dose calculation:', err)
+    currentMsv.value = 0
   } finally {
     isMsvLoading.value = false
   }
 }
 
-provide('triggerMsvRecalculation', fetchYearlyMsv)
+// --- Watcher ---
+watchEffect(() => {
+  if (authStore.isAuthReady) {
+    updateDoseCalculation()
+  }
+})
+
+// --- Provide data and functions to children ---
+provide('currentLanguage', currentLanguage)
+provide('toggleLanguage', toggleLanguage)
+provide('toggleInfoModal', toggleInfoModal)
+provide('triggerMsvRecalculation', updateDoseCalculation)
 provide('currentMsv', currentMsv)
-provide('yearlyLimit', yearlyLimit)
-
-// ✅ FIX: This is the new, robust logic that replaces the old watcher.
-// It waits for the 'isAuthReady' signal from your auth store.
-watch(
-  () => authStore.isAuthReady,
-  (isReady) => {
-    // This code only runs when the auth state is definitively known.
-    if (isReady) {
-      console.log('[App.vue] Auth store is now ready.')
-      if (authStore.user) {
-        console.log('[App.vue] User is logged in. Fetching mSv.')
-        fetchYearlyMsv()
-      } else {
-        console.log('[App.vue] No user is logged in. Resetting mSv counter.')
-        currentMsv.value = 0
-        isMsvLoading.value = false
-      }
-    }
-  },
-  { immediate: true }, // This ensures it runs on initial load.
-)
-
-// This secondary watcher handles dynamic logins/logouts that happen AFTER the initial load.
-watch(
-  () => authStore.user,
-  (newUser, oldUser) => {
-    // Only run if the user has actually changed (e.g. from a user object to null, or vice-versa)
-    if (authStore.isAuthReady && newUser?.uid !== oldUser?.uid) {
-      console.log('[App.vue] User state changed after initial load (login/logout).')
-      if (newUser) {
-        fetchYearlyMsv()
-      } else {
-        currentMsv.value = 0
-        isMsvLoading.value = false
-      }
-    }
-  },
-)
+provide('doseLimit', doseLimit)
 </script>
 
 <template>
@@ -112,7 +120,7 @@ watch(
     <TheHeader
       :current-language="currentLanguage"
       :user="authStore.user"
-      :msv-data="{ current: currentMsv, limit: yearlyLimit, isLoading: isMsvLoading }"
+      :msv-data="{ current: currentMsv, limit: doseLimit, isLoading: isMsvLoading }"
       @toggle-language="toggleLanguage"
       @toggle-info-modal="toggleInfoModal"
     />
@@ -126,6 +134,7 @@ watch(
 </template>
 
 <style>
+/* Styles remain unchanged */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
 body {

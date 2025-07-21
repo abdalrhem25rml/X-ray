@@ -2,10 +2,11 @@
 import { ref, onMounted, computed, watch, inject } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDatabaseStore } from '@/stores/database'
+import { useRouter } from 'vue-router'
 
 // Component Imports
 import ProfileFormModal from '@/components/ProfileFormModal.vue'
-import ScanFormModal from '@/components/ScanFormModal.vue'
+import PersonalScanFormModal from '@/components/PersonalScanFormModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import HistoryTable from '@/components/HistoryTable.vue'
 
@@ -13,6 +14,7 @@ import HistoryTable from '@/components/HistoryTable.vue'
 const authStore = useAuthStore()
 const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
+const router = useRouter()
 
 // --- State Management ---
 const userProfile = ref(null)
@@ -229,12 +231,17 @@ onMounted(() => {
       @save="onProfileSaved"
     />
 
-    <ScanFormModal
+    <PersonalScanFormModal
       :show="showScanFormModal"
       :scan="scanToEdit"
       @close="showScanFormModal = false"
     />
     <ConfirmDeleteModal :show="showDeleteModal" @close="showDeleteModal = false" />
+    <div class="switch-link-container">
+      <a href="#" @click.prevent="router.push('/dashboard')">
+        {{ currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم' }}
+      </a>
+    </div>
   </div>
 </template>
 
@@ -307,6 +314,7 @@ onMounted(() => {
   font-size: 0.95em;
   font-weight: 600;
   transition: all 0.2s ease;
+  margin: 10px;
 }
 .action-button:hover {
   background-color: #6a7483;
@@ -319,5 +327,18 @@ onMounted(() => {
 .edit-profile-button:hover,
 .add-scan-button:hover {
   background-color: #6a7483;
+}
+
+.switch-link-container {
+  text-align: center;
+  background-color: white;
+  border-radius: 10px;
+}
+a {
+  color: #8d99ae;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.3s ease;
+  font-size: 16.5px;
 }
 </style>
