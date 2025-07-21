@@ -382,5 +382,87 @@ export const useDatabaseStore = defineStore('database', {
         this.loading = false
       }
     },
+
+    /**
+     * Fetches a list of all unique patients associated with the current doctor
+     * by first querying the scans they've created.
+     * @returns {Promise<object[]|null>} An array of patient profile objects.
+     */
+    async fetchPatientsForDoctor() {
+        this.loading = true;
+        this.error = null;
+        const essentials = this._getDBEssentials();
+        if (!essentials) return null;
+
+        try {
+            const { db, appId, userId } = essentials;
+
+            // Step 1: Query the 'scans' collection to find all scans created by this doctor.
+            const scansCollectionRef = collection(db, 'artifacts', appId, 'scans');
+            const scansQuery = query(scansCollectionRef, where('creatorId', '==', userId));
+            const scansSnapshot = await getDocs(scansQuery);
+
+            if (scansSnapshot.empty) {
+                return []; // Doctor has not created any scans yet.
+            }
+
+            // Step 2: Extract the unique patient IDs from the scan results.
+            const patientIds = new Set();
+            scansSnapshot.forEach(doc => {
+                patientIds.add(doc.data().patientId);
+            });
+
+            // Step 3: Fetch the profile for each unique patient ID.
+            // Note: Firestore 'in' queries are limited to 30 items. For larger scale,
+            // this would need to be batched into multiple queries.
+            if (patientIds.size === 0) {
+                 return [];
+            }
+
+            const patientsCollectionRef = collection(db, 'artifacts', appId, 'patients');
+            const patientsQuery = query(patientsCollectionRef, where('userId', 'in', Array.from(patientIds)));
+            const patientsSnapshot = await getDocs(patientsQuery);
+
+            const patients = [];
+            patientsSnapshot.forEach(doc => {
+                patients.push({ id: doc.id, ...doc.data() });
+            });
+
+            return patients;
+
+        } catch (err) {
+            console.error("Error fetching patients for doctor:", err);
+            this.error = err.message;
+            return null;
+        } finally {
+            this.loading = false;
+        }
+    },
+
+    /**
+     * Deletes a patient's profile from the root 'patients' collection.
+     * WARNING: This is a destructive action and does not delete the user's auth record.
+     * @param {string} patientId - The ID of the patient to delete.
+     * @returns {Promise<boolean>}
+     */
+    async deletePatientProfile(patientId) {
+        this.loading = true;
+        this.error = null;
+        const essentials = this._getDBEssentials();
+        if (!essentials) return false;
+
+        try {
+            const { db, appId } = essentials;
+            const patientDocRef = doc(db, 'artifacts', appId, 'patients', patientId);
+            await deleteDoc(patientDocRef);
+            return true;
+        } catch (err) {
+            console.error("Error deleting patient profile:", err);
+            this.error = err.message;
+            return false;
+        } finally {
+            this.loading = false;
+        }
+    }
   },
 })

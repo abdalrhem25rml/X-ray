@@ -1,17 +1,8 @@
 <script setup>
-import { ref, inject, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import {
-  getFirestore,
-  collection,
-  getDocs,
-  addDoc,
-  doc,
-  updateDoc,
-  deleteDoc,
-  serverTimestamp,
-} from 'firebase/firestore'
 import { useAuthStore } from '@/stores/auth'
+import { useDatabaseStore } from '@/stores/database'
 
 // Import all necessary components
 import PatientTable from '@/components/PatientTable.vue'
@@ -19,96 +10,57 @@ import PatientFormModal from '@/components/PatientFormModal.vue'
 import PatientDetailsModal from '@/components/PatientDetailsModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 
-// Injections and Router
-const appId = import.meta.env.VITE_APP_ID
+// Pinia Stores and Router
 const authStore = useAuthStore()
-const currentLanguage = inject('currentLanguage')
+const databaseStore = useDatabaseStore()
 const router = useRouter()
-const firestore = getFirestore()
+const currentLanguage = ref('en') // Assuming language management
 
 // State management
 const patients = ref([])
-const isLoadingPatients = ref(true)
-const isSavingPatient = ref(false)
+const patientToDelete = ref(null)
+const selectedPatient = ref(null)
+const patientToEdit = ref(null)
 
 // Modal state
 const showPatientFormModal = ref(false)
 const showDetailsModal = ref(false)
 const showDeleteModal = ref(false)
 
-const patientToEdit = ref(null)
-const selectedPatient = ref(null)
-const patientToDelete = ref(null)
+const doctorId = computed(() => authStore.user?.uid)
 
-// --- Firebase Functions ---
+// --- Corrected Functions using Pinia Store ---
 const fetchPatients = async () => {
-  isLoadingPatients.value = true
-  try {
-    const patientsCol = collection(
-      firestore,
-      'artifacts',
-      appId,
-      'users',
-      authStore.user.uid,
-      'patients',
-    )
-    const snapshot = await getDocs(patientsCol)
-    patients.value = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0))
-  } catch (error) {
-    console.error('Error fetching patients:', error)
-  } finally {
-    isLoadingPatients.value = false
+  // Logic is now correctly handled by the store
+  const fetchedPatients = await databaseStore.fetchPatientsForDoctor()
+  if (fetchedPatients) {
+    patients.value = fetchedPatients
   }
 }
 
 const handleSavePatient = async (patientData) => {
-  isSavingPatient.value = true
-  try {
-    const patientsCol = collection(
-      firestore,
-      'artifacts',
-      appId,
-      'users',
-      authStore.user.uid,
-      'patients',
-    )
-    if (patientData.id) {
-      // Editing existing patient
-      const patientRef = doc(patientsCol, patientData.id)
-      await updateDoc(patientRef, { ...patientData, timestamp: serverTimestamp() })
-    } else {
-      // Adding new patient
-      const { id, ...dataToSave } = patientData
-      await addDoc(patientsCol, { ...dataToSave, timestamp: serverTimestamp() })
-    }
+  // We assume patientData contains a UID. The form should handle this.
+  // The 'createPatientProfile' action saves to the root /patients collection correctly.
+  const success = await databaseStore.createPatientProfile(patientData.userId, patientData)
+
+  if (success) {
     showPatientFormModal.value = false
-    await fetchPatients()
-  } catch (error) {
-    console.error('Error saving patient:', error)
-  } finally {
-    isSavingPatient.value = false
+    await fetchPatients() // Refresh the list
+  } else {
+    alert(`Failed to save patient. Error: ${databaseStore.error}`)
   }
 }
 
 const handleDeletePatient = async () => {
-  if (!patientToDelete.value) return
-  try {
-    const patientRef = doc(
-      firestore,
-      'artifacts',
-      appId,
-      'users',
-      authStore.user.uid,
-      'patients',
-      patientToDelete.value.id,
-    )
-    await deleteDoc(patientRef)
+  if (!patientToDelete.value?.id) return
+
+  // The 'deletePatientProfile' action correctly deletes from the root collection
+  const success = await databaseStore.deletePatientProfile(patientToDelete.value.id)
+  if (success) {
     showDeleteModal.value = false
-    await fetchPatients()
-  } catch (error) {
-    console.error('Error deleting patient:', error)
+    await fetchPatients() // Refresh the list
+  } else {
+    alert(`Failed to delete patient. Error: ${databaseStore.error}`)
   }
 }
 
@@ -133,17 +85,12 @@ function openConfirmDeleteModal(patient) {
   showDeleteModal.value = true
 }
 
-function handleGoToRecommend(patientId) {
-  router.push(`/recommend?patientId=${patientId}`)
-}
-
+// Watch for the doctor's user ID to be available, then fetch their patients
 watch(
-  () => authStore.user,
-  (user) => {
-    if (user) {
+  doctorId,
+  (id) => {
+    if (id) {
       fetchPatients()
-    } else {
-      patients.value = []
     }
   },
   { immediate: true },
@@ -168,11 +115,10 @@ watch(
 
         <PatientTable
           :patients="patients"
-          :is-loading="isLoadingPatients"
+          :is-loading="databaseStore.loading"
           @view="openDetailsModal"
           @edit="openEditModal"
           @delete="openConfirmDeleteModal"
-          @recommend="handleGoToRecommend"
         />
 
         <div class="switch-link-container">
@@ -187,7 +133,7 @@ watch(
     <PatientFormModal
       :show="showPatientFormModal"
       :patient="patientToEdit"
-      :is-saving="isSavingPatient"
+      :is-saving="databaseStore.loading"
       @close="showPatientFormModal = false"
       @save="handleSavePatient"
     />
@@ -201,7 +147,7 @@ watch(
     <ConfirmDeleteModal
       :show="showDeleteModal"
       :title="currentLanguage === 'en' ? 'Delete Patient' : 'حذف المريض'"
-      :message="`${currentLanguage === 'en' ? 'Are you sure you want to delete' : 'هل أنت متأكد من الحذف'} ${patientToDelete?.name}?`"
+      :message="`${currentLanguage === 'en' ? 'Are you sure you want to delete' : 'هل أنت متأكد من الحذف'} ${patientToDelete?.displayName}?`"
       @close="showDeleteModal = false"
       @confirm="handleDeletePatient"
     />
@@ -209,6 +155,7 @@ watch(
 </template>
 
 <style scoped>
+/* Styles remain the same */
 .patient-list-page {
   display: flex;
   flex-direction: column;
