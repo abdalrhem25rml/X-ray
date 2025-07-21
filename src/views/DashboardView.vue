@@ -1,136 +1,134 @@
 <script setup>
-import { ref, inject, watch } from 'vue'
+import { ref, computed, watchEffect } from 'vue'
 import { useRouter } from 'vue-router'
-import { getFirestore, doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { useAuthStore } from '@/stores/auth'
+import { useDatabaseStore } from '@/stores/database'
 
-const appId = import.meta.env.VITE_APP_ID
-const auth = inject('auth')
-const currentLanguage = inject('currentLanguage')
+// --- Pinia Stores ---
+const authStore = useAuthStore()
+const databaseStore = useDatabaseStore()
 const router = useRouter()
-const firestore = getFirestore()
 
-// --- State Management ---
-const isCheckingRole = ref(true)
+// --- Local State ---
+const isLoading = ref(true) // Local loading state for profile check
 const showProfileModal = ref(false)
-const userRole = ref(null)
+const hasBeenChecked = ref(false) // ** FIX: Flag to prevent re-checking **
 const userProfile = ref({
   role: null,
   birthDate: '',
   gender: '',
-  isPregnant: false,
   allergies: '',
-  medicalHistory: '', // ✅ NEW: Added medical history field
+  medicalHistory: '',
 })
 
-// --- Firebase Functions ---
-// ✅ FIX: The function is restored to its correct state.
-const checkUserRole = async (user) => {
-  // First, check if the role is already known from the injected auth object.
-  // This prevents unnecessary database reads on subsequent visits.
-  if (auth.role === 'doctor' || auth.role === 'patient') {
-    userRole.value = auth.role
-    isCheckingRole.value = false
+// --- Computed Properties for Reactivity ---
+const userRole = computed(() => authStore.role)
+const currentLanguage = ref('en')
+
+/**
+ * Checks if the user's full profile is complete.
+ * This effect runs ONCE after auth is ready to determine if the setup modal is needed.
+ * It now includes a flag to prevent it from re-running on every navigation.
+ */
+watchEffect(async () => {
+  // Wait until the initial authentication check is complete.
+  if (!authStore.isAuthReady) {
     return
   }
 
-  // If role is not known, proceed to check the database.
-  if (!user) {
-    isCheckingRole.value = false
+  // ** FIX: If we have already performed the check, do not run it again. **
+  if (hasBeenChecked.value) {
+    isLoading.value = false // Ensure loading is off if we come back to the page.
     return
   }
 
-  try {
-    const userDocRef = doc(firestore, 'artifacts', appId, 'users', user.uid)
-    const userSnapshot = await getDoc(userDocRef)
+  // If there's no user, stop loading. The router guard will redirect.
+  if (!authStore.user) {
+    isLoading.value = false
+    hasBeenChecked.value = true // Mark as "checked" (nothing to verify).
+    return
+  }
 
-    if (
-      !userSnapshot.exists() ||
-      !userSnapshot.data().role ||
-      !userSnapshot.data().birthDate ||
-      !userSnapshot.data().gender
-    ) {
-      // If the profile is incomplete, show the setup modal.
+  // --- Perform the one-time verification ---
+  console.log('Performing one-time profile verification...')
+
+  // 1. Check if the role is already in the auth store (fast check).
+  if (!authStore.role) {
+    console.log('User role not found. Showing profile modal.')
+    showProfileModal.value = true
+  } else {
+    // 2. Role exists, now check for the detailed patient profile in the database.
+    const patientProfileData = await databaseStore.fetchPatientProfile(authStore.user.uid)
+    if (!patientProfileData || !patientProfileData.birthDate || !patientProfileData.gender) {
+      console.log('Patient details (birthDate/gender) not found. Showing profile modal.')
       showProfileModal.value = true
     } else {
-      // If the profile is complete, set the local role and also update the injected auth object.
-      const userData = userSnapshot.data()
-      userRole.value = userData.role
-      auth.role = userData.role // Sync the role back to the provided auth object.
+      // Profile is fully complete, do not show the modal.
+      console.log('User profile is complete.')
+      showProfileModal.value = false
     }
-  } catch (error) {
-    console.error('Error during role/profile check:', error)
-  } finally {
-    isCheckingRole.value = false
   }
-}
 
+  // Finally, turn off the loading indicator and set the flag to prevent re-runs.
+  isLoading.value = false
+  hasBeenChecked.value = true
+})
+
+/**
+ * Saves the user's profile information to the correct Firestore collections.
+ */
 const saveUserProfile = async () => {
-  if (!auth.currentUser) return
+  const { uid, email, displayName } = authStore.user
+  const { role, birthDate, gender, allergies, medicalHistory } = userProfile.value
 
-  const { role, birthDate, gender, isPregnant, allergies, medicalHistory } = userProfile.value
   if (!role || !birthDate || !gender) {
     alert('Please fill out all required fields: Role, Birth Date, and Gender.')
     return
   }
 
-  try {
-    const userRef = doc(firestore, 'artifacts', appId, 'users', auth.currentUser.uid)
-    await setDoc(
-      userRef,
-      {
-        role,
-        birthDate,
-        gender,
-        isPregnant: gender === 'female' ? isPregnant : false,
-        allergies: allergies
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-        medicalHistory: medicalHistory
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean), // ✅ NEW: Save medical history as array
-        email: auth.currentUser.email,
-        displayName: auth.currentUser.displayName,
-        createdAt: serverTimestamp(),
-      },
-      { merge: true },
-    )
+  // 1. Create/update the core user document with the role.
+  const userSuccess = await databaseStore.createUserProfile(uid, email, displayName, role)
 
-    userRole.value = role
-    auth.role = role // Also update the injected auth object after saving.
+  // 2. Create the detailed patient profile.
+  const patientData = {
+    displayName: displayName, // Denormalized for convenience
+    birthDate: new Date(birthDate),
+    gender,
+    allergies: allergies
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    medicalHistory: medicalHistory
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  }
+  const patientSuccess = await databaseStore.createPatientProfile(uid, patientData)
+
+  if (userSuccess && patientSuccess) {
+    // Manually update the authStore role for immediate UI reactivity.
+    authStore.role = role
     showProfileModal.value = false
-  } catch (err) {
-    console.error('Failed to save user profile:', err)
-    alert('Something went wrong. Please try again.')
+  } else {
+    alert(`Failed to save profile. Error: ${databaseStore.error}`)
   }
 }
 
+/**
+ * Logs the user out using the auth store.
+ */
 const handleLogout = async () => {
-  try {
-    await auth.signOut()
-    router.push('/signin')
-  } catch (error) {
-    console.error('Error logging out:', error)
-  }
+  await authStore.logout()
+  router.push('/signin')
 }
-
-// Watch for auth changes to trigger the role check.
-watch(
-  () => auth.currentUser,
-  (newUser) => {
-    isCheckingRole.value = true
-    checkUserRole(newUser)
-  },
-  { immediate: true },
-)
 </script>
 
 <template>
   <div>
     <!-- Loading Screen -->
-    <div v-if="isCheckingRole" class="loading-container">
+    <div v-if="isLoading" class="loading-container">
       <p>{{ currentLanguage === 'en' ? 'Verifying session...' : 'جار التحقق من الجلسة...' }}</p>
+      <font-awesome-icon icon="spinner" spin size="2x" />
     </div>
 
     <!-- Main Content -->
@@ -143,7 +141,9 @@ watch(
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'I am a:' : 'أنا:' }}</label>
             <select v-model="userProfile.role">
-              <option value="" disabled>{{ currentLanguage === 'en' ? '-- Select Role --' : '-- اختر دورك --' }}</option>
+              <option value="" disabled>
+                {{ currentLanguage === 'en' ? '-- Select Role --' : '-- اختر دورك --' }}
+              </option>
               <option value="doctor">{{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}</option>
               <option value="patient">{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</option>
             </select>
@@ -157,40 +157,45 @@ watch(
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</label>
             <select v-model="userProfile.gender">
-              <option value="" disabled>{{ currentLanguage === 'en' ? '-- Select Gender --' : '-- اختر الجنس --' }}</option>
+              <option value="" disabled>
+                {{ currentLanguage === 'en' ? '-- Select Gender --' : '-- اختر الجنس --' }}
+              </option>
               <option value="male">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</option>
               <option value="female">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</option>
             </select>
           </div>
 
-          <div class="form-group" v-if="userProfile.gender === 'female'">
-            <label class="checkbox-label">
-              <input type="checkbox" v-model="userProfile.isPregnant" />
-              <span>{{ currentLanguage === 'en' ? 'Currently pregnant?' : 'هل أنت حامل حاليًا؟' }}</span>
-            </label>
-          </div>
-
           <div class="form-group">
-            <label>{{ currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية (مفصولة بفاصلة)' }}</label>
+            <label>{{
+              currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية (مفصولة بفاصلة)'
+            }}</label>
             <textarea
               v-model="userProfile.allergies"
               rows="2"
-              :placeholder="currentLanguage === 'en' ? 'e.g., Iodine-Based Dyes' : 'مثال: صبغات اليود'"
+              :placeholder="
+                currentLanguage === 'en' ? 'e.g., Iodine-Based Dyes' : 'مثال: صبغات اليود'
+              "
             ></textarea>
           </div>
 
-          <!-- ✅ NEW: Medical History Field -->
           <div class="form-group">
-            <label>{{ currentLanguage === 'en' ? 'Medical History (comma-separated)' : 'التاريخ الطبي (مفصول بفاصلة)' }}</label>
+            <label>{{
+              currentLanguage === 'en'
+                ? 'Medical History (comma-separated)'
+                : 'التاريخ الطبي (مفصول بفاصلة)'
+            }}</label>
             <textarea
               v-model="userProfile.medicalHistory"
               rows="2"
-              :placeholder="currentLanguage === 'en' ? 'e.g., Diabetes, Asthma' : 'مثال: مرض السكري, الربو'"
+              :placeholder="
+                currentLanguage === 'en' ? 'e.g., Diabetes, Asthma' : 'مثال: مرض السكري, الربو'
+              "
             ></textarea>
           </div>
 
-          <button class="action-button" @click="saveUserProfile">
-            {{ currentLanguage === 'en' ? 'Save & Continue' : 'حفظ ومتابعة' }}
+          <button class="action-button" @click="saveUserProfile" :disabled="databaseStore.loading">
+            <font-awesome-icon v-if="databaseStore.loading" icon="spinner" spin />
+            <span v-else>{{ currentLanguage === 'en' ? 'Save & Continue' : 'حفظ ومتابعة' }}</span>
           </button>
         </div>
       </div>
@@ -220,42 +225,24 @@ watch(
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{ currentLanguage === 'en' ? 'Get Scan Recommendation' : 'الحصول على توصية' }}
                 </h3>
-                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                  {{
-                    currentLanguage === 'en'
-                      ? 'Receive AI-powered recommendations for scans.'
-                      : 'احصل على توصيات مدعومة بالذكاء الاصطناعي للفحوصات.'
-                  }}
-                </p>
               </div>
 
-              <div v-if="userRole === 'doctor'" class="feature-item" @click="router.push('/patients')">
+              <div
+                v-if="userRole === 'doctor'"
+                class="feature-item"
+                @click="router.push('/patients')"
+              >
                 <i class="fas fa-users"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
                 </h3>
-                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                  {{
-                    currentLanguage === 'en'
-                      ? 'View, add, and manage patient records.'
-                      : 'عرض وإضافة وإدارة سجلات المرضى.'
-                  }}
-                </p>
               </div>
 
-              <!-- ✅ MODIFIED: Replaced with "View Profile" -->
               <div class="feature-item" @click="router.push('/profile')">
                 <i class="fas fa-user"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{ currentLanguage === 'en' ? 'View Profile' : 'عرض الملف الشخصي' }}
                 </h3>
-                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-                  {{
-                    currentLanguage === 'en'
-                      ? 'View your profile and scan history.'
-                      : 'عرض ملفك الشخصي وسجل الفحوصات.'
-                  }}
-                </p>
               </div>
             </div>
 
@@ -270,45 +257,75 @@ watch(
 </template>
 
 <style scoped>
+.role-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  overflow-y: auto;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.role-modal {
+  background: white;
+  padding: 30px 40px;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+  text-align: center;
+  max-width: 500px;
+  width: 100%;
+  margin: auto;
+}
+
+.role-modal h2 {
+  margin-bottom: 25px;
+  font-size: 1.8rem;
+  color: #333;
+}
+
 .form-group {
   margin-bottom: 15px;
   text-align: start;
 }
+
 .form-group label {
   display: block;
-  margin-bottom: 5px;
+  margin-bottom: 8px;
   font-weight: 500;
+  color: #555;
 }
+
 .form-group select,
 .form-group input[type='date'],
 .form-group textarea {
   width: 100%;
-  padding: 10px;
+  padding: 12px;
   border: 1px solid #ccc;
-  border-radius: 6px;
+  border-radius: 8px;
   box-sizing: border-box;
+  font-size: 1rem;
 }
-.checkbox-label {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 500;
-}
-.checkbox-label input[type='checkbox'] {
-  width: auto;
-  height: 18px;
-  width: 18px;
-}
+
 .role-modal .action-button {
   width: 100%;
-  margin-top: 15px;
+  margin-top: 20px;
+  padding: 12px 20px;
 }
+
 .dashboard-page {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 80px);
+  min-height: 100vh;
   width: 100%;
 }
+
 .dashboard-main-content {
   flex-grow: 1;
   display: flex;
@@ -317,6 +334,7 @@ watch(
   padding: 30px;
   background-color: #f8f9fa;
 }
+
 .dashboard-card {
   background-color: white;
   padding: 50px;
@@ -327,17 +345,20 @@ watch(
   width: 100%;
   border: 1px solid #eee;
 }
+
 .dashboard-card h2 {
   color: #8d99ae;
   margin-bottom: 20px;
   font-size: 2.2em;
   font-weight: 700;
 }
+
 .dashboard-card p {
   color: #555;
   margin-bottom: 30px;
   font-size: 1.2em;
 }
+
 .dashboard-features {
   display: flex;
   justify-content: center;
@@ -345,14 +366,15 @@ watch(
   margin-top: 40px;
   flex-wrap: wrap;
 }
+
 .feature-item {
-  background-color: #e0e6ed;
+  background-color: #eef2f7;
   padding: 30px;
   border-radius: 10px;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
   flex: 1;
-  min-width: 280px;
-  max-width: 350px;
+  min-width: 250px;
+  max-width: 320px;
   cursor: pointer;
   transition:
     transform 0.3s ease,
@@ -360,31 +382,29 @@ watch(
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   text-align: center;
   border: 1px solid #d3dce6;
 }
+
 .feature-item:hover {
   transform: translateY(-8px);
   box-shadow: 0 12px 25px rgba(0, 0, 0, 0.15);
 }
+
 .feature-item i {
-  font-size: 3.5em;
+  font-size: 3em;
   color: #8d99ae;
-  margin-bottom: 15px;
+  margin-bottom: 20px;
 }
+
 .feature-item h3 {
   color: #6a7483;
-  font-size: 1.5em;
-  margin-bottom: 10px;
+  font-size: 1.4em;
+  margin: 0;
   font-weight: 600;
 }
-.feature-item p {
-  color: #777;
-  font-size: 0.95em;
-  line-height: 1.5;
-  margin-bottom: 0;
-}
+
 .action-button {
   background-color: #8d99ae;
   color: white;
@@ -392,7 +412,7 @@ watch(
   padding: 15px 30px;
   border-radius: 8px;
   cursor: pointer;
-  font-size: 1.15em;
+  font-size: 1.1em;
   font-weight: 600;
   transition:
     background-color 0.3s ease,
@@ -401,65 +421,47 @@ watch(
   margin-top: 40px;
   width: auto;
 }
+
 .action-button:hover {
   background-color: #6a7483;
   transform: translateY(-2px);
 }
+
+.action-button:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
 .action-button.secondary {
   background-color: #6c757d;
 }
+
 .action-button.secondary:hover {
   background-color: #5a6268;
 }
+
 .logout-button {
   display: block;
   margin-left: auto;
   margin-right: auto;
 }
-.role-modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-}
-.role-modal {
-  background: white;
-  padding: 30px 40px;
-  border-radius: 10px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-  text-align: center;
-  max-width: 400px;
-  width: 90%;
-}
-.role-modal h2 {
-  margin-bottom: 15px;
-  font-size: 1.8rem;
-  color: #444;
-}
+
 .dashboard-blur-area.is-blurred {
   filter: blur(7px);
   pointer-events: none;
   user-select: none;
   transition: filter 0.25s ease;
 }
+
 .loading-container {
   display: flex;
+  flex-direction: column;
+  gap: 1rem;
   justify-content: center;
   align-items: center;
-  min-height: calc(100vh - 80px);
+  min-height: 100vh;
   font-size: 1.5em;
   color: #8d99ae;
   background-color: #f8f9fa;
-}
-
-.checkbox-label input[type='checkbox'] {
-  width: auto;
-  margin: 5px;
 }
 </style>

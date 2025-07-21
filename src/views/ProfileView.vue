@@ -1,18 +1,7 @@
 <script setup>
-import { ref, inject, onMounted } from 'vue'
-import {
-  getFirestore,
-  doc,
-  getDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-  addDoc,
-  updateDoc,
-  deleteDoc,
-  serverTimestamp,
-} from 'firebase/firestore'
+import { ref, onMounted, computed, watch, inject } from 'vue'
+import { useAuthStore } from '@/stores/auth'
+import { useDatabaseStore } from '@/stores/database'
 
 // Component Imports
 import ProfileFormModal from '@/components/ProfileFormModal.vue'
@@ -20,18 +9,15 @@ import ScanFormModal from '@/components/ScanFormModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 import HistoryTable from '@/components/HistoryTable.vue'
 
-// Injections and Setup
-const firestore = getFirestore()
-const auth = inject('auth')
-const appId = import.meta.env.VITE_APP_ID
-const triggerMsvRecalculation = inject('triggerMsvRecalculation')
+// --- Pinia Stores ---
+const authStore = useAuthStore()
+const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
 
 // --- State Management ---
 const userProfile = ref(null)
 const personalScans = ref([])
-const isLoadingProfile = ref(true)
-const isLoadingScans = ref(true)
+const isLoading = ref(true)
 
 // Modal States
 const showProfileFormModal = ref(false)
@@ -40,88 +26,83 @@ const showDeleteModal = ref(false)
 const scanToEdit = ref(null)
 const scanToDelete = ref(null)
 
-// --- Data Fetching ---
-const fetchUserProfile = async () => {
-  if (!auth.currentUser) return
-  isLoadingProfile.value = true
+// Computed property for the current user's ID
+const userId = computed(() => authStore.user?.uid)
+
+// --- ** FIX #1: Robust Data Fetching & Date Handling ** ---
+const fetchFullProfile = async () => {
+  if (!userId.value) return
+  isLoading.value = true
   try {
-    const userDocRef = doc(firestore, 'artifacts', appId, 'users', auth.currentUser.uid)
-    const docSnap = await getDoc(userDocRef)
-    if (docSnap.exists()) {
-      userProfile.value = { id: docSnap.id, ...docSnap.data() }
+    const patientData = await databaseStore.fetchPatientProfile(userId.value)
+
+    let birthDateString = ''
+    if (patientData?.birthDate) {
+      // Check if it's a Firestore Timestamp (which has a toDate method)
+      if (typeof patientData.birthDate.toDate === 'function') {
+        birthDateString = patientData.birthDate.toDate().toISOString().split('T')[0]
+      } else {
+        // Otherwise, assume it's already a Date object or a string
+        birthDateString = new Date(patientData.birthDate).toISOString().split('T')[0]
+      }
+    }
+
+    userProfile.value = {
+      displayName: authStore.user.displayName,
+      email: authStore.user.email,
+      role: authStore.role,
+      birthDate: birthDateString,
+      gender: patientData?.gender || '',
+      allergies: patientData?.allergies || [],
+      medicalHistory: patientData?.medicalHistory || [],
     }
   } catch (error) {
-    console.error('Error fetching user profile:', error)
+    console.error('Error fetching combined user profile:', error)
   } finally {
-    isLoadingProfile.value = false
+    isLoading.value = false
   }
 }
 
-const fetchPersonalScans = async () => {
-  if (!auth.currentUser) return
-  isLoadingScans.value = true
-  try {
-    const scansCol = collection(firestore, 'artifacts', appId, 'users', auth.currentUser.uid, 'scans')
-    const q = query(scansCol, where('patientId', '==', null)) // Personal scans have a null patientId
-    const snapshot = await getDocs(q)
-    personalScans.value = snapshot.docs
-      .map((doc) => ({ id: doc.id, ...doc.data() }))
-      .sort((a, b) => (b.scanDate?.toMillis() || 0) - (a.scanDate?.toMillis() || 0))
-  } catch (error) {
-    console.error('Error fetching personal scans:', error)
-  } finally {
-    isLoadingScans.value = false
+const fetchScans = async () => {
+  if (!userId.value) return
+  const scans = await databaseStore.fetchScansForPatient(userId.value)
+  if (scans) {
+    personalScans.value = scans
   }
 }
 
-// --- CRUD Functions for Profile & Scans ---
-const onProfileSaved = () => {
+// --- CRUD Functions ---
+const onProfileSaved = async (formData) => {
+  if (!userId.value) return
+
+  await databaseStore.createUserProfile(
+    userId.value,
+    authStore.user.email,
+    authStore.user.displayName,
+    formData.role,
+  )
+  authStore.role = formData.role
+
+  const patientUpdates = {
+    displayName: authStore.user.displayName,
+    birthDate: new Date(formData.birthDate),
+    gender: formData.gender,
+    allergies: formData.allergies
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    medicalHistory: formData.medicalHistory
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+  }
+  await databaseStore.createPatientProfile(userId.value, patientUpdates)
+
   showProfileFormModal.value = false
-  fetchUserProfile() // Re-fetch the profile to show updated data
+  await fetchFullProfile()
 }
 
-const handleSaveScan = async (scanData) => {
-  if (!auth.currentUser) return
-  const scansCol = collection(firestore, 'artifacts', appId, 'users', auth.currentUser.uid, 'scans')
-  const dataToSave = {
-    ...scanData,
-    patientId: null, // Ensure it's a personal scan
-    patientName: 'Personal',
-    scanDate: new Date(scanData.scanDate),
-    timestamp: serverTimestamp(),
-  }
-
-  try {
-    if (dataToSave.id) {
-      const scanRef = doc(scansCol, dataToSave.id)
-      await updateDoc(scanRef, dataToSave)
-    } else {
-      const { id, ...docToAdd } = dataToSave
-      await addDoc(scansCol, docToAdd)
-    }
-    showScanFormModal.value = false
-    await fetchPersonalScans()
-    await triggerMsvRecalculation()
-  } catch (error) {
-    console.error('Error saving personal scan:', error)
-  }
-}
-
-const handleDeleteScan = async () => {
-  if (!scanToDelete.value) return
-  try {
-    const scanRef = doc(firestore, 'artifacts', appId, 'users', auth.currentUser.uid, 'scans', scanToDelete.value.id)
-    await deleteDoc(scanRef)
-    showDeleteModal.value = false
-    await fetchPersonalScans()
-    await triggerMsvRecalculation()
-  } catch (error) {
-    console.error('Error deleting personal scan:', error)
-  }
-}
-
-// --- Modal Opening Functions ---
-const openEditProfileModal = () => (showProfileFormModal.value = true)
+// --- ** FIX #2: Add Missing Modal Functions ** ---
 const openAddScanModal = () => {
   scanToEdit.value = null
   showScanFormModal.value = true
@@ -135,71 +116,125 @@ const openDeleteConfirmation = (scan) => {
   showDeleteModal.value = true
 }
 
+// --- Lifecycle Hook ---
 onMounted(() => {
-  fetchUserProfile()
-  fetchPersonalScans()
+  watch(
+    () => authStore.isAuthReady,
+    (isReady) => {
+      if (isReady && userId.value) {
+        fetchFullProfile()
+        fetchScans()
+      }
+    },
+    { immediate: true },
+  )
 })
 </script>
 
 <template>
-  <div class="profile-page">
-    <!-- Profile Information Card -->
+  <div class="profile-page" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
     <div class="profile-section card">
       <div class="card-header">
         <h2>{{ currentLanguage === 'en' ? 'My Profile' : 'ملفي الشخصي' }}</h2>
-        <button @click="openEditProfileModal" class="action-button edit-profile-button">
+        <button @click="showProfileFormModal = true" class="action-button edit-profile-button">
           {{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}
         </button>
       </div>
-      <div v-if="isLoadingProfile" class="loading-state">Loading profile...</div>
+      <div v-if="isLoading" class="loading-state">Loading profile...</div>
       <div v-else-if="userProfile" class="profile-details">
-        <p><strong>{{ currentLanguage === 'en' ? 'Name' : 'الاسم' }}:</strong> {{ userProfile.displayName }}</p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Email' : 'البريد الإلكتروني' }}:</strong> {{ userProfile.email }}</p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong> <span class="role-tag">{{ userProfile.role }}</span></p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Birth Date' : 'تاريخ الميلاد' }}:</strong> {{ userProfile.birthDate }}</p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}:</strong> {{ userProfile.gender }}</p>
-        <p v-if="userProfile.gender === 'female'"><strong>{{ currentLanguage === 'en' ? 'Pregnant' : 'حامل' }}:</strong> {{ userProfile.isPregnant ? 'Yes' : 'No' }}</p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}:</strong> {{ userProfile.allergies?.join(', ') || 'None' }}</p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}:</strong> {{ userProfile.medicalHistory?.join(', ') || 'None' }}</p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong>
+          {{ userProfile.displayName }}
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong>
+          {{ userProfile.email }}
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong>
+          <!-- Check for Doctor -->
+          <span class="role-tag" v-if="userProfile.role === 'doctor' && currentLanguage === 'en'">
+            Doctor
+          </span>
+          <span
+            class="role-tag"
+            v-else-if="userProfile.role === 'doctor' && currentLanguage === 'ar'"
+          >
+            طبيب
+          </span>
+          <!-- Check for Patient -->
+          <span
+            class="role-tag"
+            v-else-if="userProfile.role === 'patient' && currentLanguage === 'en'"
+          >
+            Patient
+          </span>
+          <span
+            class="role-tag"
+            v-else-if="userProfile.role === 'patient' && currentLanguage === 'ar'"
+          >
+            مريض
+          </span>
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong>
+          {{ userProfile.birthDate }}
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong>
+          <span v-if="userProfile.gender === 'male'">
+            {{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}
+          </span>
+          <span v-else-if="userProfile.gender === 'female'">
+            {{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}
+          </span>
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'التحسسات:' }}</strong>
+          {{ userProfile.allergies?.join(', ') || 'None' }}
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ المرضي:' }}</strong>
+          {{ userProfile.medicalHistory?.join(', ') || 'None' }}
+        </p>
+      </div>
+      <div v-else class="loading-state">
+        {{
+          currentLanguage === 'en'
+            ? 'Could not load profile data.'
+            : 'تعذر تحميل بيانات الملف الشخصي.'
+        }}
       </div>
     </div>
 
-    <!-- Personal Scan History Card -->
     <div class="history-section card">
       <div class="card-header">
-        <h2>{{ currentLanguage === 'en' ? 'Personal Scan History' : 'سجل الفحوصات الشخصية' }}</h2>
+        <h2>{{ currentLanguage === 'en' ? 'Personal Scan History' : 'تاريخ الفحوصات الشخصية' }}</h2>
         <button @click="openAddScanModal" class="action-button add-scan-button">
-          {{ currentLanguage === 'en' ? 'Add Personal Scan' : 'إضافة فحص شخصي' }}
+          {{ currentLanguage === 'en' ? 'Add Personal Scan' : 'أضف فحوصات شخصية' }}
         </button>
       </div>
       <HistoryTable
         :scans="personalScans"
-        :is-loading="isLoadingScans"
+        :is-loading="databaseStore.loading"
         @edit="openEditScanModal"
         @delete="openDeleteConfirmation"
       />
     </div>
 
-    <!-- Modals -->
     <ProfileFormModal
       :show="showProfileFormModal"
-      :user-id="auth.currentUser?.uid"
+      :profile-data="userProfile"
       @close="showProfileFormModal = false"
       @save="onProfileSaved"
     />
+
     <ScanFormModal
       :show="showScanFormModal"
       :scan="scanToEdit"
       @close="showScanFormModal = false"
-      @save="handleSaveScan"
     />
-    <ConfirmDeleteModal
-      :show="showDeleteModal"
-      :title="currentLanguage === 'en' ? 'Delete Scan' : 'حذف الفحص'"
-      :message="currentLanguage === 'en' ? 'Are you sure you want to delete this scan record?' : 'هل أنت متأكد من حذف سجل الفحص هذا؟'"
-      @close="showDeleteModal = false"
-      @confirm="handleDeleteScan"
-    />
+    <ConfirmDeleteModal :show="showDeleteModal" @close="showDeleteModal = false" />
   </div>
 </template>
 
@@ -240,13 +275,14 @@ onMounted(() => {
 }
 .profile-details {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 15px 30px;
 }
 .profile-details p {
   margin: 0;
   font-size: 1.1em;
   color: #495057;
+  line-height: 1.6;
 }
 .profile-details strong {
   color: #343a40;
@@ -276,10 +312,12 @@ onMounted(() => {
   background-color: #6a7483;
   transform: translateY(-2px);
 }
-.edit-profile-button {
-  background-color: #f0ad4e;
+.edit-profile-button,
+.add-scan-button {
+  background-color: #8d99ae;
 }
-.edit-profile-button:hover {
-  background-color: #eea236;
+.edit-profile-button:hover,
+.add-scan-button:hover {
+  background-color: #6a7483;
 }
 </style>
