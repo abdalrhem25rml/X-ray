@@ -26,12 +26,12 @@ const toggleInfoModal = () => {
 
 /**
  * The final, robust dose calculation engine. It now correctly handles concurrent
- * occupational and fetal dose limits, always enforcing the more restrictive one.
+ * occupational and fetal dose limits, and correctly sums personal vs. occupational dose for doctors.
  */
 const updateDoseCalculation = async () => {
   if (!authStore.user || !authStore.role) {
     currentMsv.value = 0
-    doseLimit.value = 1 // Reset to patient default
+    doseLimit.value = 1
     isMsvLoading.value = false
     return
   }
@@ -47,40 +47,41 @@ const updateDoseCalculation = async () => {
         ? await databaseStore.fetchDoctorCreatedScans()
         : await databaseStore.fetchScansForPatient(userId)
 
+    if (!allUserScans) {
+      isMsvLoading.value = false
+      return
+    }
+
     const yearStart = new Date(new Date().getFullYear(), 0, 1)
     const scansThisYear = allUserScans.filter((scan) => scan.scanDate.toDate() >= yearStart)
 
     if (role === 'doctor') {
-      // --- DOCTOR LOGIC: Always calculate the standard annual dose first ---
-      const occupationalDoseThisYear = scansThisYear.reduce(
-        (sum, scan) => sum + (scan.doctorDose || 0),
-        0,
-      )
-      const remainingAnnualLimit = 20 - occupationalDoseThisYear
+      // --- FIX: Correctly calculate total dose for a doctor ---
+      const occupationalDoseThisYear = scansThisYear.reduce((sum, scan) => {
+        // If it's a personal scan for the doctor, use their patient dose.
+        if (scan.isPersonalScan) {
+          return sum + (scan.patientDose || 0);
+        }
+        // Otherwise, use the occupational dose from treating another patient.
+        return sum + (scan.doctorDose || 0);
+      }, 0);
 
+      const remainingAnnualLimit = 20 - occupationalDoseThisYear
       const pregnancies = await databaseStore.fetchPregnancyHistory()
       const activePregnancy = pregnancies?.find((p) => p.status === 'active')
 
       if (activePregnancy) {
-        // --- PREGNANCY LOGIC: A second, concurrent limit applies ---
-        console.log('[App.vue] Active pregnancy detected. Calculating dual limits.')
-
         const scansSinceDeclaration = allUserScans.filter(
           (scan) => scan.scanDate.toDate() >= activePregnancy.declarationDate.toDate(),
         )
         const doseSinceDeclaration = scansSinceDeclaration.reduce(
-          (sum, scan) => sum + (scan.doctorDose || 0),
+          (sum, scan) => sum + (scan.doctorDose || 0), // Pregnancy limit only applies to occupational dose
           0,
         )
         const remainingPregnancyLimit = 0.5 - doseSinceDeclaration
-
-        // The UI limit is the MORE RESTRICTIVE (lower) of the two remaining limits.
         doseLimit.value = Math.min(remainingAnnualLimit, remainingPregnancyLimit)
-        calculatedDose = occupationalDoseThisYear // The progress bar still reflects the total for the year
-
-        console.log(`[App.vue] Remaining Annual Limit: ${remainingAnnualLimit.toFixed(3)}, Remaining Pregnancy Limit: ${remainingPregnancyLimit.toFixed(3)}. Effective Limit: ${doseLimit.value.toFixed(3)}`)
+        calculatedDose = occupationalDoseThisYear
       } else {
-        // --- STANDARD DOCTOR LOGIC ---
         doseLimit.value = 20
         calculatedDose = occupationalDoseThisYear
       }

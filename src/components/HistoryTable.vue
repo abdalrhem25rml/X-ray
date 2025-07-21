@@ -5,6 +5,11 @@ import { useAuthStore } from '@/stores/auth'
 defineProps({
   scans: Array,
   isLoading: Boolean,
+  // This new prop makes the component more reusable and context-aware
+  isPersonalView: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 const emit = defineEmits(['edit', 'delete'])
@@ -17,16 +22,15 @@ const formatDate = (timestamp) => {
   if (!timestamp) return 'N/A'
   const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
   if (isNaN(date)) return 'Invalid Date'
-  return new Date(date).toLocaleDateString('en-UK')
+  return new Date(date).toLocaleDateString('en-GB') // Changed to GB format DD/MM/YYYY
 }
 
 const formatDose = (dose) => {
-  return typeof dose === 'number' ? dose.toFixed(2) : 'N/A'
+  return typeof dose === 'number' ? dose.toFixed(3) : 'N/A'
 }
 </script>
 
 <template>
-  <!-- ✅ FIX: The container now handles horizontal scrolling -->
   <div class="history-table-container">
     <div v-if="isLoading" class="loading-message">...</div>
     <div v-else-if="scans.length === 0" class="no-items-message">
@@ -35,12 +39,14 @@ const formatDose = (dose) => {
     <table v-else class="history-table">
       <thead>
         <tr>
-          <th>{{ currentLanguage === 'en' ? 'Patient Name' : 'اسم المريض' }}</th>
+          <!-- Column is now conditional based on the view context -->
+          <th v-if="!isPersonalView">{{ currentLanguage === 'en' ? 'Patient Name' : 'اسم المريض' }}</th>
           <th>{{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}</th>
           <th>{{ currentLanguage === 'en' ? 'Scan Date' : 'تاريخ الفحص' }}</th>
           <th class="reason-column">{{ currentLanguage === 'en' ? 'Reason' : 'السبب' }}</th>
           <th>{{ currentLanguage === 'en' ? "Patient's Dose" : 'جرعة المريض' }}</th>
-          <th v-if="userRole === 'doctor'">
+          <!-- Column is now conditional based on the view context -->
+          <th v-if="!isPersonalView">
             {{ currentLanguage === 'en' ? "Doctor's Dose" : 'جرعة الطبيب' }}
           </th>
           <th class="actions-column">
@@ -50,14 +56,15 @@ const formatDose = (dose) => {
       </thead>
       <tbody>
         <tr v-for="scan in scans" :key="scan.id">
-          <td>{{ scan.patientName }}</td>
+          <!-- Column is now conditional -->
+          <td v-if="!isPersonalView">{{ scan.patientName }}</td>
           <td>{{ scan.scanType }}</td>
           <td>{{ formatDate(scan.scanDate) }}</td>
           <td class="reason-column">{{ scan.reason || 'N/A' }}</td>
-          <td>{{ formatDose(scan.dose) }}</td>
-          <td v-if="userRole === 'doctor'">{{ formatDose(scan.doctorDose) }}</td>
+          <td>{{ formatDose(scan.patientDose) }}</td>
+          <!-- Column is now conditional -->
+          <td v-if="!isPersonalView">{{ formatDose(scan.doctorDose) }}</td>
           <td>
-            <!-- ✅ FIX: Added a wrapper for the buttons to apply flexbox -->
             <div class="action-buttons-wrapper">
               <button @click="$emit('edit', scan)" class="action-button-sm edit-button">
                 {{ currentLanguage === 'en' ? 'Edit' : 'تعديل' }}
@@ -74,55 +81,39 @@ const formatDose = (dose) => {
 </template>
 
 <style scoped>
-/* --- MODIFIED STYLES --- */
-
-/* This container ensures the table can scroll horizontally on small screens */
-/* without causing the whole page to scroll. */
 .history-table-container {
   margin-top: 20px;
-  overflow-x: auto; /* This is the key for horizontal scrolling */
-  border-radius: 8px; /* Optional: for a nicer look */
-  border: 1px solid #e9ecef; /* Optional: for a nicer look */
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
 }
-
 .history-table {
   width: 100%;
   border-collapse: collapse;
-  text-align: start; /* Use logical property for RTL/LTR support */
+  text-align: start;
 }
-
-.history-table th,
-.history-table td {
+.history-table th, .history-table td {
   padding: 16px 20px;
   border-bottom: 1px solid #e9ecef;
   vertical-align: middle;
-  /* ✅ FIX: Allow text to wrap by default for better responsiveness */
-  white-space: normal;
+  white-space: nowrap;
 }
-/* ✅ NEW: Special styles for the reason column to handle long text */
 .reason-column {
-  min-width: 200px; /* Give it some minimum space */
-  max-width: 350px; /* Prevent it from taking over the table */
-}
-/* Give the actions column a minimum width so it doesn't get too squished */
-.history-table th.actions-column {
+  white-space: normal;
   min-width: 200px;
-  text-align: center; /* Center the "Actions" header text */
+  max-width: 350px;
 }
-
-/* This is the new flex container for the buttons */
+.history-table th.actions-column {
+  min-width: 150px;
+  text-align: center;
+}
 .action-buttons-wrapper {
   display: flex;
-  flex-wrap: wrap; /* Allows buttons to stack vertically if needed */
-  gap: 8px; /* Cleanly adds space between buttons, horizontally or vertically */
-  justify-content: center; /* Centers buttons within the cell */
+  gap: 8px;
+  justify-content: center;
 }
-
 .action-button-sm {
-  /* This flex property is the magic for responsive width. */
-  /* flex-grow: 1 (allow growing), flex-shrink: 1 (allow shrinking), flex-basis: 80px (ideal starting width) */
   flex: 1 1 80px;
-
   padding: 8px 12px;
   border-radius: 6px;
   border: none;
@@ -130,37 +121,21 @@ const formatDose = (dose) => {
   cursor: pointer;
   color: white;
   text-align: center;
-  /* margin is removed, as 'gap' on the parent is a better approach */
 }
-
-/* --- UNCHANGED STYLES --- */
-
-.loading-message,
-.no-items-message {
+.loading-message, .no-items-message {
   padding: 40px;
   text-align: center;
   color: #6c757d;
   font-size: 1.2rem;
 }
-
 .history-table th {
   background-color: #f8f9fa;
   color: #495057;
+  font-weight: 600;
 }
-
 .history-table tbody tr:hover {
   background-color: #f1f3f5;
 }
-
-.action-button-sm.edit-button {
-  background-color: #f0ad4e;
-}
-
-.action-button-sm.delete-button {
-  background-color: #d9534f;
-}
-table {
-  table-layout: fixed;
-  width: 100%;
-}
+.action-button-sm.edit-button { background-color: #f0ad4e; }
+.action-button-sm.delete-button { background-color: #d9534f; }
 </style>

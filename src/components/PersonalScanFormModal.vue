@@ -6,51 +6,30 @@ import { useDatabaseStore } from '@/stores/database'
 // --- Component Definition ---
 const props = defineProps({
   show: Boolean,
-  scan: Object, // The scan object to edit, if any
+  scan: Object,
   isSaving: Boolean,
 })
 const emit = defineEmits(['close', 'save'])
 
 // --- Pinia Stores ---
 const authStore = useAuthStore()
-const databaseStore = useDatabaseStore() // To get the user's detailed profile
+const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
 
 // --- Reactive Form State ---
-const form = reactive({
-  id: null,
-  scanType: 'X-ray',
-  scanDate: '',
-  patientDose: null, // This is the user's own dose
-  reason: '',
-  notes: '',
-})
+const form = reactive({ id: null, scanType: 'X-ray', scanDate: '', patientDose: null, reason: '', notes: '' })
 
 // --- Logic ---
-
-/**
- * Populates the form when editing an existing scan, or resets it for a new one.
- */
 watch(
   () => props.show,
   (isShown) => {
     if (isShown) {
-      // Reset the form to its default state
-      Object.assign(form, {
-        id: null,
-        scanType: 'X-ray',
-        scanDate: new Date().toISOString().split('T')[0], // Default to today
-        patientDose: null,
-        reason: '',
-        notes: '',
-      })
-
-      // If we are editing, populate the fields from the passed 'scan' prop
+      Object.assign(form, { id: null, scanType: 'X-ray', scanDate: new Date().toISOString().split('T')[0], patientDose: null, reason: '', notes: '' })
       if (props.scan) {
         form.id = props.scan.id
         form.scanType = props.scan.scanType
         form.scanDate = props.scan.scanDate?.toDate()?.toISOString().split('T')[0] || ''
-        form.patientDose = props.scan.patientDose // Use the correct field name
+        form.patientDose = props.scan.patientDose
         form.reason = props.scan.reason
         form.notes = props.scan.notes
       }
@@ -59,29 +38,23 @@ watch(
   { immediate: true },
 )
 
-/**
- * Uses AI to estimate the user's dose based on scan type and reason.
- */
 const estimateDose = async () => {
-  // Fetch the user's full profile for better AI context
   const userProfile = await databaseStore.fetchPatientProfile(authStore.user.uid)
-  const age = userProfile?.birthDate
-    ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear()
-    : 'N/A'
+
+  let age = 'N/A'
+  if (userProfile?.birthDate) {
+    let birthDateObject = typeof userProfile.birthDate.toDate === 'function' ? userProfile.birthDate.toDate() : new Date(userProfile.birthDate)
+    age = new Date().getFullYear() - birthDateObject.getFullYear()
+  }
 
   let prompt = ''
   let validationRules = {}
 
   if (form.scanType === 'CT') {
-    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic CT scan.
-Context: Age: ${age}, Reason: ${form.reason || 'Not provided'}.
-IMPORTANT: The plausible range for a single diagnostic CT is 1-30 mSv. Respond ONLY with a number in this range.`
+    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic CT scan. Context: Age: ${age}, Reason: ${form.reason || 'Not provided'}. IMPORTANT: The plausible range for a single diagnostic CT is 1-30 mSv. Respond ONLY with a single number in this range. Do not add any other text or units.`
     validationRules = { min: 0.5, max: 40 }
   } else {
-    // X-ray
-    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic X-ray.
-Context: Age: ${age}, Reason: ${form.reason || 'Not provided'}.
-IMPORTANT: The plausible range for a single diagnostic X-ray is 0.01-5 mSv. Respond ONLY with a number in this range.`
+    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic X-ray. Context: Age: ${age}, Reason: ${form.reason || 'Not provided'}. IMPORTANT: The plausible range for a single diagnostic X-ray is 0.01-5 mSv. Respond ONLY with a single number in this range. Do not add any other text or units.`
     validationRules = { min: 0.001, max: 10 }
   }
 
@@ -93,21 +66,25 @@ IMPORTANT: The plausible range for a single diagnostic X-ray is 0.01-5 mSv. Resp
     const apiKey = import.meta.env.VITE_GEMINI_KEY
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
+    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
 
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
+    if (!response.ok) throw new Error(`API Error: ${response.status} ${response.statusText}`)
 
     const result = await response.json()
-    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    const estimated = parseFloat(aiText.match(/[\d.]+/))
+    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+
+    // --- ADDED: This is the crucial debugging line ---
+    console.log('AI Response Text:', `"${aiText}"`)
+
+    const estimated = parseFloat(aiText)
 
     if (isNaN(estimated)) {
-      throw new Error('AI did not return a valid number.')
+      throw new Error('AI did not return a valid number. Response was: ' + aiText)
     }
+
+    // --- ADDED: A second debugging line for validation ---
+    console.log(`Validating AI value: ${estimated}, against rules: min=${validationRules.min}, max=${validationRules.max}`);
+
     if (estimated < validationRules.min || estimated > validationRules.max) {
       throw new Error(`AI returned an out-of-range value: ${estimated}.`)
     }
@@ -121,22 +98,16 @@ IMPORTANT: The plausible range for a single diagnostic X-ray is 0.01-5 mSv. Resp
   }
 }
 
-/**
- * Validates the form, estimates dose if needed, and emits the 'save' event.
- */
 const handleSubmit = async () => {
   if (!form.scanDate) {
     alert('Please provide the scan date.')
     return
   }
-
-  // If the user's dose is not filled in, try to estimate it.
-  if (form.patientDose === null || form.patientDose === '') {
+  if (!form.patientDose && form.patientDose !== 0) {
     const success = await estimateDose()
-    if (!success) return // Stop submission if AI estimation fails validation
+    if (!success) return
   }
 
-  // If all checks pass, emit the save event with the form data.
   emit('save', { ...form })
 }
 </script>
@@ -324,7 +295,6 @@ const handleSubmit = async () => {
   cursor: not-allowed;
 }
 
-/* Animation for the modal fade-in */
 .modal-fade-enter-active,
 .modal-fade-leave-active {
   transition: opacity 0.3s ease;

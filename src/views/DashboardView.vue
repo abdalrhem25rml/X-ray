@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watchEffect } from 'vue'
+import { ref, computed, watchEffect, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDatabaseStore } from '@/stores/database'
@@ -23,7 +23,7 @@ const userProfile = ref({
 
 // --- Computed Properties for Reactivity ---
 const userRole = computed(() => authStore.role)
-const currentLanguage = ref('en')
+const currentLanguage = inject('currentLanguage')
 
 /**
  * Checks if the user's full profile is complete.
@@ -220,29 +220,49 @@ const handleLogout = async () => {
             </p>
 
             <div class="dashboard-features">
+              <!-- Get Scan Recommendation -->
               <div class="feature-item" @click="router.push('/recommend')">
                 <i class="fas fa-file-medical"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{ currentLanguage === 'en' ? 'Get Scan Recommendation' : 'الحصول على توصية' }}
                 </h3>
+                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{
+                    currentLanguage === 'en'
+                      ? 'Use AI to get recommendations on the necessity of radiological scans.'
+                      : 'استخدم الذكاء الاصطناعي للحصول على توصيات حول ضرورة الفحوصات الإشعاعية.'
+                  }}
+                </p>
               </div>
 
-              <div
-                v-if="userRole === 'doctor'"
-                class="feature-item"
-                @click="router.push('/patients')"
-              >
+              <!-- Manage Patients (for Doctors) -->
+              <div v-if="userRole === 'doctor'" class="feature-item" @click="router.push('/patients')">
                 <i class="fas fa-users"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
                 </h3>
+                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{
+                    currentLanguage === 'en'
+                      ? 'View, add, and manage your patient records and their scan histories.'
+                      : 'عرض وإضافة وإدارة سجلات مرضاك وتاريخ فحوصاتهم.'
+                  }}
+                </p>
               </div>
 
+              <!-- View Profile -->
               <div class="feature-item" @click="router.push('/profile')">
                 <i class="fas fa-user"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{ currentLanguage === 'en' ? 'View Profile' : 'عرض الملف الشخصي' }}
                 </h3>
+                <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+                  {{
+                    currentLanguage === 'en'
+                      ? 'Review your personal details and dose history.'
+                      : 'راجع معلوماتك الشخصية وسجل جرعاتك.'
+                  }}
+                </p>
               </div>
             </div>
 

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, watch, inject } from 'vue'
 import { useDatabaseStore } from '@/stores/database'
 
 const props = defineProps({
@@ -13,7 +13,7 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save'])
 
 const databaseStore = useDatabaseStore()
-const currentLanguage = ref('en')
+const currentLanguage = inject('currentLanguage')
 
 const form = ref({
   role: '',

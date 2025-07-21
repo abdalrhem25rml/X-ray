@@ -3,69 +3,82 @@ import { reactive, watch, inject } from 'vue'
 
 const props = defineProps({
   show: Boolean,
-  patient: Object, // If a patient is passed, we're in "edit" mode
+  patient: Object,
   isSaving: Boolean,
 })
 const emit = defineEmits(['close', 'save'])
 
 const currentLanguage = inject('currentLanguage')
 
-// The form's structure
+// --- Form now includes isPregnant and estimatedDueDate ---
 const form = reactive({
   id: null,
   name: '',
-  age: null,
+  birthDate: '',
   gender: 'male',
-  medicalHistory: [],
-  allergies: [],
+  isPregnant: false,
+  estimatedDueDate: '', // Changed from null to empty string for v-model
+  medicalHistory: '',
+  allergies: '',
 })
 
-// When the modal is shown, populate the form if we are editing
+// Watch for the modal to open or the patient data to change
 watch(
-  () => props.patient,
-  (newPatient) => {
-    if (newPatient) {
-      // Edit mode: populate form
-      form.id = newPatient.id
-      form.name = newPatient.name
-      form.age = newPatient.age
-      form.gender = newPatient.gender
-      form.medicalHistory = Array.isArray(newPatient.medicalHistory)
-        ? newPatient.medicalHistory.join(', ')
-        : ''
-      form.allergies = Array.isArray(newPatient.allergies) ? newPatient.allergies.join(', ') : ''
+  () => props.show,
+  (isShown) => {
+    if (!isShown) return
+
+    if (props.patient) {
+      // --- Edit mode ---
+      form.id = props.patient.id
+      form.name = props.patient.name
+      form.gender = props.patient.gender
+      form.isPregnant = props.patient.isPregnant || false
+
+      // Handle birthDate
+      form.birthDate = props.patient.birthDate?.toDate ? props.patient.birthDate.toDate().toISOString().split('T')[0] : ''
+      // Handle estimatedDueDate
+      form.estimatedDueDate = props.patient.estimatedDueDate?.toDate ? props.patient.estimatedDueDate.toDate().toISOString().split('T')[0] : ''
+
+      form.medicalHistory = Array.isArray(props.patient.medicalHistory) ? props.patient.medicalHistory.join(', ') : ''
+      form.allergies = Array.isArray(props.patient.allergies) ? props.patient.allergies.join(', ') : ''
     } else {
-      // Add mode: reset form
-      form.id = null
-      form.name = ''
-      form.age = null
-      form.gender = 'male'
-      form.medicalHistory = ''
-      form.allergies = ''
+      // --- Add mode: Reset form ---
+      Object.assign(form, { id: null, name: '', birthDate: '', gender: 'male', isPregnant: false, estimatedDueDate: '', medicalHistory: '', allergies: '' })
     }
   },
   { immediate: true },
 )
 
+// If the user unchecks "isPregnant", clear the due date.
+watch(() => form.isPregnant, (isPregnant) => {
+    if (!isPregnant) {
+        form.estimatedDueDate = '';
+    }
+});
+
 const handleSubmit = () => {
-  if (!form.name || !form.age) {
-    alert(
-      currentLanguage.value === 'en' ? 'Name and Age are required.' : 'الاسم والعمر حقول مطلوبة.',
-    )
+  if (!form.name || !form.birthDate) {
+    alert('Name and Date of Birth are required.')
+    return
+  }
+  if (form.isPregnant && !form.estimatedDueDate) {
+    alert('Please provide the estimated due date for the pregnancy.')
     return
   }
 
-  // Convert comma-separated strings back to arrays
+  // Sanitize data before saving
+  if (form.gender === 'male' || !form.isPregnant) {
+      form.isPregnant = false
+      form.estimatedDueDate = null
+  }
+
   const dataToSave = {
     ...form,
-    medicalHistory: form.medicalHistory
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-    allergies: form.allergies
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
+    birthDate: new Date(form.birthDate),
+    estimatedDueDate: form.estimatedDueDate ? new Date(form.estimatedDueDate) : null,
+    medicalHistory: form.medicalHistory.split(',').map((s) => s.trim()).filter(Boolean),
+    allergies: form.allergies.split(',').map((s) => s.trim()).filter(Boolean),
   }
 
   emit('save', dataToSave)
@@ -78,15 +91,7 @@ const handleSubmit = () => {
       <div class="modal-content" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
         <button @click="$emit('close')" class="close-button">&times;</button>
         <h3 class="modal-title">
-          {{
-            patient
-              ? currentLanguage === 'en'
-                ? 'Edit Patient'
-                : 'تعديل بيانات المريض'
-              : currentLanguage === 'en'
-                ? 'Add New Patient'
-                : 'إضافة مريض جديد'
-          }}
+          {{ patient ? 'Edit Patient' : 'Add New Patient' }}
         </h3>
         <form @submit.prevent="handleSubmit" class="patient-form">
           <div class="form-group">
@@ -94,8 +99,8 @@ const handleSubmit = () => {
             <input type="text" v-model="form.name" required />
           </div>
           <div class="form-group">
-            <label>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}</label>
-            <input type="number" v-model="form.age" required />
+            <label>{{ currentLanguage === 'en' ? 'Date of Birth' : 'تاريخ الميلاد' }}</label>
+            <input type="date" v-model="form.birthDate" required />
           </div>
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</label>
@@ -104,34 +109,36 @@ const handleSubmit = () => {
               <option value="female">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</option>
             </select>
           </div>
+
+          <!-- --- Pregnancy Section --- -->
+          <div v-if="form.gender === 'female'" class="pregnancy-section">
+            <div class="form-group checkbox-group">
+              <label>
+                <input type="checkbox" v-model="form.isPregnant" />
+                <span>{{ currentLanguage === 'en' ? 'Currently Pregnant?' : 'هل هي حامل حاليًا؟' }}</span>
+              </label>
+            </div>
+            <!-- Show due date field only if pregnant is checked -->
+            <div v-if="form.isPregnant" class="form-group">
+              <label>{{ currentLanguage === 'en' ? 'Estimated Due Date' : 'تاريخ الولادة المتوقع' }}</label>
+              <input type="date" v-model="form.estimatedDueDate" required />
+            </div>
+          </div>
+
           <div class="form-group">
-            <label>{{
-              currentLanguage === 'en'
-                ? 'Medical History (comma-separated)'
-                : 'التاريخ الطبي (مفصول بفاصلة)'
-            }}</label>
+            <label>{{ currentLanguage === 'en' ? 'Medical History (comma-separated)' : 'التاريخ الطبي' }}</label>
             <textarea v-model="form.medicalHistory" rows="3"></textarea>
           </div>
           <div class="form-group">
-            <label>{{
-              currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية (مفصولة بفاصلة)'
-            }}</label>
+            <label>{{ currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية' }}</label>
             <textarea v-model="form.allergies" rows="3"></textarea>
           </div>
           <div class="modal-actions">
             <button type="submit" class="action-button" :disabled="isSaving">
-              {{
-                isSaving
-                  ? currentLanguage === 'en'
-                    ? 'Saving...'
-                    : 'جار الحفظ...'
-                  : currentLanguage === 'en'
-                    ? 'Save'
-                    : 'حفظ'
-              }}
+              {{ isSaving ? 'Saving...' : 'Save' }}
             </button>
             <button type="button" @click="$emit('close')" class="action-button secondary">
-              {{ currentLanguage === 'en' ? 'Cancel' : 'إلغاء' }}
+              Cancel
             </button>
           </div>
         </form>
@@ -150,8 +157,11 @@ const handleSubmit = () => {
   background-color: rgba(0, 0, 0, 0.6);
   display: flex;
   justify-content: center;
-  align-items: center;
+  align-items: flex-start;
   z-index: 1000;
+  overflow-y: auto;
+  padding: 3rem 1rem;
+  box-sizing: border-box;
 }
 .modal-content {
   background: white;
@@ -160,6 +170,7 @@ const handleSubmit = () => {
   max-width: 500px;
   width: 100%;
   position: relative;
+  margin: auto;
 }
 .close-button {
   position: absolute;
@@ -169,46 +180,23 @@ const handleSubmit = () => {
   border: none;
   font-size: 2em;
   cursor: pointer;
+  color: #aaa;
 }
-.modal-title {
-  text-align: center;
-  margin-bottom: 25px;
+.modal-title { text-align: center; margin-bottom: 25px; font-size: 1.5rem; font-weight: 600; }
+.patient-form { display: flex; flex-direction: column; gap: 15px; }
+.form-group label { display: block; margin-bottom: 5px; font-weight: 600; }
+.checkbox-group label { display: flex; align-items: center; gap: 10px; font-weight: 500; cursor: pointer; }
+.checkbox-group input[type='checkbox'] { width: 1.25rem; height: 1.25rem; accent-color: #8d99ae; }
+.form-group input, .form-group textarea, .form-group select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+.modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee; }
+.action-button { padding: 10px 20px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: white; background-color: #8d99ae; }
+.action-button.secondary { background-color: #6c757d; }
+.action-button:disabled { background-color: #ccc; cursor: not-allowed; }
+.pregnancy-section {
+  border-top: 1px solid #f0f0f0;
+  border-bottom: 1px solid #f0f0f0;
+  padding: 15px 0;
 }
-.patient-form {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 5px;
-  font-weight: 600;
-}
-.form-group input,
-.form-group textarea,
-.form-group select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  box-sizing: border-box;
-}
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 10px;
-  margin-top: 20px;
-}
-.action-button {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  color: white;
-  background-color: #8d99ae;
-}
-.action-button.secondary {
-  background-color: #6c757d;
-}
+.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.3s ease; }
+.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
 </style>

@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, computed } from 'vue'
+import { ref, watch, computed, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDatabaseStore } from '@/stores/database'
@@ -14,7 +14,7 @@ import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
 const authStore = useAuthStore()
 const databaseStore = useDatabaseStore()
 const router = useRouter()
-const currentLanguage = ref('en') // Assuming language management
+const currentLanguage = inject('currentLanguage')// Assuming language management
 
 // State management
 const patients = ref([])
