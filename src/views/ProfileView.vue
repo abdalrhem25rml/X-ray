@@ -37,19 +37,29 @@ const fetchFullProfile = async () => {
   isLoading.value = true
   try {
     const patientData = await databaseStore.fetchPatientProfile(userId.value)
-    let birthDateString = ''
-    if (patientData?.birthDate) {
-      birthDateString = typeof patientData.birthDate.toDate === 'function'
-        ? patientData.birthDate.toDate().toISOString().split('T')[0]
-        : new Date(patientData.birthDate).toISOString().split('T')[0]
-    }
+
+    // --- FIX: This helper function robustly handles any date format ---
+    const toDateString = (firestoreDate) => {
+        if (!firestoreDate) return '';
+        // Handles Firestore Timestamps, JS Dates, and date strings
+        const dateObj = typeof firestoreDate.toDate === 'function' ? firestoreDate.toDate() : new Date(firestoreDate);
+        if (isNaN(dateObj)) return ''; // Return empty string for invalid dates
+        return dateObj.toISOString().split('T')[0];
+    };
+
     userProfile.value = {
-      displayName: authStore.user.displayName, email: authStore.user.email, role: authStore.role,
-      birthDate: birthDateString, gender: patientData?.gender || '',
-      allergies: patientData?.allergies || [], medicalHistory: patientData?.medicalHistory || [],
+      displayName: authStore.user.displayName,
+      email: authStore.user.email,
+      role: authStore.role,
+      birthDate: toDateString(patientData?.birthDate),
+      gender: patientData?.gender || '',
+      isPregnant: patientData?.isPregnant || false,
+      estimatedDueDate: toDateString(patientData?.estimatedDueDate),
+      allergies: patientData?.allergies || [],
+      medicalHistory: patientData?.medicalHistory || [],
     }
   } catch (error) {
-    console.error('Error fetching combined user profile:', error)
+    console.error('[ProfileView] Error fetching full user profile:', error)
   } finally {
     isLoading.value = false
   }
@@ -58,65 +68,60 @@ const fetchFullProfile = async () => {
 const fetchScans = async () => {
   if (!userId.value) return
   const scans = await databaseStore.fetchScansForPatient(userId.value)
-  if (scans) {
-    personalScans.value = scans
-  }
+  if (scans) { personalScans.value = scans }
 }
 
 // --- CRUD Handlers ---
 const onProfileSaved = async (formData) => {
   if (!userId.value) return
-  // Logic for profile saving...
-  await fetchFullProfile()
+  try {
+    await databaseStore.createUserProfile(userId.value, authStore.user.email, authStore.user.displayName, formData.role)
+    authStore.role = formData.role
+    const patientUpdates = {
+      displayName: authStore.user.displayName,
+      birthDate: new Date(formData.birthDate),
+      gender: formData.gender,
+      isPregnant: formData.isPregnant,
+      estimatedDueDate: formData.isPregnant && formData.estimatedDueDate ? new Date(formData.estimatedDueDate) : null,
+      allergies: formData.allergies ? formData.allergies.split(',').map((s) => s.trim()).filter(Boolean) : [],
+      medicalHistory: formData.medicalHistory ? formData.medicalHistory.split(',').map((s) => s.trim()).filter(Boolean) : [],
+    }
+    await databaseStore.createPatientProfile(userId.value, patientUpdates)
+    showProfileFormModal.value = false
+    await fetchFullProfile()
+  } catch (error) {
+    console.error('[ProfileView] A critical error occurred during profile save:', error)
+    alert('Failed to save profile. Please check the console for details.')
+  }
 }
 
 const handleSaveScan = async (scanDataFromModal) => {
   if (!userId.value) return
-
   const dataToSave = {
-    patientId: userId.value,
-    scanType: scanDataFromModal.scanType,
-    scanDate: new Date(scanDataFromModal.scanDate),
-    patientDose: Number(scanDataFromModal.patientDose),
-    doctorDose: 0,
-    reason: scanDataFromModal.reason,
-    notes: scanDataFromModal.notes,
+    patientId: userId.value, scanType: scanDataFromModal.scanType, scanDate: new Date(scanDataFromModal.scanDate),
+    patientDose: Number(scanDataFromModal.patientDose), doctorDose: 0, reason: scanDataFromModal.reason, notes: scanDataFromModal.notes,
   }
-
-  let success = false;
-  if (scanDataFromModal.id) {
-    // Editing an existing scan
-    success = await databaseStore.updateScan(scanDataFromModal.id, dataToSave);
-  } else {
-    // Creating a new scan
-    const newScanId = await databaseStore.createScan(dataToSave);
-    success = !!newScanId; // Convert returned ID to boolean
-  }
-
+  const success = scanDataFromModal.id
+    ? await databaseStore.updateScan(scanDataFromModal.id, dataToSave)
+    : !!await databaseStore.createScan(dataToSave)
   if (success) {
-    showScanFormModal.value = false;
-    await fetchScans();
-    if (triggerMsvRecalculation) {
-      triggerMsvRecalculation();
-    }
+    showScanFormModal.value = false
+    await fetchScans()
+    if (triggerMsvRecalculation) triggerMsvRecalculation()
   } else {
-    alert(`Failed to save scan: ${databaseStore.error}`);
+    alert(`Failed to save scan: ${databaseStore.error}`)
   }
 }
 
 const handleDeleteScan = async () => {
   if (!scanToDelete.value?.id) return
-
-  const success = await databaseStore.deleteScan(scanToDelete.value.id);
-
+  const success = await databaseStore.deleteScan(scanToDelete.value.id)
   if (success) {
-    showDeleteModal.value = false;
-    await fetchScans();
-    if (triggerMsvRecalculation) {
-      triggerMsvRecalculation();
-    }
+    showDeleteModal.value = false
+    await fetchScans()
+    if (triggerMsvRecalculation) triggerMsvRecalculation()
   } else {
-    alert(`Failed to delete scan: ${databaseStore.error}`);
+    alert(`Failed to delete scan: ${databaseStore.error}`)
   }
 }
 
@@ -127,9 +132,7 @@ const openDeleteConfirmation = (scan) => { scanToDelete.value = scan; showDelete
 
 // --- Lifecycle Hook ---
 onMounted(() => {
-  watch(
-    () => authStore.isAuthReady,
-    (isReady) => {
+  watch(() => authStore.isAuthReady, (isReady) => {
       if (isReady && userId.value) {
         fetchFullProfile()
         fetchScans()
@@ -145,153 +148,108 @@ onMounted(() => {
     <div class="profile-section card">
       <div class="card-header">
         <h2>{{ currentLanguage === 'en' ? 'My Profile' : 'ملفي الشخصي' }}</h2>
-        <button @click="showProfileFormModal = true" class="action-button edit-profile-button">
-          {{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}
-        </button>
+        <button @click="showProfileFormModal = true" class="action-button">{{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}</button>
       </div>
       <div v-if="isLoading" class="loading-state">Loading profile...</div>
       <div v-else-if="userProfile" class="profile-details">
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong>
-          {{ userProfile.displayName }}
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong>
-          {{ userProfile.email }}
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong>
-          <span class="role-tag" v-if="userProfile.role === 'doctor'">
-            {{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}
-          </span>
-          <span class="role-tag" v-else-if="userProfile.role === 'patient'">
-            {{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}
-          </span>
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong>
-          {{ userProfile.birthDate }}
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong>
-          <span v-if="userProfile.gender === 'male'">
-            {{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}
-          </span>
-          <span v-else-if="userProfile.gender === 'female'">
-            {{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}
-          </span>
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong>
-          {{ userProfile.allergies?.join(', ') || 'None' }}
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ الطبي:' }}</strong>
-          {{ userProfile.medicalHistory?.join(', ') || 'None' }}
-        </p>
-      </div>
-      <div v-else class="loading-state">
-        {{ currentLanguage === 'en' ? 'Could not load profile data.' : 'تعذر تحميل بيانات الملف الشخصي.' }}
+        <p><strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong><span>{{ userProfile.displayName }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong><span>{{ userProfile.email }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong><span class="role-tag" v-if="userProfile.role === 'doctor'">{{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}</span><span class="role-tag" v-else>{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong><span>{{ userProfile.birthDate }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong><span v-if="userProfile.gender === 'male'">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</span><span v-else-if="userProfile.gender === 'female'">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</span></p>
+        <p v-if="userProfile.gender === 'female'"><strong>{{ currentLanguage === 'en' ? 'Pregnant: ' : 'حامل: ' }}</strong><span v-if="userProfile.isPregnant">{{ currentLanguage === 'en' ? 'Yes' : 'نعم' }} ({{ currentLanguage === 'en' ? 'Due:' : 'المتوقع:' }} {{ userProfile.estimatedDueDate }})</span><span v-else>{{ currentLanguage === 'en' ? 'No' : 'لا' }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong><span>{{ userProfile.allergies?.join(', ') || 'None' }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ الطبي:' }}</strong><span>{{ userProfile.medicalHistory?.join(', ') || 'None' }}</span></p>
       </div>
     </div>
 
     <div class="history-section card">
       <div class="card-header">
         <h2>{{ currentLanguage === 'en' ? 'Personal Scan History' : 'تاريخ الفحوصات الشخصية' }}</h2>
-        <button @click="openAddScanModal" class="action-button add-scan-button">
-          {{ currentLanguage === 'en' ? 'Add Personal Scan' : 'إضافة فحص شخصي' }}
-        </button>
+        <button @click="openAddScanModal" class="action-button">{{ currentLanguage === 'en' ? 'Add Personal Scan' : 'إضافة فحص شخصي' }}</button>
       </div>
-      <HistoryTable
-        :scans="personalScans"
-        :is-loading="databaseStore.loading"
-        :is-personal-view="true"
-        @edit="openEditScanModal"
-        @delete="openDeleteConfirmation"
-      />
+      <HistoryTable :scans="personalScans" :is-loading="databaseStore.loading" :is-personal-view="true" @edit="openEditScanModal" @delete="openDeleteConfirmation" />
     </div>
 
-    <ProfileFormModal
-      :show="showProfileFormModal"
-      :profile-data="userProfile"
-      @close="showProfileFormModal = false"
-      @save="onProfileSaved"
-    />
-
-    <PersonalScanFormModal
-      :show="showScanFormModal"
-      :scan="scanToEdit"
-      :is-saving="databaseStore.loading"
-      @close="showScanFormModal = false"
-      @save="handleSaveScan"
-    />
-
-    <ConfirmDeleteModal
-      :show="showDeleteModal"
-      :title="currentLanguage === 'en' ? 'Delete Scan' : 'حذف الفحص'"
-      :message="currentLanguage === 'en' ? 'Are you sure you want to delete this scan?' : 'هل أنت متأكد من رغبتك في حذف هذا الفحص؟'"
-      @close="showDeleteModal = false"
-      @confirm="handleDeleteScan"
-    />
+    <ProfileFormModal :show="showProfileFormModal" :profile-data="userProfile" @close="showProfileFormModal = false" @save="onProfileSaved" />
+    <PersonalScanFormModal :show="showScanFormModal" :scan="scanToEdit" :is-saving="databaseStore.loading" @close="showScanFormModal = false" @save="handleSaveScan" />
+    <ConfirmDeleteModal :show="showDeleteModal" :title="'Delete Scan'" :message="'Are you sure you want to delete this scan?'" @close="showDeleteModal = false" @confirm="handleDeleteScan" />
 
     <div class="switch-link-container">
-      <a href="#" @click.prevent="router.push('/dashboard')">
-        {{ currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم' }}
-      </a>
+      <a href="#" @click.prevent="router.push('/dashboard')">{{ currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم' }}</a>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* Desktop-first styles */
 .profile-page {
-  padding: 30px;
-  max-width: 1200px;
+  padding: 2rem;
+  max-width: 1100px;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 2rem;
 }
+
 .card {
   background: white;
-  padding: 30px;
+  padding: 2rem;
   border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  border: 1px solid #e9ecef;
 }
+
+/* Flex row for title + button */
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 25px;
-  border-bottom: 1px solid #f0f0f0;
-  padding-bottom: 15px;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #e9ecef;
+  padding-bottom: 1rem;
 }
+
 .card-header h2 {
-  color: #8d99ae;
-  font-size: 1.8em;
+  color: #343a40;
+  font-size: 1.5em;
   margin: 0;
 }
-.loading-state {
-  text-align: center;
-  color: #888;
-  padding: 40px;
-  font-size: 1.2em;
-}
+
 .profile-details {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 15px 30px;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem 2rem;
+  background-color: #f8f9fa;
+  padding: 1.5rem;
+  border-radius: 8px;
 }
+
+/* Label + value block in two-column layout */
 .profile-details p {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #e9ecef;
+  padding: 0.75rem 0;
   margin: 0;
-  font-size: 1.1em;
-  color: #495057;
-  line-height: 1.6;
+  font-size: 1rem;
 }
+
+.profile-details p:last-child {
+  border-bottom: none;
+}
+
 .profile-details strong {
-  color: #343a40;
-  margin-right: 8px;
+  color: #495057;
+  padding-right: 1rem;
 }
+
+.profile-details span {
+  text-align: right;
+  color: #212529;
+  word-break: break-word;
+}
+
 .role-tag {
   background-color: #e0e6ed;
   color: #6a7483;
@@ -299,8 +257,8 @@ onMounted(() => {
   border-radius: 15px;
   font-size: 0.9em;
   font-weight: 600;
-  text-transform: capitalize;
 }
+
 .action-button {
   background-color: #8d99ae;
   color: white;
@@ -311,29 +269,74 @@ onMounted(() => {
   font-size: 0.95em;
   font-weight: 600;
   transition: all 0.2s ease;
-  margin: 10px;
 }
+
 .action-button:hover {
   background-color: #6a7483;
   transform: translateY(-2px);
 }
-.edit-profile-button,
-.add-scan-button {
-  background-color: #8d99ae;
-}
-.edit-profile-button:hover,
-.add-scan-button:hover {
-  background-color: #6a7483;
-}
+
 .switch-link-container {
   text-align: center;
-  padding-bottom: 1rem;
+  padding: 1rem 0;
 }
+
 a {
   color: #8d99ae;
   text-decoration: none;
   font-weight: 600;
-  transition: color 0.3s ease;
-  font-size: 16.5px;
+}
+
+/* ---------- RESPONSIVE STYLES ----------- */
+@media (max-width: 767px) {
+  .profile-page {
+    padding: 1rem;
+    gap: 1.5rem;
+  }
+
+  .card {
+    padding: 1.25rem;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.75rem;
+  }
+
+  .card-header h2 {
+    font-size: 1.35em;
+  }
+
+  .action-button {
+    width: 100%;
+    padding: 12px;
+    font-size: 1em;
+    text-align: center;
+  }
+
+  .profile-details {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+
+  .profile-details p {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.5rem 0;
+  }
+
+  .profile-details strong {
+    padding-right: 0;
+    margin-bottom: 0.25rem;
+  }
+
+  .profile-details span {
+    text-align: left;
+  }
+
+  .switch-link-container {
+    margin-top: 20px;
+  }
 }
 </style>
