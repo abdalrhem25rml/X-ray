@@ -14,7 +14,7 @@ const databaseStore = useDatabaseStore()
 const currentLanguage = ref('en')
 const showInfoModal = ref(false)
 const currentMsv = ref(0)
-const doseLimit = ref(20) // Default to the highest possible limit, will be adjusted
+const doseLimit = ref(20)
 const isMsvLoading = ref(true)
 
 const toggleLanguage = () => {
@@ -24,10 +24,25 @@ const toggleInfoModal = () => {
   showInfoModal.value = !showInfoModal.value
 }
 
+// ✅ FIX: Create a robust helper function to handle different date formats.
 /**
- * The final, robust dose calculation engine. It now correctly handles concurrent
- * occupational and fetal dose limits, and correctly sums personal vs. occupational dose for doctors.
+ * Safely converts a value into a JavaScript Date object.
+ * Handles Firestore Timestamps (which have a .toDate() method) and date strings.
+ * @param {object | string} firestoreDate - The value to convert.
+ * @returns {Date | null} A Date object or null if the input is invalid.
  */
+const getJsDate = (firestoreDate) => {
+  if (!firestoreDate) return null;
+  // If it's a Firestore Timestamp object, it will have a toDate method.
+  if (typeof firestoreDate.toDate === 'function') {
+    return firestoreDate.toDate();
+  }
+  // Otherwise, assume it's a string and try to parse it.
+  const date = new Date(firestoreDate);
+  // Return the date only if it's a valid date.
+  return !isNaN(date.getTime()) ? date : null;
+}
+
 const updateDoseCalculation = async () => {
   if (!authStore.user || !authStore.role) {
     currentMsv.value = 0
@@ -53,16 +68,17 @@ const updateDoseCalculation = async () => {
     }
 
     const yearStart = new Date(new Date().getFullYear(), 0, 1)
-    const scansThisYear = allUserScans.filter((scan) => scan.scanDate.toDate() >= yearStart)
+    // ✅ FIX: Use the robust getJsDate helper to filter scans.
+    const scansThisYear = allUserScans.filter((scan) => {
+      const scanDate = getJsDate(scan.scanDate);
+      return scanDate && scanDate >= yearStart;
+    });
 
     if (role === 'doctor') {
-      // --- FIX: Correctly calculate total dose for a doctor ---
       const occupationalDoseThisYear = scansThisYear.reduce((sum, scan) => {
-        // If it's a personal scan for the doctor, use their patient dose.
         if (scan.isPersonalScan) {
           return sum + (scan.patientDose || 0);
         }
-        // Otherwise, use the occupational dose from treating another patient.
         return sum + (scan.doctorDose || 0);
       }, 0);
 
@@ -71,11 +87,15 @@ const updateDoseCalculation = async () => {
       const activePregnancy = pregnancies?.find((p) => p.status === 'active')
 
       if (activePregnancy) {
-        const scansSinceDeclaration = allUserScans.filter(
-          (scan) => scan.scanDate.toDate() >= activePregnancy.declarationDate.toDate(),
-        )
+        // ✅ FIX: Use the robust getJsDate helper here as well.
+        const scansSinceDeclaration = allUserScans.filter((scan) => {
+            const scanDate = getJsDate(scan.scanDate);
+            const declarationDate = getJsDate(activePregnancy.declarationDate);
+            return scanDate && declarationDate && scanDate >= declarationDate;
+        });
+
         const doseSinceDeclaration = scansSinceDeclaration.reduce(
-          (sum, scan) => sum + (scan.doctorDose || 0), // Pregnancy limit only applies to occupational dose
+          (sum, scan) => sum + (scan.doctorDose || 0),
           0,
         )
         const remainingPregnancyLimit = 0.5 - doseSinceDeclaration

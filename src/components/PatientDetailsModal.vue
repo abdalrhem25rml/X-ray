@@ -1,163 +1,375 @@
 <script setup>
-import { ref, watch, inject } from 'vue'
-import { useDatabaseStore } from '@/stores/database' // Import the database store
+import { ref, watch, inject, computed } from 'vue'
+import { useDatabaseStore } from '@/stores/database'
 
-// Import child components
+// Import the child components this modal uses
 import ScanFormModal from './ScanFormModal.vue'
-import HistoryTable from './HistoryTable.vue'
+import ConfirmDeleteModal from './ConfirmDeleteModal.vue'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 const props = defineProps({
   show: Boolean,
-  patient: {
-    type: Object,
-    default: () => null,
-  },
+  patient: Object,
 })
 
-const emit = defineEmits(['close', 'scanAdded'])
+const emit = defineEmits(['close'])
 
-const databaseStore = useDatabaseStore() // Initialize the store
+const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
 
-// Local State
-const showScanFormModal = ref(false)
-const patientScans = ref([])
-const isLoadingScans = ref(false)
-const scanToEdit = ref(null) // For editing functionality
+// State for this modal
+const scans = ref([])
+const scanToEdit = ref(null)
+const scanToDelete = ref(null)
 
-// --- DATA FETCHING ---
-const fetchPatientScans = async () => {
-  if (!props.patient?.id) {
-    patientScans.value = []
+// Modal visibility control
+const showScanFormModal = ref(false)
+const showConfirmDeleteModal = ref(false)
+
+const patientId = computed(() => props.patient?.id)
+
+// --- Data Fetching ---
+const fetchScans = async () => {
+  if (!patientId.value) {
+    scans.value = []
     return
   }
-  isLoadingScans.value = true
-  try {
-    // We can re-use the existing store action here
-    const scans = await databaseStore.fetchScansForPatient(props.patient.id)
-    if (scans) {
-      patientScans.value = scans
-    }
-  } catch (error) {
-    console.error('Error fetching patient scans:', error)
-  } finally {
-    isLoadingScans.value = false
+  const fetchedScans = await databaseStore.fetchScansForPatient(patientId.value)
+  if (fetchedScans) {
+    scans.value = fetchedScans
   }
 }
 
-// --- FIX: This is the corrected save logic ---
-const handleSavePatientScan = async (scanDataFromModal) => {
-  if (!props.patient?.id) {
-    alert('Cannot save scan: Patient ID is missing.')
-    return
+// When the modal is shown, fetch the scans for the selected patient
+watch(
+  () => props.show,
+  (isShown) => {
+    if (isShown && patientId.value) {
+      fetchScans()
+    }
+  },
+)
+
+// --- Action Handlers ---
+const handleSavePatientScan = async (scanDataFromForm) => {
+  // ✅ THE FIX: Deconstruct the incoming form data and map it to the correct schema.
+  const {
+    id,
+    patientId,
+    isPregnant,
+    pregnancyMonth,
+    scanType,
+    scanDate,
+    dose, // This is the field from the form
+    doctorDose,
+    reason,
+    notes,
+    doctorAdditionalContext,
+  } = scanDataFromForm
+
+  // Create a clean payload that matches your Firestore schema EXACTLY.
+  const payload = {
+    patientId: patientId,
+    isPregnant: isPregnant,
+    pregnancyMonth: pregnancyMonth,
+    scanType: scanType,
+    scanDate: scanDate,
+    patientDose: dose, // Map 'dose' from form to 'patientDose' for the database
+    doctorDose: doctorDose,
+    reason: reason,
+    notes: notes,
+    doctorAdditionalContext: doctorAdditionalContext,
   }
 
-  // 1. Prepare the data object with the correct patientId
-  const dataToSave = {
-    ...scanDataFromModal,
-    patientId: props.patient.id, // Ensure the patientId is always set
-  }
-
-  // 2. Call the centralized database store action
-  let success = false;
-  if (scanDataFromModal.id) {
+  let success = false
+  if (id) {
     // Editing an existing scan
-    success = await databaseStore.updateScan(scanDataFromModal.id, dataToSave);
+    success = await databaseStore.updateScan(id, payload)
   } else {
-    // Creating a new scan
-    const newScanId = await databaseStore.createScan(dataToSave);
-    success = !!newScanId;
+    // Creating a new scan with the clean, schema-compliant payload
+    success = await databaseStore.createScan(payload)
   }
 
-  // 3. Handle the result
   if (success) {
     showScanFormModal.value = false
-    await fetchPatientScans() // Refresh the scan list in the modal
-    emit('scanAdded') // Notify the parent view if needed
+    await fetchScans() // Refresh the scan list
   } else {
-    console.error('Error saving patient scan:', databaseStore.error)
-    alert(`Failed to save scan. Error: ${databaseStore.error}`)
+    alert(
+      `${currentLanguage.value === 'en' ? 'Error saving patient scan:' : 'خطأ في حفظ فحص المريض:'} ${databaseStore.error}`,
+    )
   }
 }
 
-// --- Modal Controls ---
-const openAddScanModal = () => {
+const handleDeleteScan = async () => {
+  if (!scanToDelete.value?.id) return
+  const success = await databaseStore.deleteScan(scanToDelete.value.id)
+  if (success) {
+    showConfirmDeleteModal.value = false
+    await fetchScans() // Refresh the scan list
+  } else {
+    alert(
+      `${currentLanguage.value === 'en' ? 'Error deleting scan:' : 'خطأ في حذف الفحص:'} ${databaseStore.error}`,
+    )
+  }
+}
+
+// --- Modal Control Functions ---
+function openAddScanModal() {
   scanToEdit.value = null
   showScanFormModal.value = true
 }
 
-const openEditScanModal = (scan) => {
-  scanToEdit.value = scan
+function openEditScanModal(scan) {
+  // When editing, we need to map the data back for the form
+  const scanForForm = {
+    ...scan,
+    dose: scan.patientDose, // Map 'patientDose' from DB to 'dose' for the form
+  }
+  scanToEdit.value = scanForForm
   showScanFormModal.value = true
 }
 
-// When the modal is shown, fetch the patient's scan history
-watch(() => props.show, (isShown) => {
-    if (isShown) {
-        fetchPatientScans()
-    }
-})
+function openConfirmDeleteScanModal(scan) {
+  scanToDelete.value = scan
+  showConfirmDeleteModal.value = true
+}
 
-// Helper function to format dates
+// Helper to format Firestore Timestamps
 const formatDate = (timestamp) => {
-  if (!timestamp) return 'N/A'
-  return timestamp.toDate ? timestamp.toDate().toLocaleDateString() : new Date(timestamp).toLocaleDateString()
+  if (!timestamp || !timestamp.toDate) return 'N/A'
+  return timestamp.toDate().toLocaleDateString()
 }
 </script>
 
 <template>
   <Transition name="modal-fade">
     <div v-if="show" class="modal-overlay" @click.self="$emit('close')">
-      <div class="modal-content" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-        <button class="close-button" @click="$emit('close')">&times;</button>
+      <div class="modal-content-details" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+        <button class="close-modal-button" @click="$emit('close')">&times;</button>
 
         <div v-if="patient">
-          <h3 class="modal-title">{{ patient.displayName }}</h3>
-          <div class="patient-details-grid">
-            <p><strong>Birth Date:</strong> {{ formatDate(patient.birthDate) }}</p>
-            <p><strong>Gender:</strong> {{ patient.gender }}</p>
-            <p><strong>Allergies:</strong> {{ patient.allergies?.join(', ') || 'None' }}</p>
-            <p><strong>History:</strong> {{ patient.medicalHistory?.join(', ') || 'None' }}</p>
-          </div>
+          <h3>
+            {{ currentLanguage === 'en' ? 'Scan History for' : 'سجل الفحوصات لـ' }}
+            <strong>{{ patient.name }}</strong>
+          </h3>
+          <p>
+            {{
+              currentLanguage === 'en'
+                ? 'Review past scans or add a new record.'
+                : 'مراجعة الفحوصات السابقة أو إضافة سجل جديد.'
+            }}
+          </p>
 
-          <div class="scan-history-section">
-            <div class="section-header">
-              <h4>Scan History</h4>
-              <button @click="openAddScanModal" class="action-button primary">Add Scan</button>
+          <button @click="openAddScanModal" class="add-scan-button">
+            <font-awesome-icon icon="plus" />
+            {{ currentLanguage === 'en' ? 'Add New Scan' : 'إضافة فحص جديد' }}
+          </button>
+
+          <div class="scans-list-container">
+            <div v-if="databaseStore.loading" class="loading-message">
+              <font-awesome-icon icon="spinner" spin />
+              {{ currentLanguage === 'en' ? 'Loading scans...' : 'جاري تحميل الفحوصات...' }}
             </div>
-            <HistoryTable
-              :scans="patientScans"
-              :is-loading="isLoadingScans"
-              :is-personal-view="false"
-              @edit="openEditScanModal"
-            />
+            <div v-else-if="scans.length === 0" class="no-scans-message">
+              {{
+                currentLanguage === 'en'
+                  ? 'No scans recorded for this patient yet.'
+                  : 'لا توجد فحوصات مسجلة لهذا المريض بعد.'
+              }}
+            </div>
+            <ul v-else class="scans-list">
+              <li v-for="scan in scans" :key="scan.id" class="scan-item">
+                <div class="scan-info">
+                  <span class="scan-type">{{ scan.scanType }}</span>
+                  <span class="scan-date">{{ formatDate(scan.scanDate) }}</span>
+                  <span class="scan-dose">
+                    {{ currentLanguage === 'en' ? 'Dose:' : 'الجرعة:' }} {{ scan.patientDose }} mSv
+                  </span>
+                </div>
+                <div class="scan-actions">
+                  <button @click="openEditScanModal(scan)" class="action-button-icon edit-button">
+                    <font-awesome-icon icon="edit" />
+                  </button>
+                  <button
+                    @click="openConfirmDeleteScanModal(scan)"
+                    class="action-button-icon delete-button"
+                  >
+                    <font-awesome-icon icon="trash-alt" />
+                  </button>
+                </div>
+              </li>
+            </ul>
           </div>
         </div>
       </div>
     </div>
   </Transition>
 
-  <!-- Nested Scan Form Modal -->
+  <!-- Child Modals -->
   <ScanFormModal
     :show="showScanFormModal"
+    :patient="patient"
     :scan="scanToEdit"
     :is-saving="databaseStore.loading"
     @close="showScanFormModal = false"
     @save="handleSavePatientScan"
   />
+
+  <ConfirmDeleteModal
+    :show="showConfirmDeleteModal"
+    :title="currentLanguage === 'en' ? 'Delete Scan' : 'حذف الفحص'"
+    :message="`${currentLanguage === 'en' ? 'Are you sure you want to delete this scan from' : 'هل أنت متأكد من حذف هذا الفحص بتاريخ'} ${formatDate(scanToDelete?.scanDate)}?`"
+    @close="showConfirmDeleteModal = false"
+    @confirm="handleDeleteScan"
+  />
 </template>
 
 <style scoped>
-/* All modal styles remain the same */
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; justify-content: center; align-items: flex-start; z-index: 1000; overflow-y: auto; padding: 3rem 1rem; }
-.modal-content { background: white; padding: 2rem; border-radius: 12px; max-width: 800px; width: 100%; margin: auto 0; position: relative; }
-.close-button { position: absolute; top: 10px; right: 15px; background: none; border: none; font-size: 1.5rem; cursor: pointer; }
-.modal-title { text-align: center; margin-bottom: 1.5rem; font-size: 1.8rem; }
-.patient-details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem; background: #f8f9fa; padding: 1rem; border-radius: 8px; }
-.patient-details-grid p { margin: 0; }
-.scan-history-section { margin-top: 2rem; }
-.section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-.action-button.primary { background-color: #8d99ae; color: white; padding: 8px 15px; border-radius: 6px; border: none; cursor: pointer; }
-.modal-fade-enter-active, .modal-fade-leave-active { transition: opacity 0.3s ease; }
-.modal-fade-enter-from, .modal-fade-leave-to { opacity: 0; }
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+.modal-content-details {
+  background-color: white;
+  padding: 30px 40px;
+  border-radius: 12px;
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+.close-modal-button {
+  position: absolute;
+  top: 15px;
+  right: 20px;
+  background: none;
+  border: none;
+  font-size: 2.5em;
+  line-height: 1;
+  cursor: pointer;
+  color: #aaa;
+}
+.close-modal-button:hover {
+  color: #333;
+}
+h3 {
+  text-align: center;
+  margin-bottom: 10px;
+  font-size: 1.8em;
+  color: #333;
+}
+h3 strong {
+  color: #8d99ae;
+  font-weight: 700;
+}
+p {
+  text-align: center;
+  margin-bottom: 30px;
+  color: #666;
+  font-size: 1.1em;
+}
+.add-scan-button {
+  display: block;
+  margin: 0 auto 30px auto;
+  background-color: #8d99ae;
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 1.05em;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.add-scan-button:hover {
+  background-color: #6a7483;
+}
+.add-scan-button .svg-inline--fa {
+  margin-inline-end: 8px;
+}
+.scans-list-container {
+  min-height: 150px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 20px;
+  background-color: #f8f9fa;
+}
+.loading-message,
+.no-scans-message {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100px;
+  color: #8d99ae;
+  font-size: 1.2em;
+}
+.scans-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.scan-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  background-color: white;
+  border-radius: 6px;
+  border: 1px solid #dee2e6;
+  transition: box-shadow 0.2s;
+}
+.scan-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+.scan-info {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 1.1em;
+}
+.scan-type {
+  font-weight: 600;
+  color: #495057;
+  min-width: 80px;
+}
+.scan-date {
+  color: #6c757d;
+}
+.scan-dose {
+  color: #d9534f;
+  font-weight: 500;
+}
+.scan-actions {
+  display: flex;
+  gap: 10px;
+}
+.action-button-icon {
+  background: none;
+  border: none;
+  color: #adb5bd;
+  font-size: 1.3em;
+  cursor: pointer;
+  padding: 5px;
+  transition: color 0.2s;
+}
+.action-button-icon.edit-button:hover {
+  color: #f0ad4e;
+}
+.action-button-icon.delete-button:hover {
+  color: #d9534f;
+}
 </style>

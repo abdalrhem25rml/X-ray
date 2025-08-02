@@ -4,7 +4,7 @@ import { h } from 'vue' // Import the 'h' function for creating VNodes
 import SignupView from '@/views/SignupView.vue'
 import SigninView from '@/views/SigninView.vue' // Ensure this is the correct login view
 import RecommendView from '@/views/RecommendView.vue'
-import PatientListView from '@/views/PatientListView.vue'
+import PatientsView from '@/views/PatientsView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import ResetPasswordView from '@/views/ResetPasswordView.vue' // Import the new component
 import HistoryView from '@/views/HistoryView.vue'
@@ -40,7 +40,7 @@ const router = createRouter({
     {
       path: '/patients',
       name: 'patients',
-      component: PatientListView,
+      component: PatientsView,
       meta: { requiresAuth: true }, // Uncomment this later if you want to protect this route
     },
     {
