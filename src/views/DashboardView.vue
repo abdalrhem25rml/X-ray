@@ -6,34 +6,27 @@ import { useDatabaseStore } from '@/stores/database'
 import { Timestamp } from 'firebase/firestore'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
-// --- Pinia Stores ---
 const authStore = useAuthStore()
 const databaseStore = useDatabaseStore()
 const router = useRouter()
 
-// --- Local State for the form ONLY ---
 const userProfileForm = ref({
-  role: null,
-  birthDate: '',
-  gender: '',
-  allergies: '',
-  medicalHistory: '',
+  role: null, birthDate: '', gender: '', allergies: '', medicalHistory: '',
 })
 
-// --- Computed Properties for UI ---
-const isLoading = computed(() => !authStore.isAuthReady)
+// ✅ FIX: The main loading screen now waits for BOTH auth to be ready AND the profile to finish loading.
+// This prevents the dashboard from rendering in an intermediate state.
+const isLoading = computed(() => !authStore.isAuthReady || authStore.isProfileLoading)
 
 const showProfileModal = computed(() => {
-  if (!authStore.isAuthReady) return false
+  // This logic is now safe because `isLoading` will be false before this is ever evaluated.
+  if (!authStore.user) return false
   return !authStore.isProfileComplete
 })
 
 const userRole = computed(() => authStore.role)
 const currentLanguage = inject('currentLanguage')
 
-/**
- * Saves the user's profile information.
- */
 const saveUserProfile = async () => {
   const { uid, email, displayName } = authStore.user
   const { role, birthDate, gender, allergies, medicalHistory } = userProfileForm.value
@@ -53,11 +46,9 @@ const saveUserProfile = async () => {
     medicalHistory: medicalHistory.split(',').map((s) => s.trim()).filter(Boolean),
   }
 
-  // Save the profile to the database
   const success = await databaseStore.setUserProfile(uid, profileData)
 
   if (success) {
-    // Manually update the authStore state for instant UI reactivity.
     authStore.setUserProfile(profileData)
   } else {
     alert(`Failed to save profile. Error: ${databaseStore.error}`)
@@ -78,9 +69,8 @@ const handleLogout = async () => {
       <font-awesome-icon icon="spinner" spin size="2x" />
     </div>
 
-    <!-- Main Content -->
+    <!-- Main Content (All template code from here down remains the same) -->
     <template v-else>
-      <!-- Profile Setup Modal -->
       <div v-if="showProfileModal" class="role-modal-backdrop">
         <div class="role-modal">
           <h2>{{ currentLanguage === 'en' ? 'Complete Your Profile' : 'أكمل ملفك الشخصي' }}</h2>
@@ -147,7 +137,6 @@ const handleLogout = async () => {
         </div>
       </div>
 
-      <!-- Main Dashboard Content -->
       <div class="dashboard-page dashboard-blur-area" :class="{ 'is-blurred': showProfileModal }">
         <main class="dashboard-main-content">
           <section class="dashboard-card">
@@ -225,6 +214,7 @@ const handleLogout = async () => {
 </template>
 
 <style scoped>
+/* All your previous styles remain the same */
 .role-modal-backdrop {
   position: fixed;
   top: 0;

@@ -21,6 +21,7 @@ export const useAuthStore = defineStore('auth', {
     loading: false,
     error: null,
     successMessage: null,
+    isProfileLoading: false,
   }),
   getters: {
     // Getter to easily check if the profile is complete
@@ -36,26 +37,34 @@ export const useAuthStore = defineStore('auth', {
       if (!auth) return
       this.authInstance = auth
 
-      onAuthStateChanged(this.authInstance, async (user) => {
+onAuthStateChanged(this.authInstance, async (user) => {
         if (user) {
           this.user = user
+          // ✅ 1. Set profile loading to TRUE before starting the fetch.
+          this.isProfileLoading = true
+          try {
+            const db = getFirestore()
+            const appId = import.meta.env.VITE_APP_ID
+            const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid)
+            const userDocSnap = await getDoc(userDocRef)
 
-          // Fetch the ENTIRE user profile document upon login
-          const db = getFirestore()
-          const appId = import.meta.env.VITE_APP_ID
-          const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid)
-          const userDocSnap = await getDoc(userDocRef)
-
-          if (userDocSnap.exists()) {
-            this.userProfile = userDocSnap.data()
-          } else {
-            this.userProfile = null // User exists in Auth, but no profile in DB yet
+            if (userDocSnap.exists()) {
+              this.userProfile = userDocSnap.data()
+            } else {
+              this.userProfile = null
+            }
+          } catch (error) {
+            console.error('Failed to fetch user profile:', error)
+            this.userProfile = null
+          } finally {
+            // ✅ 2. Set profile loading to FALSE after the fetch is complete.
+            this.isProfileLoading = false
           }
         } else {
-          // User is logged out, clear everything
           this.user = null
           this.userProfile = null
         }
+        // isAuthReady indicates the initial check is done.
         this.isAuthReady = true
       })
     },
