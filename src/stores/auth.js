@@ -1,4 +1,3 @@
-// stores/auth.js
 import { defineStore } from 'pinia'
 import {
   onAuthStateChanged,
@@ -16,67 +15,58 @@ import { getFirestore, doc, getDoc } from 'firebase/firestore'
 export const useAuthStore = defineStore('auth', {
   state: () => ({
     user: null,
+    userProfile: null, // Holds the full user profile from Firestore
     isAuthReady: false,
-    authInstance: null, // To store the auth instance passed from main.js
-    loading: false, // Loading state for auth operations
-    error: null, // Error message state
-    successMessage: null, // Success message state
+    authInstance: null,
+    loading: false,
+    error: null,
+    successMessage: null,
   }),
+  getters: {
+    // Getter to easily check if the profile is complete
+    isProfileComplete: (state) => {
+      // Profile is complete if the role AND birthDate fields exist.
+      return !!state.userProfile?.role && !!state.userProfile?.birthDate
+    },
+    // Getter for the role for easier access in components
+    role: (state) => state.userProfile?.role,
+  },
   actions: {
-    // Modify initAuth to accept the auth instance
     initAuth(auth) {
-      if (!auth) {
-        return
-      }
+      if (!auth) return
       this.authInstance = auth
 
-      // ✅ 3. The onAuthStateChanged listener is now upgraded
       onAuthStateChanged(this.authInstance, async (user) => {
         if (user) {
-          // User is logged in, store their main user object
           this.user = user
 
-          // NOW, fetch their role from the corresponding Firestore document
+          // Fetch the ENTIRE user profile document upon login
           const db = getFirestore()
           const appId = import.meta.env.VITE_APP_ID
           const userDocRef = doc(db, 'artifacts', appId, 'users', user.uid)
           const userDocSnap = await getDoc(userDocRef)
 
           if (userDocSnap.exists()) {
-            // If the document exists, set the role in our store
-            this.role = userDocSnap.data().role
+            this.userProfile = userDocSnap.data()
           } else {
-            // No custom user document yet, role is null
-            this.role = null
+            this.userProfile = null // User exists in Auth, but no profile in DB yet
           }
         } else {
           // User is logged out, clear everything
           this.user = null
-          this.role = null // Also clear the role
+          this.userProfile = null
         }
-        // Signal that the initial auth check is complete
         this.isAuthReady = true
       })
     },
 
+    // Action to manually update the local profile state after saving
+    setUserProfile(profileData) {
+      this.userProfile = profileData
+    },
+
     async logout() {
-      this.loading = true
-      this.error = null
-      this.successMessage = null
-      try {
-        if (this.authInstance) {
-          await signOut(this.authInstance)
-          this.user = null
-        } else {
-          console.warn('Auth instance not available for logout.')
-          this.error = 'Authentication service not available.'
-        }
-      } catch (err) {
-        console.error('Error logging out:', err)
-        this.error = err.message
-      } finally {
-        this.loading = false
-      }
+      await signOut(this.authInstance)
     },
 
     async signupWithEmail(name, email, password) {
@@ -94,7 +84,6 @@ export const useAuthStore = defineStore('auth', {
         this.successMessage = 'Account created successfully!'
         return true
       } catch (err) {
-        console.error('Error signing up with email:', err)
         this.error = err.message
         return false
       } finally {
@@ -111,7 +100,6 @@ export const useAuthStore = defineStore('auth', {
         this.user = userCredential.user
         return true
       } catch (err) {
-        console.error('Error signing in with email:', err)
         this.error = err.message
         return false
       } finally {
@@ -129,7 +117,6 @@ export const useAuthStore = defineStore('auth', {
         this.user = userCredential.user
         return true
       } catch (err) {
-        console.error('Error signing in with Google:', err)
         this.error = err.message
         return false
       } finally {
@@ -146,7 +133,6 @@ export const useAuthStore = defineStore('auth', {
         this.successMessage = 'Password reset link sent to your email!'
         return true
       } catch (err) {
-        console.error('Error sending password reset email:', err)
         this.error = err.message
         return false
       } finally {
@@ -164,7 +150,6 @@ export const useAuthStore = defineStore('auth', {
           'Your password has been reset successfully! You can now sign in with your new password.'
         return true
       } catch (err) {
-        console.error('Error confirming password reset:', err)
         this.error = err.message
         return false
       } finally {

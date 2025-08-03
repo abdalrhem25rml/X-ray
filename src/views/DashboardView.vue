@@ -1,19 +1,18 @@
 <script setup>
-import { ref, computed, watchEffect, inject } from 'vue'
+import { ref, computed, inject } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDatabaseStore } from '@/stores/database'
+import { Timestamp } from 'firebase/firestore'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
 // --- Pinia Stores ---
 const authStore = useAuthStore()
 const databaseStore = useDatabaseStore()
 const router = useRouter()
 
-// --- Local State ---
-const isLoading = ref(true) // Local loading state for profile check
-const showProfileModal = ref(false)
-const hasBeenChecked = ref(false) // ** FIX: Flag to prevent re-checking **
-const userProfile = ref({
+// --- Local State for the form ONLY ---
+const userProfileForm = ref({
   role: null,
   birthDate: '',
   gender: '',
@@ -21,102 +20,50 @@ const userProfile = ref({
   medicalHistory: '',
 })
 
-// --- Computed Properties for Reactivity ---
+// --- Computed Properties for UI ---
+const isLoading = computed(() => !authStore.isAuthReady)
+
+const showProfileModal = computed(() => {
+  if (!authStore.isAuthReady) return false
+  return !authStore.isProfileComplete
+})
+
 const userRole = computed(() => authStore.role)
 const currentLanguage = inject('currentLanguage')
 
 /**
- * Checks if the user's full profile is complete.
- * This effect runs ONCE after auth is ready to determine if the setup modal is needed.
- * It now includes a flag to prevent it from re-running on every navigation.
- */
-watchEffect(async () => {
-  // Wait until the initial authentication check is complete.
-  if (!authStore.isAuthReady) {
-    return
-  }
-
-  // ** FIX: If we have already performed the check, do not run it again. **
-  if (hasBeenChecked.value) {
-    isLoading.value = false // Ensure loading is off if we come back to the page.
-    return
-  }
-
-  // If there's no user, stop loading. The router guard will redirect.
-  if (!authStore.user) {
-    isLoading.value = false
-    hasBeenChecked.value = true // Mark as "checked" (nothing to verify).
-    return
-  }
-
-  // --- Perform the one-time verification ---
-  console.log('Performing one-time profile verification...')
-
-  // 1. Check if the role is already in the auth store (fast check).
-  if (!authStore.role) {
-    console.log('User role not found. Showing profile modal.')
-    showProfileModal.value = true
-  } else {
-    // 2. Role exists, now check for the detailed patient profile in the database.
-    const patientProfileData = await databaseStore.fetchPatientProfile(authStore.user.uid)
-    if (!patientProfileData || !patientProfileData.birthDate || !patientProfileData.gender) {
-      console.log('Patient details (birthDate/gender) not found. Showing profile modal.')
-      showProfileModal.value = true
-    } else {
-      // Profile is fully complete, do not show the modal.
-      console.log('User profile is complete.')
-      showProfileModal.value = false
-    }
-  }
-
-  // Finally, turn off the loading indicator and set the flag to prevent re-runs.
-  isLoading.value = false
-  hasBeenChecked.value = true
-})
-
-/**
- * Saves the user's profile information to the correct Firestore collections.
+ * Saves the user's profile information.
  */
 const saveUserProfile = async () => {
   const { uid, email, displayName } = authStore.user
-  const { role, birthDate, gender, allergies, medicalHistory } = userProfile.value
+  const { role, birthDate, gender, allergies, medicalHistory } = userProfileForm.value
 
   if (!role || !birthDate || !gender) {
     alert('Please fill out all required fields: Role, Birth Date, and Gender.')
     return
   }
 
-  // 1. Create/update the core user document with the role.
-  const userSuccess = await databaseStore.createUserProfile(uid, email, displayName, role)
-
-  // 2. Create the detailed patient profile.
-  const patientData = {
-    displayName: displayName, // Denormalized for convenience
-    birthDate: new Date(birthDate),
-    gender,
-    allergies: allergies
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
-    medicalHistory: medicalHistory
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean),
+  const profileData = {
+    email: email,
+    displayName: displayName,
+    role: role,
+    birthDate: Timestamp.fromDate(new Date(birthDate)),
+    gender: gender,
+    allergies: allergies.split(',').map((s) => s.trim()).filter(Boolean),
+    medicalHistory: medicalHistory.split(',').map((s) => s.trim()).filter(Boolean),
   }
-  const patientSuccess = await databaseStore.createPatientProfile(uid, patientData)
 
-  if (userSuccess && patientSuccess) {
-    // Manually update the authStore role for immediate UI reactivity.
-    authStore.role = role
-    showProfileModal.value = false
+  // Save the profile to the database
+  const success = await databaseStore.setUserProfile(uid, profileData)
+
+  if (success) {
+    // Manually update the authStore state for instant UI reactivity.
+    authStore.setUserProfile(profileData)
   } else {
     alert(`Failed to save profile. Error: ${databaseStore.error}`)
   }
 }
 
-/**
- * Logs the user out using the auth store.
- */
 const handleLogout = async () => {
   await authStore.logout()
   router.push('/signin')
@@ -140,7 +87,7 @@ const handleLogout = async () => {
 
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'I am a:' : 'أنا:' }}</label>
-            <select v-model="userProfile.role">
+            <select v-model="userProfileForm.role">
               <option value="" disabled>
                 {{ currentLanguage === 'en' ? '-- Select Role --' : '-- اختر دورك --' }}
               </option>
@@ -151,12 +98,12 @@ const handleLogout = async () => {
 
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Birth Date' : 'تاريخ الميلاد' }}</label>
-            <input type="date" v-model="userProfile.birthDate" />
+            <input type="date" v-model="userProfileForm.birthDate" />
           </div>
 
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</label>
-            <select v-model="userProfile.gender">
+            <select v-model="userProfileForm.gender">
               <option value="" disabled>
                 {{ currentLanguage === 'en' ? '-- Select Gender --' : '-- اختر الجنس --' }}
               </option>
@@ -170,7 +117,7 @@ const handleLogout = async () => {
               currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية (مفصولة بفاصلة)'
             }}</label>
             <textarea
-              v-model="userProfile.allergies"
+              v-model="userProfileForm.allergies"
               rows="2"
               :placeholder="
                 currentLanguage === 'en' ? 'e.g., Iodine-Based Dyes' : 'مثال: صبغات اليود'
@@ -185,7 +132,7 @@ const handleLogout = async () => {
                 : 'التاريخ الطبي (مفصول بفاصلة)'
             }}</label>
             <textarea
-              v-model="userProfile.medicalHistory"
+              v-model="userProfileForm.medicalHistory"
               rows="2"
               :placeholder="
                 currentLanguage === 'en' ? 'e.g., Diabetes, Asthma' : 'مثال: مرض السكري, الربو'
@@ -220,7 +167,6 @@ const handleLogout = async () => {
             </p>
 
             <div class="dashboard-features">
-              <!-- Get Scan Recommendation -->
               <div class="feature-item" @click="router.push('/recommend')">
                 <i class="fas fa-file-medical"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
@@ -235,8 +181,11 @@ const handleLogout = async () => {
                 </p>
               </div>
 
-              <!-- Manage Patients (for Doctors) -->
-              <div v-if="userRole === 'doctor'" class="feature-item" @click="router.push('/patients')">
+              <div
+                v-if="userRole === 'doctor'"
+                class="feature-item"
+                @click="router.push('/patients')"
+              >
                 <i class="fas fa-users"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{ currentLanguage === 'en' ? 'Manage Patients' : 'إدارة المرضى' }}
@@ -250,7 +199,6 @@ const handleLogout = async () => {
                 </p>
               </div>
 
-              <!-- View Profile -->
               <div class="feature-item" @click="router.push('/profile')">
                 <i class="fas fa-user"></i>
                 <h3 :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">

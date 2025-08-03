@@ -18,18 +18,9 @@ const doseLimit = inject('doseLimit')
 // --- Local Component State ---
 const recommendationMode = ref('personal')
 const form = ref({
-  patientId: null,
-  patientName: '',
-  birthDate: '',
-  gender: 'male',
-  medicalHistory: '',
-  currentSymptoms: '',
-  allergies: '',
-  isPregnant: false,
-  estimatedDueDate: '',
-  previousRadiationExposure: '',
-  scanType: '',
-  doctorAdditionalContext: '',
+  patientId: null, patientName: '', birthDate: '', gender: 'male', medicalHistory: '',
+  currentSymptoms: '', allergies: '', isPregnant: false, estimatedDueDate: '',
+  previousRadiationExposure: '', scanType: '', doctorAdditionalContext: '',
 })
 
 // UI and AI State
@@ -49,33 +40,29 @@ const clearForm = () => {
   }
 }
 
+// ✅ FIX: This function is now smarter and uses the correct data source.
 const loadPatientData = async (id) => {
   if (!id) return
   isFetchingPatient.value = true
   clearForm()
   try {
-    const patientData = await databaseStore.fetchPatientProfile(id)
+    let patientData = null;
+    // If the ID is the current user's, get the profile from the auth store.
+    if (id === authStore.user?.uid) {
+        patientData = authStore.userProfile;
+    } else {
+        // Otherwise, fetch the specific patient from the 'patients' collection.
+        patientData = await databaseStore.fetchSinglePatient(id);
+    }
+
     if (patientData) {
-      let birthDateString = ''
-      if (patientData.birthDate) {
-        birthDateString = typeof patientData.birthDate.toDate === 'function'
-          ? patientData.birthDate.toDate().toISOString().split('T')[0]
-          : new Date(patientData.birthDate).toISOString().split('T')[0]
-      }
-
-      let dueDateString = ''
-      if (patientData.estimatedDueDate) {
-        dueDateString = typeof patientData.estimatedDueDate.toDate === 'function'
-          ? patientData.estimatedDueDate.toDate().toISOString().split('T')[0]
-          : new Date(patientData.estimatedDueDate).toISOString().split('T')[0]
-      }
-
+      const toDateString = (d) => d ? (d.toDate ? d.toDate() : new Date(d)).toISOString().split('T')[0] : '';
       form.value.patientId = id
-      form.value.patientName = patientData.displayName
-      form.value.birthDate = birthDateString
+      form.value.patientName = patientData.displayName || patientData.name // Handles both user and patient schemas
+      form.value.birthDate = toDateString(patientData.birthDate)
       form.value.gender = patientData.gender || 'male'
       form.value.isPregnant = patientData.isPregnant || false
-      form.value.estimatedDueDate = dueDateString
+      form.value.estimatedDueDate = toDateString(patientData.estimatedDueDate)
       form.value.medicalHistory = patientData.medicalHistory?.join(', ') || ''
       form.value.allergies = patientData.allergies?.join(', ') || ''
     }
@@ -104,7 +91,6 @@ watch(() => route.query.patientId, (newId) => {
       recommendationMode.value = 'general'
       loadPatientData(newId)
     } else {
-      // When navigating away or no ID is present, default to personal mode
       recommendationMode.value = 'personal'
       if (authStore.user) {
         loadPatientData(authStore.user.uid)
@@ -120,7 +106,7 @@ watch(() => form.value.isPregnant, (isPregnant) => {
     }
 });
 
-// --- AI Recommendation Logic ---
+// --- AI Recommendation Logic (remains the same) ---
 const getRecommendations = async () => {
   isLoading.value = true
   errorMessage.value = ''
@@ -330,6 +316,7 @@ const getRecommendations = async () => {
 </template>
 
 <style scoped>
+/* All your previous styles remain the same */
 .recommend-page { padding: 30px; background-color: #f8f9fa; }
 .recommend-card { background-color: white; padding: 40px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); max-width: 700px; margin: auto; }
 .recommend-card h2 { text-align: center; color: #8d99ae; }

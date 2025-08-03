@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, computed, watch, inject } from 'vue'
+import { ref, computed, watch, inject, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import { useDatabaseStore } from '@/stores/database'
 import { useRouter } from 'vue-router'
+import { Timestamp } from 'firebase/firestore'
 
 // Component Imports
 import ProfileFormModal from '@/components/ProfileFormModal.vue'
@@ -18,9 +19,7 @@ const currentLanguage = inject('currentLanguage')
 const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 
 // --- State Management ---
-const userProfile = ref(null)
 const personalScans = ref([])
-const isLoading = ref(true)
 
 // Modal States
 const showProfileFormModal = ref(false)
@@ -31,79 +30,85 @@ const scanToDelete = ref(null)
 
 const userId = computed(() => authStore.user?.uid)
 
-// --- Data Fetching ---
-const fetchFullProfile = async () => {
-  if (!userId.value) return
-  isLoading.value = true
-  try {
-    const patientData = await databaseStore.fetchPatientProfile(userId.value)
-
-    // --- FIX: This helper function robustly handles any date format ---
-    const toDateString = (firestoreDate) => {
-        if (!firestoreDate) return '';
-        // Handles Firestore Timestamps, JS Dates, and date strings
-        const dateObj = typeof firestoreDate.toDate === 'function' ? firestoreDate.toDate() : new Date(firestoreDate);
-        if (isNaN(dateObj)) return ''; // Return empty string for invalid dates
-        return dateObj.toISOString().split('T')[0];
-    };
-
-    userProfile.value = {
-      displayName: authStore.user.displayName,
-      email: authStore.user.email,
-      role: authStore.role,
-      birthDate: toDateString(patientData?.birthDate),
-      gender: patientData?.gender || '',
-      isPregnant: patientData?.isPregnant || false,
-      estimatedDueDate: toDateString(patientData?.estimatedDueDate),
-      allergies: patientData?.allergies || [],
-      medicalHistory: patientData?.medicalHistory || [],
+// ✅ FIX: The user's profile is now a computed property that reads directly from the authStore.
+// No more local data fetching for the profile is needed.
+const userProfile = computed(() => {
+  // If the profile from the store is not loaded yet, return a basic structure to prevent errors.
+  if (!authStore.userProfile) {
+    return {
+      displayName: authStore.user?.displayName || '',
+      email: authStore.user?.email || '',
     }
-  } catch (error) {
-    console.error('[ProfileView] Error fetching full user profile:', error)
-  } finally {
-    isLoading.value = false
   }
-}
 
+  // Helper to safely format dates for display
+  const toDateString = (firestoreDate) => {
+    if (!firestoreDate) return ''
+    const dateObj = firestoreDate.toDate ? firestoreDate.toDate() : new Date(firestoreDate)
+    return !isNaN(dateObj) ? dateObj.toISOString().split('T')[0] : ''
+  }
+
+  // Return the full profile with formatted dates
+  return {
+    ...authStore.userProfile,
+    displayName: authStore.user?.displayName,
+    email: authStore.user?.email,
+    birthDate: toDateString(authStore.userProfile.birthDate),
+    estimatedDueDate: toDateString(authStore.userProfile.estimatedDueDate),
+  }
+})
+
+// --- Data Fetching (Only for scans) ---
 const fetchScans = async () => {
   if (!userId.value) return
   const scans = await databaseStore.fetchScansForPatient(userId.value)
-  if (scans) { personalScans.value = scans }
+  if (scans) {
+    personalScans.value = scans
+  }
 }
 
-// --- CRUD Handlers ---
+// ✅ FIX: The save function now uses the correct `setUserProfile` and builds a complete data object.
 const onProfileSaved = async (formData) => {
   if (!userId.value) return
-  try {
-    await databaseStore.createUserProfile(userId.value, authStore.user.email, authStore.user.displayName, formData.role)
-    authStore.role = formData.role
-    const patientUpdates = {
-      displayName: authStore.user.displayName,
-      birthDate: new Date(formData.birthDate),
-      gender: formData.gender,
-      isPregnant: formData.isPregnant,
-      estimatedDueDate: formData.isPregnant && formData.estimatedDueDate ? new Date(formData.estimatedDueDate) : null,
-      allergies: formData.allergies ? formData.allergies.split(',').map((s) => s.trim()).filter(Boolean) : [],
-      medicalHistory: formData.medicalHistory ? formData.medicalHistory.split(',').map((s) => s.trim()).filter(Boolean) : [],
-    }
-    await databaseStore.createPatientProfile(userId.value, patientUpdates)
+
+  const profileToSave = {
+    ...authStore.userProfile, // Keep existing fields
+    displayName: authStore.user.displayName,
+    email: authStore.user.email,
+    role: formData.role,
+    birthDate: Timestamp.fromDate(new Date(formData.birthDate)),
+    gender: formData.gender,
+    isPregnant: formData.isPregnant,
+    estimatedDueDate: formData.isPregnant && formData.estimatedDueDate ? Timestamp.fromDate(new Date(formData.estimatedDueDate)) : null,
+    allergies: Array.isArray(formData.allergies) ? formData.allergies : formData.allergies.split(',').map((s) => s.trim()).filter(Boolean),
+    medicalHistory: Array.isArray(formData.medicalHistory) ? formData.medicalHistory : formData.medicalHistory.split(',').map((s) => s.trim()).filter(Boolean),
+  }
+
+  const success = await databaseStore.setUserProfile(userId.value, profileToSave)
+
+  if (success) {
+    authStore.setUserProfile(profileToSave) // Update local state instantly
     showProfileFormModal.value = false
-    await fetchFullProfile()
-  } catch (error) {
-    console.error('[ProfileView] A critical error occurred during profile save:', error)
-    alert('Failed to save profile. Please check the console for details.')
+  } else {
+    alert(`Failed to save profile. Error: ${databaseStore.error}`)
   }
 }
 
 const handleSaveScan = async (scanDataFromModal) => {
   if (!userId.value) return
   const dataToSave = {
-    patientId: userId.value, scanType: scanDataFromModal.scanType, scanDate: new Date(scanDataFromModal.scanDate),
-    patientDose: Number(scanDataFromModal.patientDose), doctorDose: 0, reason: scanDataFromModal.reason, notes: scanDataFromModal.notes,
+    patientId: userId.value,
+    scanType: scanDataFromModal.scanType,
+    scanDate: Timestamp.fromDate(new Date(scanDataFromModal.scanDate)),
+    patientDose: Number(scanDataFromModal.patientDose),
+    doctorDose: 0,
+    reason: scanDataFromModal.reason,
+    notes: scanDataFromModal.notes,
   }
   const success = scanDataFromModal.id
     ? await databaseStore.updateScan(scanDataFromModal.id, dataToSave)
-    : !!await databaseStore.createScan(dataToSave)
+    : await databaseStore.createScan(dataToSave)
+
   if (success) {
     showScanFormModal.value = false
     await fetchScans()
@@ -134,8 +139,7 @@ const openDeleteConfirmation = (scan) => { scanToDelete.value = scan; showDelete
 onMounted(() => {
   watch(() => authStore.isAuthReady, (isReady) => {
       if (isReady && userId.value) {
-        fetchFullProfile()
-        fetchScans()
+        fetchScans() // We only need to fetch scans; profile is already in the store.
       }
     },
     { immediate: true },
@@ -150,13 +154,13 @@ onMounted(() => {
         <h2>{{ currentLanguage === 'en' ? 'My Profile' : 'ملفي الشخصي' }}</h2>
         <button @click="showProfileFormModal = true" class="action-button">{{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}</button>
       </div>
-      <div v-if="isLoading" class="loading-state">Loading profile...</div>
+      <div v-if="authStore.loading" class="loading-state">Loading profile...</div>
       <div v-else-if="userProfile" class="profile-details">
         <p><strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong><span>{{ userProfile.displayName }}</span></p>
         <p><strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong><span>{{ userProfile.email }}</span></p>
         <p><strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong><span class="role-tag" v-if="userProfile.role === 'doctor'">{{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}</span><span class="role-tag" v-else>{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</span></p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong><span>{{ userProfile.birthDate }}</span></p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong><span v-if="userProfile.gender === 'male'">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</span><span v-else-if="userProfile.gender === 'female'">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong><span>{{ userProfile.birthDate || 'Not set' }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong><span v-if="userProfile.gender === 'male'">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</span><span v-else-if="userProfile.gender === 'female'">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</span><span v-else>Not set</span></p>
         <p v-if="userProfile.gender === 'female'"><strong>{{ currentLanguage === 'en' ? 'Pregnant: ' : 'حامل: ' }}</strong><span v-if="userProfile.isPregnant">{{ currentLanguage === 'en' ? 'Yes' : 'نعم' }} ({{ currentLanguage === 'en' ? 'Due:' : 'المتوقع:' }} {{ userProfile.estimatedDueDate }})</span><span v-else>{{ currentLanguage === 'en' ? 'No' : 'لا' }}</span></p>
         <p><strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong><span>{{ userProfile.allergies?.join(', ') || 'None' }}</span></p>
         <p><strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ الطبي:' }}</strong><span>{{ userProfile.medicalHistory?.join(', ') || 'None' }}</span></p>
@@ -182,7 +186,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* Desktop-first styles */
+/* All your styles remain the same */
 .profile-page {
   padding: 2rem;
   max-width: 1100px;
@@ -199,7 +203,6 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-/* Flex row for title + button */
 .card-header {
   display: flex;
   justify-content: space-between;
@@ -224,7 +227,6 @@ onMounted(() => {
   border-radius: 8px;
 }
 
-/* Label + value block in two-column layout */
 .profile-details p {
   display: flex;
   justify-content: space-between;
@@ -287,7 +289,6 @@ a {
   font-weight: 600;
 }
 
-/* ---------- RESPONSIVE STYLES ----------- */
 @media (max-width: 767px) {
   .profile-page {
     padding: 1rem;

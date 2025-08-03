@@ -7,7 +7,7 @@ import { useDatabaseStore } from '@/stores/database'
 // Import FontAwesome for table icons
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
-// Import all necessary components (PatientTable is removed)
+// Import all necessary components
 import PatientFormModal from '@/components/PatientFormModal.vue'
 import PatientDetailsModal from '@/components/PatientDetailsModal.vue'
 import ConfirmDeleteModal from '@/components/ConfirmDeleteModal.vue'
@@ -31,9 +31,8 @@ const showDeleteModal = ref(false)
 
 const doctorId = computed(() => authStore.user?.uid)
 
-// --- Functions using the corrected Pinia Store actions ---
+// --- Functions ---
 const fetchPatients = async () => {
-  // We check for databaseStore.loading in the template, so no need to set it here.
   const fetchedPatients = await databaseStore.fetchPatientsForDoctor()
   if (fetchedPatients) {
     patients.value = fetchedPatients
@@ -41,23 +40,20 @@ const fetchPatients = async () => {
 }
 
 const handleSavePatient = async (patientDataFromModal) => {
-  // Destructure to remove the 'id' field from the data we save,
-  // as Firestore handles it. We only use it to check for existence.
   const { id, ...dataToSave } = patientDataFromModal
-
   let success = false
   if (id) {
-    // If an ID exists, we are EDITING.
+    // If an ID exists, we are EDITING. This is correct.
     success = await databaseStore.updatePatientProfile(id, dataToSave)
   } else {
-    // If no ID, we are CREATING a new patient.
-    const newPatientId = await databaseStore.createPatientProfile(dataToSave)
-    success = !!newPatientId // Convert the returned ID to a boolean
+    // ✅ FIX: When creating a new patient, call 'addNewPatient' instead of 'createPatientProfile'.
+    const newPatientId = await databaseStore.addNewPatient(dataToSave)
+    success = !!newPatientId
   }
 
   if (success) {
     showPatientFormModal.value = false
-    await fetchPatients() // Refresh the list
+    await fetchPatients()
   } else {
     alert(`Failed to save patient. Error: ${databaseStore.error}`)
   }
@@ -68,7 +64,7 @@ const handleDeletePatient = async () => {
   const success = await databaseStore.deletePatientProfile(patientToDelete.value.id)
   if (success) {
     showDeleteModal.value = false
-    await fetchPatients() // Refresh the list
+    await fetchPatients()
   } else {
     alert(`Failed to delete patient. Error: ${databaseStore.error}`)
   }
@@ -92,9 +88,7 @@ function openConfirmDeleteModal(patient) {
   showDeleteModal.value = true
 }
 
-// Placeholder function for the 'recommend' action
 function handleRecommend(patientId) {
-  // This can be implemented later to navigate to the recommendation page.
   console.log(`Recommendation requested for patient ID: ${patientId}`)
   alert('Recommendation feature is not yet implemented.')
 }
@@ -127,7 +121,6 @@ watch(
           {{ currentLanguage === 'en' ? 'Add New Patient' : 'إضافة مريض جديد' }}
         </button>
 
-        <!-- ✅ REFACTOR: Patient table is now integrated directly into this component -->
         <div class="patient-list-section" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           <h3>
             {{ currentLanguage === 'en' ? 'Existing Patients' : 'المرضى الحاليون' }}
@@ -157,12 +150,12 @@ watch(
               </thead>
               <tbody>
                 <tr v-for="patient in patients" :key="patient.id">
-                  <td>{{ patient.name }}</td>
-                  <td>{{ patient.age }}</td>
+                  <td>{{ patient.name ?? 'N/A' }}</td>
+                  <td>{{ patient.age ?? 'N/A' }}</td>
                   <td>
                     {{
                       currentLanguage === 'en'
-                        ? patient.gender.charAt(0).toUpperCase() + patient.gender.slice(1)
+                        ? (patient.gender?.charAt(0).toUpperCase() ?? '') + (patient.gender?.slice(1) ?? 'N/A')
                         : patient.gender === 'male'
                           ? 'ذكر'
                           : 'أنثى'
@@ -182,27 +175,20 @@ watch(
                   </td>
                   <td>
                     <div class="action-buttons-wrapper">
-                      <!-- View Scan History -->
                       <button
                         @click="openDetailsModal(patient)"
                         class="action-button-sm view-button"
-                        :title="
-                          currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات'
-                        "
+                        :title="currentLanguage === 'en' ? 'View Scan History' : 'عرض سجل الفحوصات'"
                       >
                         <font-awesome-icon icon="eye" />
                       </button>
-                      <!-- Edit Patient Details -->
                       <button
                         @click="openEditModal(patient)"
                         class="action-button-sm edit-button"
-                        :title="
-                          currentLanguage === 'en' ? 'Edit Patient Details' : 'تعديل تفاصيل المريض'
-                        "
+                        :title="currentLanguage === 'en' ? 'Edit Patient Details' : 'تعديل تفاصيل المريض'"
                       >
                         <font-awesome-icon icon="edit" />
                       </button>
-                      <!-- Delete Patient -->
                       <button
                         @click="openConfirmDeleteModal(patient)"
                         class="action-button-sm delete-button"
@@ -210,13 +196,10 @@ watch(
                       >
                         <font-awesome-icon icon="trash-alt" />
                       </button>
-                      <!-- Get Recommendation -->
                       <button
                         @click="handleRecommend(patient.id)"
                         class="action-button-sm recommend-button"
-                        :title="
-                          currentLanguage === 'en' ? 'Get Recommendation' : 'الحصول على توصية'
-                        "
+                        :title="currentLanguage === 'en' ? 'Get Recommendation' : 'الحصول على توصية'"
                       >
                         <font-awesome-icon icon="file-medical" />
                       </button>
@@ -227,7 +210,6 @@ watch(
             </table>
           </div>
         </div>
-        <!-- End of integrated table -->
 
         <div class="switch-link-container">
           <a href="#" @click.prevent="router.push('/dashboard')">{{
@@ -248,11 +230,10 @@ watch(
       :patient="selectedPatient"
       @close="showDetailsModal = false"
     />
-    <!-- ✅ FIX: Using patient.name instead of patient.displayName for the message -->
     <ConfirmDeleteModal
       :show="showDeleteModal"
       :title="currentLanguage === 'en' ? 'Delete Patient' : 'حذف المريض'"
-      :message="`${currentLanguage === 'en' ? 'Are you sure you want to delete' : 'هل أنت متأكد من الحذف'} ${patientToDelete?.name}?`"
+      :message="`${currentLanguage === 'en' ? 'Are you sure you want to delete' : 'هل أنت متأكد من الحذف'} ${patientToDelete?.name ?? 'this patient'}?`"
       @close="showDeleteModal = false"
       @confirm="handleDeletePatient"
     />
@@ -260,7 +241,7 @@ watch(
 </template>
 
 <style scoped>
-/* Main page styles */
+/* All your styles from the provided file remain the same */
 .patient-list-page {
   display: flex;
   flex-direction: column;
@@ -323,8 +304,6 @@ watch(
   transition: color 0.3s ease;
   font-size: 16.5px;
 }
-
-/* ✅ REFACTOR: Styles from PatientTable.vue are now here */
 .patient-list-section {
   margin-top: 2rem;
 }

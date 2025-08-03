@@ -16,6 +16,8 @@ const emit = defineEmits(['close'])
 
 const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
+// ✅ 1. Inject the recalculation function provided by App.vue
+const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 
 // State for this modal
 const scans = ref([])
@@ -52,7 +54,6 @@ watch(
 
 // --- Action Handlers ---
 const handleSavePatientScan = async (scanDataFromForm) => {
-  // ✅ THE FIX: Deconstruct the incoming form data and map it to the correct schema.
   const {
     id,
     patientId,
@@ -60,21 +61,20 @@ const handleSavePatientScan = async (scanDataFromForm) => {
     pregnancyMonth,
     scanType,
     scanDate,
-    dose, // This is the field from the form
+    dose,
     doctorDose,
     reason,
     notes,
     doctorAdditionalContext,
   } = scanDataFromForm
 
-  // Create a clean payload that matches your Firestore schema EXACTLY.
   const payload = {
     patientId: patientId,
     isPregnant: isPregnant,
     pregnancyMonth: pregnancyMonth,
     scanType: scanType,
     scanDate: scanDate,
-    patientDose: dose, // Map 'dose' from form to 'patientDose' for the database
+    patientDose: dose,
     doctorDose: doctorDose,
     reason: reason,
     notes: notes,
@@ -83,16 +83,19 @@ const handleSavePatientScan = async (scanDataFromForm) => {
 
   let success = false
   if (id) {
-    // Editing an existing scan
     success = await databaseStore.updateScan(id, payload)
   } else {
-    // Creating a new scan with the clean, schema-compliant payload
     success = await databaseStore.createScan(payload)
   }
 
   if (success) {
     showScanFormModal.value = false
-    await fetchScans() // Refresh the scan list
+    await fetchScans() // Refresh the scan list in the UI
+
+    // ✅ 2. Call the injected function to trigger the update in App.vue
+    if (triggerMsvRecalculation) {
+      triggerMsvRecalculation()
+    }
   } else {
     alert(
       `${currentLanguage.value === 'en' ? 'Error saving patient scan:' : 'خطأ في حفظ فحص المريض:'} ${databaseStore.error}`,
@@ -102,10 +105,17 @@ const handleSavePatientScan = async (scanDataFromForm) => {
 
 const handleDeleteScan = async () => {
   if (!scanToDelete.value?.id) return
+
   const success = await databaseStore.deleteScan(scanToDelete.value.id)
+
   if (success) {
     showConfirmDeleteModal.value = false
-    await fetchScans() // Refresh the scan list
+    await fetchScans() // Refresh the scan list in the UI
+
+    // ✅ 3. Call the injected function here as well
+    if (triggerMsvRecalculation) {
+      triggerMsvRecalculation()
+    }
   } else {
     alert(
       `${currentLanguage.value === 'en' ? 'Error deleting scan:' : 'خطأ في حذف الفحص:'} ${databaseStore.error}`,
@@ -120,10 +130,9 @@ function openAddScanModal() {
 }
 
 function openEditScanModal(scan) {
-  // When editing, we need to map the data back for the form
   const scanForForm = {
     ...scan,
-    dose: scan.patientDose, // Map 'patientDose' from DB to 'dose' for the form
+    dose: scan.patientDose,
   }
   scanToEdit.value = scanForForm
   showScanFormModal.value = true
@@ -225,6 +234,7 @@ const formatDate = (timestamp) => {
 </template>
 
 <style scoped>
+/* All your styles remain unchanged */
 .modal-overlay {
   position: fixed;
   top: 0;
