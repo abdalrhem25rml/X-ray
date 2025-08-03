@@ -7,6 +7,7 @@ import RecommendView from '@/views/RecommendView.vue'
 import PatientsView from '@/views/PatientsView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import ResetPasswordView from '@/views/ResetPasswordView.vue' // Import the new component
+import HistoryView from '@/views/HistoryView.vue'
 import ProfileView from '@/views/ProfileView.vue'
 
 import { useAuthStore } from '@/stores/auth' // Import the auth store
@@ -46,6 +47,12 @@ const router = createRouter({
       path: '/profile',
       name: 'profile',
       component: ProfileView,
+      meta: { requiresAuth: true },
+    },
+    {
+      path: '/history',
+      name: 'history',
+      component: HistoryView,
       meta: { requiresAuth: true },
     },
     {
