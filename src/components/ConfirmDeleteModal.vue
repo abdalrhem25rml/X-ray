@@ -1,6 +1,8 @@
 <script setup>
 import { inject } from 'vue'
 
+const triggerMsvRecalculation = inject('triggerMsvRecalculation')
+
 // This generic modal receives its text via props.
 defineProps({
   show: Boolean,
@@ -31,7 +33,8 @@ const currentLanguage = inject('currentLanguage')
           <button @click="$emit('close')" class="action-button secondary">
             {{ currentLanguage === 'en' ? 'Cancel' : 'إلغاء' }}
           </button>
-          <button @click="$emit('confirm')" class="action-button delete-button-confirm">
+          <button @click="$emit('confirm');
+            triggerMsvRecalculation()" class="action-button delete-button-confirm">
             {{ currentLanguage === 'en' ? 'Delete' : 'حذف' }}
           </button>
         </div>
