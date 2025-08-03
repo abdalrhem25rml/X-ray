@@ -24,27 +24,19 @@ const toggleInfoModal = () => {
   showInfoModal.value = !showInfoModal.value
 }
 
-// ✅ FIX: Create a robust helper function to handle different date formats.
-/**
- * Safely converts a value into a JavaScript Date object.
- * Handles Firestore Timestamps (which have a .toDate() method) and date strings.
- * @param {object | string} firestoreDate - The value to convert.
- * @returns {Date | null} A Date object or null if the input is invalid.
- */
 const getJsDate = (firestoreDate) => {
-  if (!firestoreDate) return null;
-  // If it's a Firestore Timestamp object, it will have a toDate method.
+  if (!firestoreDate) return null
   if (typeof firestoreDate.toDate === 'function') {
-    return firestoreDate.toDate();
+    return firestoreDate.toDate()
   }
-  // Otherwise, assume it's a string and try to parse it.
-  const date = new Date(firestoreDate);
-  // Return the date only if it's a valid date.
-  return !isNaN(date.getTime()) ? date : null;
+  const date = new Date(firestoreDate)
+  return !isNaN(date.getTime()) ? date : null
 }
 
 const updateDoseCalculation = async () => {
+  console.log('%c[DOSE_CALC] Starting dose calculation...', 'color: blue; font-weight: bold;')
   if (!authStore.user || !authStore.role) {
+    console.log('[DOSE_CALC] User or role not found. Aborting.')
     currentMsv.value = 0
     doseLimit.value = 1
     isMsvLoading.value = false
@@ -54,7 +46,7 @@ const updateDoseCalculation = async () => {
 
   const userId = authStore.user.uid
   const role = authStore.role
-  let calculatedDose = 0
+  console.log(`[DOSE_CALC] User ID: ${userId}, Role: ${role}`)
 
   try {
     const allUserScans =
@@ -62,67 +54,80 @@ const updateDoseCalculation = async () => {
         ? await databaseStore.fetchDoctorCreatedScans()
         : await databaseStore.fetchScansForPatient(userId)
 
+    console.log(`[DOSE_CALC] Fetched ${allUserScans?.length || 0} total scans.`)
+
     if (!allUserScans) {
       isMsvLoading.value = false
       return
     }
 
     const yearStart = new Date(new Date().getFullYear(), 0, 1)
-    // ✅ FIX: Use the robust getJsDate helper to filter scans.
     const scansThisYear = allUserScans.filter((scan) => {
-      const scanDate = getJsDate(scan.scanDate);
-      return scanDate && scanDate >= yearStart;
-    });
+      const scanDate = getJsDate(scan.scanDate)
+      return scanDate && scanDate >= yearStart
+    })
+    console.log(`[DOSE_CALC] Found ${scansThisYear.length} scans this year.`)
 
     if (role === 'doctor') {
-      const occupationalDoseThisYear = scansThisYear.reduce((sum, scan) => {
+      const totalAnnualDose = scansThisYear.reduce((sum, scan) => {
         if (scan.isPersonalScan) {
-          return sum + (scan.patientDose || 0);
+          return sum + (scan.patientDose || 0)
         }
-        return sum + (scan.doctorDose || 0);
-      }, 0);
+        return sum + (scan.doctorDose || 0)
+      }, 0)
 
-      const remainingAnnualLimit = 20 - occupationalDoseThisYear
-      const pregnancies = await databaseStore.fetchPregnancyHistory()
-      const activePregnancy = pregnancies?.find((p) => p.status === 'active')
+      currentMsv.value = parseFloat(totalAnnualDose.toFixed(3));
+      console.log(`[DOSE_CALC] Calculated total annual dose: ${totalAnnualDose.toFixed(3)} mSv`);
 
-      if (activePregnancy) {
-        // ✅ FIX: Use the robust getJsDate helper here as well.
-        const scansSinceDeclaration = allUserScans.filter((scan) => {
-            const scanDate = getJsDate(scan.scanDate);
-            const declarationDate = getJsDate(activePregnancy.declarationDate);
-            return scanDate && declarationDate && scanDate >= declarationDate;
-        });
+      // --- LOGGING THE PREGNANCY CHECK ---
+      console.log('%c[DOSE_CALC] Checking pregnancy status...', 'color: #f5a623; font-weight: bold;');
+      const userProfile = authStore.userProfile;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const estimatedDueDate = userProfile ? getJsDate(userProfile.estimatedDueDate) : null;
 
-        const doseSinceDeclaration = scansSinceDeclaration.reduce(
-          (sum, scan) => sum + (scan.doctorDose || 0),
-          0,
-        )
-        const remainingPregnancyLimit = 0.5 - doseSinceDeclaration
-        doseLimit.value = Math.min(remainingAnnualLimit, remainingPregnancyLimit)
-        calculatedDose = occupationalDoseThisYear
+      // Log the exact data being used for the check
+      console.log('[DOSE_CALC] Profile data for check:', userProfile);
+      console.log(`[DOSE_CALC] Profile 'isPregnant' flag:`, userProfile?.isPregnant);
+      console.log(`[DOSE_CALC] Parsed Due Date:`, estimatedDueDate);
+      console.log(`[DOSE_CALC] Today's Date:`, today);
+      if (estimatedDueDate) {
+        console.log(`[DOSE_CALC] Is today before due date?`, today < estimatedDueDate);
+      }
+
+      if (userProfile?.isPregnant && estimatedDueDate && today < estimatedDueDate) {
+        console.log('%c[DOSE_CALC] --- ACTIVE PREGNANCY LOGIC ACTIVATED ---', 'color: purple; font-weight: bold;');
+        const remainingAnnualLimit = 20 - totalAnnualDose;
+        const remainingPregnancyLimit = 0.5 - totalAnnualDose;
+        console.log(`[DOSE_CALC] Remaining Annual Limit: ${remainingAnnualLimit.toFixed(3)} mSv`);
+        console.log(`[DOSE_CALC] Remaining Pregnancy Limit (stricter interpretation): ${remainingPregnancyLimit.toFixed(3)} mSv`);
+
+        doseLimit.value = Math.max(0, Math.min(remainingAnnualLimit, remainingPregnancyLimit));
+        console.log(`[DOSE_CALC] Final limit set to (strictest of the two): ${doseLimit.value.toFixed(3)} mSv`);
       } else {
-        doseLimit.value = 20
-        calculatedDose = occupationalDoseThisYear
+        console.log('%c[DOSE_CALC] --- STANDARD DOCTOR LOGIC ACTIVATED ---', 'color: green; font-weight: bold;');
+        doseLimit.value = 20;
       }
     } else {
-      // --- PATIENT LOGIC ---
+      console.log('%c[DOSE_CALC] --- PATIENT LOGIC ---', 'color: orange; font-weight: bold;')
       doseLimit.value = 1
-      calculatedDose = scansThisYear.reduce((sum, scan) => sum + (scan.patientDose || 0), 0)
+      const totalPatientDose = scansThisYear.reduce((sum, scan) => sum + (scan.patientDose || 0), 0)
+      currentMsv.value = parseFloat(totalPatientDose.toFixed(3))
     }
 
-    currentMsv.value = parseFloat(calculatedDose.toFixed(3))
   } catch (err) {
-    console.error('[App.vue] Failed to update dose calculation:', err)
+    console.error('[DOSE_CALC_ERROR] Failed to update dose calculation:', err)
     currentMsv.value = 0
   } finally {
     isMsvLoading.value = false
+    console.log(`[DOSE_CALC] FINAL STATE -> currentMsv: ${currentMsv.value}, doseLimit: ${doseLimit.value}`)
+    console.log('%c[DOSE_CALC] Dose calculation finished.', 'color: blue; font-weight: bold;')
   }
 }
 
 // --- Watcher ---
 watchEffect(() => {
-  if (authStore.isAuthReady) {
+  if (authStore.isAuthReady && !authStore.isProfileLoading) {
     updateDoseCalculation()
   }
 })

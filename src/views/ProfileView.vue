@@ -30,10 +30,7 @@ const scanToDelete = ref(null)
 
 const userId = computed(() => authStore.user?.uid)
 
-// ✅ FIX: The user's profile is now a computed property that reads directly from the authStore.
-// No more local data fetching for the profile is needed.
 const userProfile = computed(() => {
-  // If the profile from the store is not loaded yet, return a basic structure to prevent errors.
   if (!authStore.userProfile) {
     return {
       displayName: authStore.user?.displayName || '',
@@ -41,14 +38,12 @@ const userProfile = computed(() => {
     }
   }
 
-  // Helper to safely format dates for display
   const toDateString = (firestoreDate) => {
     if (!firestoreDate) return ''
     const dateObj = firestoreDate.toDate ? firestoreDate.toDate() : new Date(firestoreDate)
     return !isNaN(dateObj) ? dateObj.toISOString().split('T')[0] : ''
   }
 
-  // Return the full profile with formatted dates
   return {
     ...authStore.userProfile,
     displayName: authStore.user?.displayName,
@@ -67,12 +62,12 @@ const fetchScans = async () => {
   }
 }
 
-// ✅ FIX: The save function now uses the correct `setUserProfile` and builds a complete data object.
+// --- CRUD Handlers ---
 const onProfileSaved = async (formData) => {
   if (!userId.value) return
 
   const profileToSave = {
-    ...authStore.userProfile, // Keep existing fields
+    ...authStore.userProfile,
     displayName: authStore.user.displayName,
     email: authStore.user.email,
     role: formData.role,
@@ -89,6 +84,12 @@ const onProfileSaved = async (formData) => {
   if (success) {
     authStore.setUserProfile(profileToSave) // Update local state instantly
     showProfileFormModal.value = false
+
+    // ✅ FIX: Trigger the mSv recalculation after the profile has been successfully saved.
+    // This ensures the dose limit is updated if pregnancy status has changed.
+    if (triggerMsvRecalculation) {
+      triggerMsvRecalculation()
+    }
   } else {
     alert(`Failed to save profile. Error: ${databaseStore.error}`)
   }
@@ -139,7 +140,7 @@ const openDeleteConfirmation = (scan) => { scanToDelete.value = scan; showDelete
 onMounted(() => {
   watch(() => authStore.isAuthReady, (isReady) => {
       if (isReady && userId.value) {
-        fetchScans() // We only need to fetch scans; profile is already in the store.
+        fetchScans()
       }
     },
     { immediate: true },
@@ -154,7 +155,7 @@ onMounted(() => {
         <h2>{{ currentLanguage === 'en' ? 'My Profile' : 'ملفي الشخصي' }}</h2>
         <button @click="showProfileFormModal = true" class="action-button">{{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}</button>
       </div>
-      <div v-if="authStore.loading" class="loading-state">Loading profile...</div>
+      <div v-if="authStore.isProfileLoading" class="loading-state">Loading profile...</div>
       <div v-else-if="userProfile" class="profile-details">
         <p><strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong><span>{{ userProfile.displayName }}</span></p>
         <p><strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong><span>{{ userProfile.email }}</span></p>

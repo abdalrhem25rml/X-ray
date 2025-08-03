@@ -5,19 +5,30 @@ const props = defineProps({
   currentMsv: { type: Number, default: 0 },
   yearlyLimit: { type: Number, default: 1 },
   currentLanguage: String,
-  isLoading: { type: Boolean, default: true }, // ✅ NEW: Prop to control loading state
+  isLoading: { type: Boolean, default: true },
 })
 
 const statusClass = computed(() => {
-  const percentage = props.yearlyLimit > 0 ? (props.currentMsv / props.yearlyLimit) * 100 : 0
-  if (percentage < 50) return 'status-safe'
-  if (percentage < 100) return 'status-warning'
-  return 'status-danger'
+  // ✅ FIX: First, check for the most critical condition.
+  // If the current dose is at or over the limit, it is always 'danger',
+  // especially if the limit is 0.
+  if (props.currentMsv >= props.yearlyLimit) {
+    return 'status-danger'
+  }
+
+  // If the limit is greater than zero, calculate the percentage for warning/safe.
+  if (props.yearlyLimit > 0) {
+    const percentage = (props.currentMsv / props.yearlyLimit) * 100
+    if (percentage < 50) return 'status-safe'
+    return 'status-warning' // Covers the 50-99% range
+  }
+
+  // Fallback to safe if none of the above conditions are met (e.g., limit is 0 but dose is also 0).
+  return 'status-safe'
 })
 </script>
 
 <template>
-  <!-- ✅ MODIFIED: Conditionally render based on the isLoading prop -->
   <div class="msv-counter" :class="statusClass" :dir="currentLanguage === 'en' ? 'ltr' : 'rtl'">
     <div v-if="isLoading" class="loading-state">
       {{ currentLanguage === 'en' ? 'Calculating...' : 'جاري الحساب...' }}
@@ -31,7 +42,7 @@ const statusClass = computed(() => {
           <div
             class="counter-bar"
             :style="{
-              width: Math.min((currentMsv / yearlyLimit) * 100, 100) + '%',
+              width: yearlyLimit > 0 ? Math.min((currentMsv / yearlyLimit) * 100, 100) + '%' : '100%',
             }"
           ></div>
         </div>
@@ -42,6 +53,7 @@ const statusClass = computed(() => {
 </template>
 
 <style scoped>
+/* All your previous styles remain the same */
 .msv-counter {
   display: flex;
   align-items: center;
@@ -53,7 +65,6 @@ const statusClass = computed(() => {
   min-width: 250px;
   transition: background-color 0.4s ease;
 }
-/* ✅ NEW: Style for the loading state text */
 .loading-state {
   font-size: 0.85em;
   font-weight: 600;

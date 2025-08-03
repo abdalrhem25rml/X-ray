@@ -43,10 +43,8 @@ const handleSavePatient = async (patientDataFromModal) => {
   const { id, ...dataToSave } = patientDataFromModal
   let success = false
   if (id) {
-    // If an ID exists, we are EDITING. This is correct.
     success = await databaseStore.updatePatientProfile(id, dataToSave)
   } else {
-    // ✅ FIX: When creating a new patient, call 'addNewPatient' instead of 'createPatientProfile'.
     const newPatientId = await databaseStore.addNewPatient(dataToSave)
     success = !!newPatientId
   }
@@ -88,9 +86,14 @@ function openConfirmDeleteModal(patient) {
   showDeleteModal.value = true
 }
 
+// ✅ FIX: This function now navigates to the Recommend page with the patient's ID.
 function handleRecommend(patientId) {
-  console.log(`Recommendation requested for patient ID: ${patientId}`)
-  alert('Recommendation feature is not yet implemented.')
+  if (!patientId) return
+  // Use the router to push to the 'recommend' route, passing the patient's ID as a query parameter.
+  router.push({
+    name: 'recommend',
+    query: { patientId: patientId }
+  })
 }
 
 // Watch for the doctor's user ID to be available, then fetch their patients
@@ -241,7 +244,7 @@ watch(
 </template>
 
 <style scoped>
-/* All your styles from the provided file remain the same */
+/* All your previous styles remain the same */
 .patient-list-page {
   display: flex;
   flex-direction: column;
