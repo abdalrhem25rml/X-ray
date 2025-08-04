@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, watch, inject } from 'vue'
+import { reactive, watch, inject, computed } from 'vue'
 
 const props = defineProps({
   show: Boolean,
@@ -14,12 +14,35 @@ const emit = defineEmits(['close', 'save'])
 
 const currentLanguage = inject('currentLanguage')
 
-// This is the form's internal state
+// --- Scan subtype options with translations ---
+const scanSubtypes = {
+  'CT': [
+    { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
+    { value: 'Brain with contrast', en: 'Brain with contrast', ar: 'الدماغ بمادة تباين' },
+    { value: 'Angiography CTA', en: 'Angiography CTA', ar: 'تصوير الأوعية CTA' },
+    { value: 'Urography', en: 'Urography', ar: 'تصوير المسالك البولية' },
+    { value: 'Enterography', en: 'Enterography', ar: 'تصوير الأمعاء' },
+    { value: 'Other', en: 'Other...', ar: 'أخرى...' }
+  ],
+  'X-ray': [
+    { value: 'Barium Swallow', en: 'Barium Swallow', ar: 'بلع الباريوم' },
+    { value: 'Barium Meal', en: 'Barium Meal', ar: 'وجبة الباريوم' },
+    { value: 'Barium Enema', en: 'Barium Enema', ar: 'حقنة الباريوم الشرجية' },
+    { value: 'IV Urogram (IVP)', en: 'IV Urogram (IVP)', ar: 'أشعة المسالك البولية (IVP)' },
+    { value: 'HSG', en: 'HSG', ar: 'أشعة الرحم (HSG)' },
+    { value: 'VCUG', en: 'VCUG', ar: 'دراسة المثانة بالصبغة (VCUG)' },
+    { value: 'Other', en: 'Other...', ar: 'أخرى...' }
+  ]
+}
+
+// --- Form State ---
 const form = reactive({
   id: null,
   isPregnant: false,
   pregnancyMonth: null,
   scanType: 'X-ray',
+  subScanType: '',
+  otherScanDescription: '',
   scanDate: '',
   dose: null,
   doctorDose: null,
@@ -28,64 +51,74 @@ const form = reactive({
   doctorAdditionalContext: '',
 })
 
-watch(
-  () => props.show,
-  (isShown) => {
-    if (isShown) {
-      // Reset the form every time it's opened
-      Object.assign(form, {
-        id: null,
-        isPregnant: false,
-        pregnancyMonth: null,
-        scanType: 'X-ray',
-        scanDate: '',
-        dose: null,
-        doctorDose: null,
-        reason: '',
-        notes: '',
-        doctorAdditionalContext: '',
-      })
+// --- Computed Properties ---
+const currentScanSubtypes = computed(() => scanSubtypes[form.scanType] || [])
+const showOtherInput = computed(() => form.subScanType === 'Other')
 
-      // If we are editing an existing scan, populate the fields
-      if (props.scan) {
-        form.id = props.scan.id
-        form.isPregnant = props.scan.isPregnant || false
-        form.pregnancyMonth = props.scan.pregnancyMonth || null
-        form.scanType = props.scan.scanType
-        // Handle both string dates and Firestore Timestamp objects
-        const date = props.scan.scanDate?.toDate ? props.scan.scanDate.toDate() : new Date(props.scan.scanDate);
-        form.scanDate = date.toISOString().split('T')[0] || ''
-        form.dose = props.scan.dose
-        form.doctorDose = props.scan.doctorDose
-        form.reason = props.scan.reason
-        form.notes = props.scan.notes
-        form.doctorAdditionalContext = props.scan.doctorAdditionalContext
+// --- Watchers ---
+watch(() => props.show, (isShown) => {
+  if (isShown) {
+    Object.assign(form, {
+      id: null, isPregnant: false, pregnancyMonth: null, scanType: 'X-ray',
+      subScanType: '', otherScanDescription: '', scanDate: '', dose: null,
+      doctorDose: null, reason: '', notes: '', doctorAdditionalContext: '',
+    })
+    if (props.scan) {
+      form.id = props.scan.id
+      form.isPregnant = props.scan.isPregnant || false
+      form.pregnancyMonth = props.scan.pregnancyMonth || null
+      form.scanType = props.scan.scanType
+      const date = props.scan.scanDate?.toDate ? props.scan.scanDate.toDate() : new Date(props.scan.scanDate)
+      form.scanDate = date.toISOString().split('T')[0] || ''
+      form.dose = props.scan.patientDose // Note: prop might be `dose` or `patientDose`
+      form.doctorDose = props.scan.doctorDose
+      form.reason = props.scan.reason
+      form.notes = props.scan.notes
+      form.doctorAdditionalContext = props.scan.doctorAdditionalContext
+
+      const savedSubtype = props.scan.scanDetail
+      const isStandardSubtype = currentScanSubtypes.value.some(opt => opt.value === savedSubtype)
+      if (isStandardSubtype) {
+        form.subScanType = savedSubtype
+      } else if (savedSubtype) {
+        form.subScanType = 'Other'
+        form.otherScanDescription = savedSubtype
       }
     }
-  },
-)
+  }
+})
 
-watch(
-  () => form.isPregnant,
-  (preg) => {
-    if (!preg) form.pregnancyMonth = null
-  },
-)
+watch(() => form.scanType, () => {
+  form.subScanType = ''
+  form.otherScanDescription = ''
+})
 
+watch(() => form.isPregnant, (preg) => {
+  if (!preg) form.pregnancyMonth = null
+})
+
+// ✅ FIXED: The estimateDose function now correctly uses the descriptive labels.
 const estimateDose = async (doseFor) => {
-  // AI dose estimation logic remains the same...
+  const selectedSubtypeObject = currentScanSubtypes.value.find(opt => opt.value === form.subScanType)
+
+  let finalScanDetailText = ''
+  if (showOtherInput.value) {
+    finalScanDetailText = form.otherScanDescription
+  } else if (selectedSubtypeObject) {
+    finalScanDetailText = currentLanguage.value === 'en' ? selectedSubtypeObject.en : selectedSubtypeObject.ar
+  }
+
   let prompt = ''
+  if (doseFor === 'patient') {
+    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan with the specific protocol: "${finalScanDetailText}". Patient Age: ${props.patient?.age || 'N/A'}. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`
+  } else { // doseFor === 'doctor'
+    prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a patient's ${form.scanType} scan with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
+  }
+
   let validationRules = {}
   if (doseFor === 'patient') {
-    if (form.scanType === 'CT') {
-      prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic CT scan. Context: Age: ${props.patient?.age || 'N/A'}, Reason: ${form.reason || 'Not provided'}. IMPORTANT: The plausible range for a single diagnostic CT is 1-30 mSv. Respond ONLY with a number in this range.`
-      validationRules = { min: 0.5, max: 40 }
-    } else {
-      prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single diagnostic X-ray. Context: Age: ${props.patient?.age || 'N/A'}, Reason: ${form.reason || 'Not provided'}. IMPORTANT: The plausible range for a single diagnostic X-ray is 0.01-5 mSv. Respond ONLY with a number in this range.`
-      validationRules = { min: 0.001, max: 10 }
-    }
-  } else if (doseFor === 'doctor') {
-    prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a patient's ${form.scanType} scan. Context: ${form.doctorAdditionalContext || 'No shielding or distance context provided.'} IMPORTANT: Occupational dose is a small fraction of the patient dose, typically under 0.5 mSv. Respond ONLY with a number.`
+    validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }
+  } else {
     validationRules = { min: 0, max: 2 }
   }
 
@@ -98,40 +131,48 @@ const estimateDose = async (doseFor) => {
     const result = await response.json();
     const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const estimated = parseFloat(aiText.match(/[\d.]+/));
-    if (isNaN(estimated)) throw new Error('AI did not return a valid number.');
-    if (estimated < validationRules.min || estimated > validationRules.max) throw new Error(`AI returned an out-of-range value: ${estimated}. Expected between ${validationRules.min} and ${validationRules.max}.`);
+    if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
+
     if (doseFor === 'patient') form.dose = estimated;
-    else if (doseFor === 'doctor') form.doctorDose = estimated;
-    return true
+    else form.doctorDose = estimated;
+
+    return true;
   } catch (error) {
     console.error(`Dose estimation failed for ${doseFor}:`, error);
-    alert(currentLanguage.value === 'en' ? `The AI returned an unlikely value for the ${doseFor} dose. Please review and enter it manually.` : `أعاد الذكاء الاصطناعي قيمة غير محتملة لجرعة ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يرجى مراجعتها وإدخالها يدويًا.`);
-    return false
+    alert(currentLanguage.value === 'en' ? `AI estimation for the ${doseFor} failed. Please enter it manually.` : `فشل تقدير الذكاء الاصطناعي لـ ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يرجى إدخاله يدويًا.`);
+    return false;
   }
 }
 
 const handleSubmit = async () => {
-  if (!form.scanDate) {
-    alert(currentLanguage.value === 'en' ? 'Please provide the scan date.' : 'يرجى إدخال تاريخ الفحص.');
+  if (!form.scanDate || !form.subScanType || (form.subScanType === 'Other' && !form.otherScanDescription)) {
+    alert(currentLanguage.value === 'en' ? 'Please fill all required scan details.' : 'يرجى ملء جميع تفاصيل الفحص المطلوبة.');
     return;
   }
   if (props.patient && (form.dose === null || form.dose === '')) {
-    const success = await estimateDose('patient');
-    if (!success) return;
+    if (!await estimateDose('patient')) return;
   }
   if (form.doctorDose === null || form.doctorDose === '') {
-    const success = await estimateDose('doctor');
-    if (!success) return;
+    if (!await estimateDose('doctor')) return;
   }
 
-  // ✅ THE FIX: Create a new object that includes all the form data
-  // PLUS the patientId from the component's props.
+  const finalScanDetailValue = showOtherInput.value ? form.otherScanDescription : form.subScanType
+
   const dataToSave = {
-    ...form,
-    patientId: props.patient?.id, // This line is the critical fix.
+    id: form.id,
+    isPregnant: form.isPregnant,
+    pregnancyMonth: form.pregnancyMonth,
+    scanType: form.scanType,
+    scanDetail: finalScanDetailValue,
+    scanDate: form.scanDate,
+    patientDose: form.dose,
+    doctorDose: form.doctorDose,
+    reason: form.reason,
+    notes: form.notes,
+    doctorAdditionalContext: form.doctorAdditionalContext,
+    patientId: props.patient?.id,
   };
 
-  // Emit the complete data object, which now includes the patientId.
   emit('save', dataToSave);
 }
 </script>
@@ -148,31 +189,48 @@ const handleSubmit = async () => {
           {{ currentLanguage === 'en' ? 'For Patient' : 'للمريض' }}: <strong>{{ patient.name }}</strong>
         </div>
         <form @submit.prevent="handleSubmit" class="scan-form">
+          <!-- Pregnancy Section remains the same -->
           <div v-if="patient?.gender === 'female'" class="form-row pregnancy-section">
             <div class="form-group checkbox-group">
-              <label>
-                <input type="checkbox" v-model="form.isPregnant" />
-                <span>{{ currentLanguage === 'en' ? 'Is Pregnant?' : 'هل المريضة حامل؟' }}</span>
-              </label>
+              <label><input type="checkbox" v-model="form.isPregnant" /><span>{{ currentLanguage === 'en' ? 'Is Pregnant?' : 'هل المريضة حامل؟' }}</span></label>
             </div>
-            <div class="form-group">
-              <label v-if="form.isPregnant">{{ currentLanguage === 'en' ? 'Month of Pregnancy' : 'شهر الحمل' }}</label>
-              <input v-if="form.isPregnant" type="number" v-model="form.pregnancyMonth" min="1" max="9" placeholder="1-9" />
+            <div class="form-group" v-if="form.isPregnant">
+              <label>{{ currentLanguage === 'en' ? 'Month of Pregnancy' : 'شهر الحمل' }}</label>
+              <input type="number" v-model="form.pregnancyMonth" min="1" max="9" placeholder="1-9" />
             </div>
           </div>
+
+          <!-- ✅ MODIFIED: Scan Type and Subtype selection -->
           <div class="form-row">
             <div class="form-group">
-              <label>{{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}</label>
+              <label>{{ currentLanguage === 'en' ? 'Scan Category' : 'فئة الفحص' }}</label>
               <select v-model="form.scanType" required>
                 <option value="X-ray">{{ currentLanguage === 'en' ? 'X-ray' : 'أشعة سينية' }}</option>
                 <option value="CT">{{ currentLanguage === 'en' ? 'CT' : 'أشعة مقطعية' }}</option>
               </select>
             </div>
             <div class="form-group">
-              <label>{{ currentLanguage === 'en' ? 'Scan Date' : 'تاريخ الفحص' }}</label>
-              <input type="date" v-model="form.scanDate" required />
+              <label>{{ currentLanguage === 'en' ? 'Scan Protocol' : 'بروتوكول الفحص' }}</label>
+              <select v-model="form.subScanType" required>
+                <option disabled value="">{{ currentLanguage === 'en' ? 'Select...' : 'اختر...' }}</option>
+                <option v-for="option in currentScanSubtypes" :key="option.value" :value="option.value">
+                  {{ currentLanguage === 'en' ? option.en : option.ar }}
+                </option>
+              </select>
             </div>
           </div>
+
+          <div v-if="showOtherInput" class="form-group">
+            <label>{{ currentLanguage === 'en' ? 'Please specify scan protocol' : 'يرجى تحديد بروتوكول الفحص' }}</label>
+            <input type="text" v-model="form.otherScanDescription" :placeholder="currentLanguage === 'en' ? 'e.g., Chest X-ray' : 'مثال: أشعة سينية للصدر'" required />
+          </div>
+
+          <div class="form-group">
+            <label>{{ currentLanguage === 'en' ? 'Scan Date' : 'تاريخ الفحص' }}</label>
+            <input type="date" v-model="form.scanDate" required />
+          </div>
+
+          <!-- Other form fields remain the same -->
           <div class="form-row">
             <div class="form-group">
               <label>{{ currentLanguage === 'en' ? "Patient's Dose (mSv)" : 'جرعة المريض (mSv)' }}</label>
@@ -192,7 +250,7 @@ const handleSubmit = async () => {
             <textarea v-model="form.notes" rows="3"></textarea>
           </div>
           <div class="form-group">
-            <label>{{ currentLanguage === 'en' ? 'Additional details affecting your exposure (optional)' : 'تفاصيل إضافية على تعرضك (اختياري)' }}</label>
+            <label>{{ currentLanguage === 'en' ? 'Details affecting your exposure (optional)' : 'تفاصيل إضافية على تعرضك (اختياري)' }}</label>
             <textarea v-model="form.doctorAdditionalContext" rows="2"></textarea>
           </div>
           <div class="modal-actions">
