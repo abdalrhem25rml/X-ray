@@ -22,11 +22,12 @@ import {
   faFileMedical,
   faPlus,
   faSpinner, // For loading indicators
+  faQuestionCircle
   // Add any other solid icons you use here (e.g., faUser, faCog, etc.)
 } from '@fortawesome/free-solid-svg-icons'
 
 // Add the imported icons to the Font Awesome library
-library.add(faEye, faEdit, faTrashAlt, faFileMedical, faPlus, faSpinner)
+library.add(faEye, faEdit, faTrashAlt, faFileMedical, faPlus, faSpinner, faQuestionCircle)
 // --- End Font Awesome imports ---
 
 // Firebase configuration using environment variables (Vite's import.meta.env)

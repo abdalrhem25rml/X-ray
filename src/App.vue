@@ -1,21 +1,39 @@
 <script setup>
-import { RouterView } from 'vue-router'
-import { provide, ref, watchEffect } from 'vue'
+import { RouterView, useRoute } from 'vue-router'
+import { provide, ref, watchEffect, computed } from 'vue'
 import { useAuthStore } from './stores/auth'
 import { useDatabaseStore } from './stores/database'
 import TheHeader from './components/TheHeader.vue'
 import InfoModal from './components/InfoModal.vue'
+import HelpModal from './components/HelpModal.vue' // --- 1. Import new component
+import { helpContent } from './helpContent' // --- 2. Import help content
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
-// --- Pinia Stores ---
+// --- Pinia Stores and Router ---
 const authStore = useAuthStore()
 const databaseStore = useDatabaseStore()
+const route = useRoute() // --- 3. Get route access
 
 // --- Local State ---
 const currentLanguage = ref('en')
 const showInfoModal = ref(false)
+const showHelpModal = ref(false) // --- 4. Add state for help modal
 const currentMsv = ref(0)
 const doseLimit = ref(20)
 const isMsvLoading = ref(true)
+
+// --- Help Modal Logic ---
+const toggleHelpModal = () => {
+  showHelpModal.value = !showHelpModal.value
+}
+const currentHelpContent = computed(() => {
+  // Use route.name, which should be defined in your router/index.js
+  const routeName = route.name
+  if (routeName && helpContent[routeName]) {
+    return helpContent[routeName]
+  }
+  return null // Return null if no help content is found for the current route
+})
 
 const toggleLanguage = () => {
   currentLanguage.value = currentLanguage.value === 'en' ? 'ar' : 'en'
@@ -79,14 +97,12 @@ const updateDoseCalculation = async () => {
       currentMsv.value = parseFloat(totalAnnualDose.toFixed(3));
       console.log(`[DOSE_CALC] Calculated total annual dose: ${totalAnnualDose.toFixed(3)} mSv`);
 
-      // --- LOGGING THE PREGNANCY CHECK ---
       console.log('%c[DOSE_CALC] Checking pregnancy status...', 'color: #f5a623; font-weight: bold;');
       const userProfile = authStore.userProfile;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const estimatedDueDate = userProfile ? getJsDate(userProfile.estimatedDueDate) : null;
 
-      // Log the exact data being used for the check
       console.log('[DOSE_CALC] Profile data for check:', userProfile);
       console.log(`[DOSE_CALC] Profile 'isPregnant' flag:`, userProfile?.isPregnant);
       console.log(`[DOSE_CALC] Parsed Due Date:`, estimatedDueDate);
@@ -155,11 +171,54 @@ provide('doseLimit', doseLimit)
         <component :is="Component" :key="route.path" />
       </transition>
     </router-view>
+
+    <!-- --- 5. Add floating help button --- -->
+    <button
+      v-if="authStore.user && currentHelpContent"
+      class="help-fab"
+      @click="toggleHelpModal"
+      :title="currentLanguage === 'en' ? 'Help' : 'مساعدة'"
+    >
+      <font-awesome-icon icon="question-circle" />
+    </button>
+
+    <!-- --- 6. Render Modals --- -->
     <InfoModal :show="showInfoModal" :current-language="currentLanguage" @close="toggleInfoModal" />
+    <HelpModal
+      :show="showHelpModal"
+      :content="currentHelpContent"
+      @close="toggleHelpModal"
+    />
   </div>
 </template>
 
 <style>
+/* --- 7. Add styles for floating button --- */
+.help-fab {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background-color: #343a40;
+  color: white;
+  border: none;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 28px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+  z-index: 999;
+  transition: transform 0.2s ease-in-out, background-color 0.2s;
+}
+
+.help-fab:hover {
+  transform: scale(1.1);
+  background-color: #495057;
+}
+
 /* Styles remain unchanged */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
