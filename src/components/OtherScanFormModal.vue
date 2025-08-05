@@ -36,17 +36,27 @@ watch(() => props.show, (isShown) => {
   }
 })
 
+// ✅ UPDATED: handleSubmit now logs the data before emitting
 const handleSubmit = () => {
   if (!form.type || !form.date || form.dosage === null) {
     alert(currentLanguage.value === 'en' ? 'Please fill all fields.' : 'يرجى ملء جميع الحقول.')
     return
   }
-  emit('save', {
+
+  // Prepare the data object to be saved
+  const dataToEmit = {
     id: form.id,
     type: form.type,
+    // Convert the string date from the form into a Firestore Timestamp
     date: Timestamp.fromDate(new Date(form.date)),
     dosage: Number(form.dosage),
-  })
+  };
+
+  // ✅ ADDED: Log the data object to the console for debugging
+  console.log('[OtherScanFormModal] Emitting "save" event with data payload:', JSON.parse(JSON.stringify(dataToEmit)));
+
+  // Emit the save event with the prepared data
+  emit('save', dataToEmit)
 }
 </script>
 
@@ -81,7 +91,7 @@ const handleSubmit = () => {
 </template>
 
 <style scoped>
-/* You can reuse styles from your other modals */
+/* Styles are unchanged */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); z-index: 4000; display: flex; justify-content: center; align-items: center; }
 .modal-content { background: #fff; padding: 2rem; border-radius: 12px; max-width: 500px; width: 100%; position: relative; }
 .close-modal-button { position: absolute; top: 10px; right: 15px; font-size: 2rem; border: none; background: none; cursor: pointer; }

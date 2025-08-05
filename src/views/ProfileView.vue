@@ -123,8 +123,16 @@ const handleSaveOtherScan = async (otherScanData) => {
 
   if (success) {
     showOtherScanModal.value = false
-    await fetchAllScans()
-    if (triggerMsvRecalculation) triggerMsvRecalculation()
+
+    // Introduce a 1-second delay before re-fetching data.
+    // This gives Firestore's indexes time to update.
+    console.log("[ProfileView] Save successful. Waiting 1 second before refetching data...");
+    setTimeout(async () => {
+      console.log("[ProfileView] Refetching data now...");
+      await fetchAllData();
+      if (triggerMsvRecalculation) triggerMsvRecalculation();
+    }, 1000); // 1000 milliseconds = 1 second
+
   } else {
     alert(`Failed to save other scan: ${databaseStore.error}`)
   }

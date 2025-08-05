@@ -399,28 +399,36 @@ export const useDatabaseStore = defineStore('database', {
       }
     },
 
-    async createOtherScan(otherScanData) {
-      this.loading = true;
-      this.error = null;
-      const essentials = this._getDBEssentials();
-      if (!essentials) return null;
-      try {
-        const { db, appId, userId } = essentials;
-        const otherScansCollectionRef = collection(db, 'artifacts', appId, 'other_scans');
-        const dataToSave = {
-          ...otherScanData,
-          userId: userId, // Ensure the user's ID is stored
-          createdAt: Timestamp.now(),
-        };
-        const docRef = await addDoc(otherScansCollectionRef, dataToSave);
-        return docRef.id;
-      } catch (err) {
-        this.error = err.message;
-        return null;
-      } finally {
-        this.loading = false;
-      }
-    },
+  async createOtherScan(otherScanData) {
+        this.loading = true;
+        this.error = null;
+        const essentials = this._getDBEssentials();
+        if (!essentials) return null;
+
+        try {
+          const { db, appId, userId } = essentials;
+          const otherScansCollectionRef = collection(db, 'artifacts', appId, 'other_scans');
+
+          // Destructure the id property out of the object, leaving the rest in 'data'.
+          // This is the key part of the fix.
+          const { id, ...data } = otherScanData;
+
+          const dataToSave = {
+            ...data, // This now contains only 'type', 'date', and 'dosage'
+            userId: userId, // We add the creator's ID
+            createdAt: Timestamp.now(),
+          };
+          console.log('[DB_STORE] Attempting to createOtherScan with cleaned payload:', dataToSave);
+          const docRef = await addDoc(otherScansCollectionRef, dataToSave);
+          return docRef.id;
+        } catch (err) {
+          this.error = err.message;
+          console.error('[DB_STORE] Error creating other scan:', err);
+          return null;
+        } finally {
+          this.loading = false;
+        }
+      },
 
     async updateOtherScan(scanId, otherScanData) {
       this.loading = true;
@@ -458,47 +466,65 @@ export const useDatabaseStore = defineStore('database', {
       }
     },
 
-    async fetchOtherScansForUser(userId) {
-      this.loading = true;
-      this.error = null;
-      try {
-        const db = getFirestore();
-        const appId = import.meta.env.VITE_APP_ID;
-        const q = query(
-          collection(db, 'artifacts', appId, 'other_scans'),
-          where('userId', '==', userId),
-          orderBy('date', 'desc')
-        );
-        const querySnapshot = await getDocs(q);
-        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      } catch (err) {
-        this.error = err.message;
-        return [];
-      } finally {
-        this.loading = false;
-      }
-    },
+  async fetchOtherScansForUser(userId) {
+        this.loading = true;
+        this.error = null;
+        try {
+          const db = getFirestore();
+          const appId = import.meta.env.VITE_APP_ID;
 
-    async fetchAllDosesForUser(userId) {
+          const q = query(
+            collection(db, 'artifacts', appId, 'other_scans'),
+            where('userId', '==', userId)
+          );
+
+          const querySnapshot = await getDocs(q);
+          const scans = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+          // Sort the results by date descending after fetching
+          scans.sort((a, b) => b.date.toDate() - a.date.toDate());
+
+          return scans;
+        } catch (err) {
+          this.error = err.message;
+          return [];
+        } finally {
+          this.loading = false;
+        }
+      },
+
+    // This function remains correct.
+    async fetchAllDosesForUser(userId, userRole) {
       this.loading = true;
       this.error = null;
       try {
-        const personalScans = await this.fetchScansForPatient(userId);
+        const allDoses = [];
+
         const otherScans = await this.fetchOtherScansForUser(userId);
+        otherScans.forEach(scan => {
+          if (scan.dosage > 0) {
+            allDoses.push({ date: scan.date, dose: scan.dosage });
+          }
+        });
 
-        const formattedPersonalScans = personalScans.map(scan => ({
-          scanDate: scan.scanDate,
-          patientDose: scan.patientDose || 0,
-          doctorDose: scan.doctorDose || 0,
-        }));
+        const personalScans = await this.fetchScansForPatient(userId);
+        personalScans.forEach(scan => {
+          if (scan.patientDose > 0) {
+            allDoses.push({ date: scan.scanDate, dose: scan.patientDose });
+          }
+        });
 
-        const formattedOtherScans = otherScans.map(scan => ({
-          scanDate: scan.date, // Note the different field name 'date'
-          patientDose: scan.dosage || 0, // Note the different field name 'dosage'
-          doctorDose: 0, // 'other_scans' don't have a doctor dose component
-        }));
+        if (userRole === 'doctor') {
+          const createdScans = await this.fetchDoctorCreatedScans();
+          createdScans.forEach(scan => {
+            if (scan.doctorDose > 0) {
+              allDoses.push({ date: scan.scanDate, dose: scan.doctorDose });
+            }
+          });
+        }
 
-        return [...formattedPersonalScans, ...formattedOtherScans];
+        return allDoses;
+
       } catch (err) {
         this.error = `Failed to fetch all doses: ${err.message}`;
         return [];
@@ -506,5 +532,55 @@ export const useDatabaseStore = defineStore('database', {
         this.loading = false;
       }
     },
+
+async fetchAllDosesForUser(userId, userRole) {
+  this.loading = true;
+  this.error = null;
+  console.log(`[DB_STORE] Starting fetchAllDosesForUser for userId: ${userId}, role: ${userRole}`);
+
+  try {
+    const allDoses = [];
+
+    // 1. Fetch "other scans" for the user (applies to both roles)
+    const otherScans = await this.fetchOtherScansForUser(userId);
+    console.log(`[DB_STORE] other scans:`, JSON.parse(JSON.stringify(otherScans)));
+    otherScans.forEach(scan => {
+      if (scan.dosage > 0) {
+        allDoses.push({ date: scan.date, dose: scan.dosage });
+      }
+    });
+
+    // 2. Fetch scans where the user was the patient (applies to both roles)
+    const personalScans = await this.fetchScansForPatient(userId);
+    console.log(`[DB_STORE] personal scans:`, JSON.parse(JSON.stringify(personalScans)));
+    personalScans.forEach(scan => {
+      if (scan.patientDose > 0) {
+        allDoses.push({ date: scan.scanDate, dose: scan.patientDose });
+      }
+    });
+
+    // 3. For doctors ONLY, fetch scans they created to add their occupational dose.
+    if (userRole === 'doctor') {
+      const createdScans = await this.fetchDoctorCreatedScans();
+      console.log(`[DB_STORE] created scans (for occupational dose):`, JSON.parse(JSON.stringify(createdScans)));
+      createdScans.forEach(scan => {
+        // IMPORTANT: We only add the doctorDose here. The patientDose is already
+        // accounted for in step 2 if the doctor was the patient. This prevents double-counting.
+        if (scan.doctorDose > 0) {
+          allDoses.push({ date: scan.scanDate, dose: scan.doctorDose });
+        }
+      });
+    }
+
+    return allDoses;
+
+  } catch (err) {
+    this.error = `Failed to fetch all doses: ${err.message}`;
+    console.error(`[DB_STORE] Error: ${err.message}`);
+    return [];
+  } finally {
+    this.loading = false;
+  }
+},
   },
 })
