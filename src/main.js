@@ -22,7 +22,7 @@ import {
   faFileMedical,
   faPlus,
   faSpinner, // For loading indicators
-  faQuestionCircle
+  faQuestionCircle,
   // Add any other solid icons you use here (e.g., faUser, faCog, etc.)
 } from '@fortawesome/free-solid-svg-icons'
 

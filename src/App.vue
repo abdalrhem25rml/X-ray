@@ -94,35 +94,48 @@ const updateDoseCalculation = async () => {
         return sum + (scan.doctorDose || 0)
       }, 0)
 
-      currentMsv.value = parseFloat(totalAnnualDose.toFixed(3));
-      console.log(`[DOSE_CALC] Calculated total annual dose: ${totalAnnualDose.toFixed(3)} mSv`);
+      currentMsv.value = parseFloat(totalAnnualDose.toFixed(3))
+      console.log(`[DOSE_CALC] Calculated total annual dose: ${totalAnnualDose.toFixed(3)} mSv`)
 
-      console.log('%c[DOSE_CALC] Checking pregnancy status...', 'color: #f5a623; font-weight: bold;');
-      const userProfile = authStore.userProfile;
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const estimatedDueDate = userProfile ? getJsDate(userProfile.estimatedDueDate) : null;
+      console.log(
+        '%c[DOSE_CALC] Checking pregnancy status...',
+        'color: #f5a623; font-weight: bold;',
+      )
+      const userProfile = authStore.userProfile
+      const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      const estimatedDueDate = userProfile ? getJsDate(userProfile.estimatedDueDate) : null
 
-      console.log('[DOSE_CALC] Profile data for check:', userProfile);
-      console.log(`[DOSE_CALC] Profile 'isPregnant' flag:`, userProfile?.isPregnant);
-      console.log(`[DOSE_CALC] Parsed Due Date:`, estimatedDueDate);
-      console.log(`[DOSE_CALC] Today's Date:`, today);
+      console.log('[DOSE_CALC] Profile data for check:', userProfile)
+      console.log(`[DOSE_CALC] Profile 'isPregnant' flag:`, userProfile?.isPregnant)
+      console.log(`[DOSE_CALC] Parsed Due Date:`, estimatedDueDate)
+      console.log(`[DOSE_CALC] Today's Date:`, today)
       if (estimatedDueDate) {
-        console.log(`[DOSE_CALC] Is today before due date?`, today < estimatedDueDate);
+        console.log(`[DOSE_CALC] Is today before due date?`, today < estimatedDueDate)
       }
 
       if (userProfile?.isPregnant && estimatedDueDate && today < estimatedDueDate) {
-        console.log('%c[DOSE_CALC] --- ACTIVE PREGNANCY LOGIC ACTIVATED ---', 'color: purple; font-weight: bold;');
-        const remainingAnnualLimit = 20 - totalAnnualDose;
-        const remainingPregnancyLimit = 0.5 - totalAnnualDose;
-        console.log(`[DOSE_CALC] Remaining Annual Limit: ${remainingAnnualLimit.toFixed(3)} mSv`);
-        console.log(`[DOSE_CALC] Remaining Pregnancy Limit (stricter interpretation): ${remainingPregnancyLimit.toFixed(3)} mSv`);
+        console.log(
+          '%c[DOSE_CALC] --- ACTIVE PREGNANCY LOGIC ACTIVATED ---',
+          'color: purple; font-weight: bold;',
+        )
+        const remainingAnnualLimit = 20 - totalAnnualDose
+        const remainingPregnancyLimit = 0.5 - totalAnnualDose
+        console.log(`[DOSE_CALC] Remaining Annual Limit: ${remainingAnnualLimit.toFixed(3)} mSv`)
+        console.log(
+          `[DOSE_CALC] Remaining Pregnancy Limit (stricter interpretation): ${remainingPregnancyLimit.toFixed(3)} mSv`,
+        )
 
-        doseLimit.value = Math.max(0, Math.min(remainingAnnualLimit, remainingPregnancyLimit));
-        console.log(`[DOSE_CALC] Final limit set to (strictest of the two): ${doseLimit.value.toFixed(3)} mSv`);
+        doseLimit.value = Math.max(0, Math.min(remainingAnnualLimit, remainingPregnancyLimit))
+        console.log(
+          `[DOSE_CALC] Final limit set to (strictest of the two): ${doseLimit.value.toFixed(3)} mSv`,
+        )
       } else {
-        console.log('%c[DOSE_CALC] --- STANDARD DOCTOR LOGIC ACTIVATED ---', 'color: green; font-weight: bold;');
-        doseLimit.value = 20;
+        console.log(
+          '%c[DOSE_CALC] --- STANDARD DOCTOR LOGIC ACTIVATED ---',
+          'color: green; font-weight: bold;',
+        )
+        doseLimit.value = 20
       }
     } else {
       console.log('%c[DOSE_CALC] --- PATIENT LOGIC ---', 'color: orange; font-weight: bold;')
@@ -130,13 +143,14 @@ const updateDoseCalculation = async () => {
       const totalPatientDose = scansThisYear.reduce((sum, scan) => sum + (scan.patientDose || 0), 0)
       currentMsv.value = parseFloat(totalPatientDose.toFixed(3))
     }
-
   } catch (err) {
     console.error('[DOSE_CALC_ERROR] Failed to update dose calculation:', err)
     currentMsv.value = 0
   } finally {
     isMsvLoading.value = false
-    console.log(`[DOSE_CALC] FINAL STATE -> currentMsv: ${currentMsv.value}, doseLimit: ${doseLimit.value}`)
+    console.log(
+      `[DOSE_CALC] FINAL STATE -> currentMsv: ${currentMsv.value}, doseLimit: ${doseLimit.value}`,
+    )
     console.log('%c[DOSE_CALC] Dose calculation finished.', 'color: blue; font-weight: bold;')
   }
 }
@@ -184,11 +198,7 @@ provide('doseLimit', doseLimit)
 
     <!-- --- 6. Render Modals --- -->
     <InfoModal :show="showInfoModal" :current-language="currentLanguage" @close="toggleInfoModal" />
-    <HelpModal
-      :show="showHelpModal"
-      :content="currentHelpContent"
-      @close="toggleHelpModal"
-    />
+    <HelpModal :show="showHelpModal" :content="currentHelpContent" @close="toggleHelpModal" />
   </div>
 </template>
 
@@ -211,7 +221,9 @@ provide('doseLimit', doseLimit)
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
   cursor: pointer;
   z-index: 999;
-  transition: transform 0.2s ease-in-out, background-color 0.2s;
+  transition:
+    transform 0.2s ease-in-out,
+    background-color 0.2s;
 }
 
 .help-fab:hover {

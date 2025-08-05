@@ -42,52 +42,52 @@ const fetchPatients = async () => {
 const calculateAge = (birthDate) => {
   // Return 'N/A' if the birthDate is invalid or missing
   if (!birthDate?.toDate) {
-    return 'N/A';
+    return 'N/A'
   }
 
-  const birth = birthDate.toDate();
-  const today = new Date();
+  const birth = birthDate.toDate()
+  const today = new Date()
 
-  let years = today.getFullYear() - birth.getFullYear();
-  let months = today.getMonth() - birth.getMonth();
+  let years = today.getFullYear() - birth.getFullYear()
+  let months = today.getMonth() - birth.getMonth()
 
   // Decrement months if the birth day of the month hasn't been reached yet
   if (today.getDate() < birth.getDate()) {
-    months--;
+    months--
   }
 
   // If months are negative, it means the birth month hasn't been reached this year
   if (months < 0) {
-    years--;
-    months += 12;
+    years--
+    months += 12
   }
 
   // Apply conditional formatting based on the user's request
   if (years >= 2) {
-    return `${years} ${currentLanguage.value === 'ar' ? 'سنوات' : 'years'}`;
+    return `${years} ${currentLanguage.value === 'ar' ? 'سنوات' : 'years'}`
   } else {
     // Handle cases under 2 years
-    const yearText = currentLanguage.value === 'ar' ? 'سنة' : 'year';
-    const monthTextPlural = currentLanguage.value === 'ar' ? 'أشهر' : 'months';
-    const monthTextSingular = currentLanguage.value === 'ar' ? 'شهر' : 'month';
+    const yearText = currentLanguage.value === 'ar' ? 'سنة' : 'year'
+    const monthTextPlural = currentLanguage.value === 'ar' ? 'أشهر' : 'months'
+    const monthTextSingular = currentLanguage.value === 'ar' ? 'شهر' : 'month'
 
     if (years > 0) {
-      const monthText = months === 1 ? monthTextSingular : monthTextPlural;
+      const monthText = months === 1 ? monthTextSingular : monthTextPlural
       // e.g., "1 year, 6 months"
-      return `${years} ${yearText}, ${months} ${monthText}`;
+      return `${years} ${yearText}, ${months} ${monthText}`
     } else {
       // Handle cases under 1 year
       if (months > 0) {
-        const monthText = months === 1 ? monthTextSingular : monthTextPlural;
+        const monthText = months === 1 ? monthTextSingular : monthTextPlural
         // e.g., "8 months"
-        return `${months} ${monthText}`;
+        return `${months} ${monthText}`
       } else {
         // Handle newborns less than a month old
-        return currentLanguage.value === 'ar' ? 'أقل من شهر' : 'Less than a month';
+        return currentLanguage.value === 'ar' ? 'أقل من شهر' : 'Less than a month'
       }
     }
   }
-};
+}
 
 const handleSavePatient = async (patientDataFromModal) => {
   const { id, ...dataToSave } = patientDataFromModal
@@ -142,7 +142,7 @@ function handleRecommend(patientId) {
   // Use the router to push to the 'recommend' route, passing the patient's ID as a query parameter.
   router.push({
     name: 'recommend',
-    query: { patientId: patientId }
+    query: { patientId: patientId },
   })
 }
 
@@ -195,8 +195,12 @@ watch(
                   <th>{{ currentLanguage === 'en' ? 'Weight' : 'الوزن' }}</th>
 
                   <th>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</th>
-                  <th class="details-column">{{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}</th>
-                  <th class="details-column">{{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}</th>
+                  <th class="details-column">
+                    {{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}
+                  </th>
+                  <th class="details-column">
+                    {{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}
+                  </th>
                   <th>{{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}</th>
                 </tr>
               </thead>
@@ -210,7 +214,8 @@ watch(
                   <td>
                     {{
                       currentLanguage === 'en'
-                        ? (patient.gender?.charAt(0).toUpperCase() ?? '') + (patient.gender?.slice(1) ?? 'N/A')
+                        ? (patient.gender?.charAt(0).toUpperCase() ?? '') +
+                          (patient.gender?.slice(1) ?? 'N/A')
                         : patient.gender === 'male'
                           ? 'ذكر'
                           : 'أنثى'
@@ -240,7 +245,9 @@ watch(
                       <button
                         @click="openEditModal(patient)"
                         class="action-button-sm edit-button"
-                        :title="currentLanguage === 'en' ? 'Edit Patient Details' : 'تعديل تفاصيل المريض'"
+                        :title="
+                          currentLanguage === 'en' ? 'Edit Patient Details' : 'تعديل تفاصيل المريض'
+                        "
                       >
                         <font-awesome-icon icon="edit" />
                       </button>
@@ -254,7 +261,9 @@ watch(
                       <button
                         @click="handleRecommend(patient.id)"
                         class="action-button-sm recommend-button"
-                        :title="currentLanguage === 'en' ? 'Get Recommendation' : 'الحصول على توصية'"
+                        :title="
+                          currentLanguage === 'en' ? 'Get Recommendation' : 'الحصول على توصية'
+                        "
                       >
                         <font-awesome-icon icon="file-medical" />
                       </button>

@@ -38,7 +38,11 @@ const formatDate = (timestamp) => {
     </div>
 
     <div v-else-if="!scans || scans.length === 0" class="empty-state">
-      <p>{{ currentLanguage === 'en' ? 'No scan records found.' : 'لم يتم العثور على سجلات فحوصات.' }}</p>
+      <p>
+        {{
+          currentLanguage === 'en' ? 'No scan records found.' : 'لم يتم العثور على سجلات فحوصات.'
+        }}
+      </p>
     </div>
 
     <div v-else class="table-container">
@@ -46,34 +50,52 @@ const formatDate = (timestamp) => {
         <thead>
           <tr>
             <th>{{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}</th>
-            <!-- ✅ ADDED: Scan Protocol Header -->
-            <th class="details-column">{{ currentLanguage === 'en' ? 'Scan Protocol' : 'بروتوكول الفحص' }}</th>
+
+            <!-- ✅ ADDED: Place of Scan Header -->
+            <th class="details-column">
+              {{ currentLanguage === 'en' ? 'Place of Scan' : 'مكان الفحص' }}
+            </th>
+
+            <th class="details-column">
+              {{ currentLanguage === 'en' ? 'Scan Protocol' : 'بروتوكول الفحص' }}
+            </th>
             <th>{{ currentLanguage === 'en' ? 'Date' : 'التاريخ' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Patient Dose' : 'جرعة المريض' }} (mSv)</th>
-            <!-- ✅ ADDED: Reason for Scan Header -->
-            <th class="details-column">{{ currentLanguage === 'en' ? 'Reason for Scan' : 'سبب الفحص' }}</th>
-            <!-- ✅ ADDED: Additional Notes Header -->
-            <th class="details-column">{{ currentLanguage === 'en' ? 'Additional Notes' : 'ملاحظات إضافية' }}</th>
+            <th class="details-column">
+              {{ currentLanguage === 'en' ? 'Reason for Scan' : 'سبب الفحص' }}
+            </th>
+            <th class="details-column">
+              {{ currentLanguage === 'en' ? 'Additional Notes' : 'ملاحظات إضافية' }}
+            </th>
             <th>{{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="scan in scans" :key="scan.id">
             <td>{{ scan.scanType || 'N/A' }}</td>
-            <!-- ✅ ADDED: Scan Protocol Data -->
+
+            <!-- ✅ ADDED: Place of Scan Data -->
+            <td class="details-column">{{ scan.scanPlace || 'N/A' }}</td>
+
             <td class="details-column">{{ scan.scanDetail || 'N/A' }}</td>
             <td>{{ formatDate(scan.scanDate) }}</td>
             <td>{{ scan.patientDose ?? 'N/A' }}</td>
-            <!-- ✅ ADDED: Reason for Scan Data -->
             <td class="details-column">{{ scan.reason || 'N/A' }}</td>
-            <!-- ✅ ADDED: Additional Notes Data -->
             <td class="details-column">{{ scan.notes || 'N/A' }}</td>
             <td>
               <div class="action-buttons">
-                <button @click="$emit('edit', scan)" class="action-button-icon edit-button" :title="currentLanguage === 'en' ? 'Edit' : 'تعديل'">
+                <button
+                  @click="$emit('edit', scan)"
+                  class="action-button-icon edit-button"
+                  :title="currentLanguage === 'en' ? 'Edit' : 'تعديل'"
+                >
                   <font-awesome-icon icon="edit" />
                 </button>
-                <button @click="$emit('delete', scan)" class="action-button-icon delete-button" :title="currentLanguage === 'en' ? 'Delete' : 'حذف'">
+                <button
+                  @click="$emit('delete', scan)"
+                  class="action-button-icon delete-button"
+                  :title="currentLanguage === 'en' ? 'Delete' : 'حذف'"
+                >
                   <font-awesome-icon icon="trash-alt" />
                 </button>
               </div>
@@ -148,10 +170,9 @@ const formatDate = (timestamp) => {
   color: #d9534f;
 }
 
-/* ✅ ADDED: Responsive styling for the new columns */
 .details-column {
-  white-space: normal; /* Allow text wrapping */
-  min-width: 150px; /* Give them some space */
+  white-space: normal;
+  min-width: 150px;
   max-width: 250px;
   overflow: hidden;
   text-overflow: ellipsis;

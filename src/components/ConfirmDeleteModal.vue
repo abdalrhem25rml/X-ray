@@ -33,8 +33,13 @@ const currentLanguage = inject('currentLanguage')
           <button @click="$emit('close')" class="action-button secondary">
             {{ currentLanguage === 'en' ? 'Cancel' : 'إلغاء' }}
           </button>
-          <button @click="$emit('confirm');
-            triggerMsvRecalculation()" class="action-button delete-button-confirm">
+          <button
+            @click="
+              $emit('confirm');
+              triggerMsvRecalculation();
+            "
+            class="action-button delete-button-confirm"
+          >
             {{ currentLanguage === 'en' ? 'Delete' : 'حذف' }}
           </button>
         </div>

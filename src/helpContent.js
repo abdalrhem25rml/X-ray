@@ -11,7 +11,7 @@ export const helpContent = {
           <li><strong>View Profile:</strong> Go to your personal profile page to see your details and your personal scan history.</li>
         </ul>
         <p>If this is your first time logging in, you will see a "Complete Your Profile" modal. You must fill this out to use the app.</p>
-      `
+      `,
     },
     ar: {
       title: 'دليل لوحة التحكم',
@@ -24,8 +24,8 @@ export const helpContent = {
           <li><strong>عرض الملف الشخصي:</strong> انتقل إلى صفحتك الشخصية لرؤية تفاصيلك وسجل فحوصاتك الشخصية.</li>
         </ul>
         <p>إذا كانت هذه هي المرة الأولى التي تسجل فيها الدخول، فسترى نافذة "أكمل ملفك الشخصي". يجب عليك ملء هذا النموذج لاستخدام التطبيق.</p>
-      `
-    }
+      `,
+    },
   },
   recommend: {
     en: {
@@ -39,7 +39,7 @@ export const helpContent = {
           <li><strong>Get Recommendation:</strong> After filling the form, click this to send the data to the AI for analysis.</li>
         </ul>
         <p>The goal is to adhere to the <strong>ALARA (As Low As Reasonably Achievable)</strong> principle by avoiding unnecessary radiation exposure.</p>
-      `
+      `,
     },
     ar: {
       title: 'دليل صفحة التوصيات',
@@ -52,8 +52,8 @@ export const helpContent = {
           <li><strong>الحصول على توصية:</strong> بعد ملء النموذج، انقر هنا لإرسال البيانات إلى الذكاء الاصطناعي لتحليلها.</li>
         </ul>
         <p>الهدف هو الالتزام بمبدأ <strong>ALARA (أقل ما يمكن تحقيقه بشكل معقول)</strong> عن طريق تجنب التعرض غير الضروري للإشعاع.</p>
-      `
-    }
+      `,
+    },
   },
   patients: {
     en: {
@@ -72,7 +72,7 @@ export const helpContent = {
             </ul>
           </li>
         </ul>
-      `
+      `,
     },
     ar: {
       title: 'دليل إدارة المرضى',
@@ -90,8 +90,8 @@ export const helpContent = {
             </ul>
           </li>
         </ul>
-      `
-    }
+      `,
+    },
   },
   profile: {
     en: {
@@ -108,7 +108,7 @@ export const helpContent = {
           </li>
         </ul>
         <p>Keeping your profile and scan history accurate ensures the mSv dose tracker in the header is always correct.</p>
-      `
+      `,
     },
     ar: {
       title: 'دليل صفحة الملف الشخصي',
@@ -124,7 +124,7 @@ export const helpContent = {
           </li>
         </ul>
         <p>يضمن الحفاظ على دقة ملفك الشخصي وسجل الفحوصات أن يكون متتبع جرعات mSv في الرأس صحيحًا دائمًا.</p>
-      `
-    }
-  }
+      `,
+    },
+  },
 }

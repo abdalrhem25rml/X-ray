@@ -42,7 +42,8 @@ const statusClass = computed(() => {
           <div
             class="counter-bar"
             :style="{
-              width: yearlyLimit > 0 ? Math.min((currentMsv / yearlyLimit) * 100, 100) + '%' : '100%',
+              width:
+                yearlyLimit > 0 ? Math.min((currentMsv / yearlyLimit) * 100, 100) + '%' : '100%',
             }"
           ></div>
         </div>

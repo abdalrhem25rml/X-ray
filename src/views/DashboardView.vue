@@ -11,7 +11,11 @@ const databaseStore = useDatabaseStore()
 const router = useRouter()
 
 const userProfileForm = ref({
-  role: null, birthDate: '', gender: '', allergies: '', medicalHistory: '',
+  role: null,
+  birthDate: '',
+  gender: '',
+  allergies: '',
+  medicalHistory: '',
 })
 
 // ✅ FIX: The main loading screen now waits for BOTH auth to be ready AND the profile to finish loading.
@@ -42,8 +46,14 @@ const saveUserProfile = async () => {
     role: role,
     birthDate: Timestamp.fromDate(new Date(birthDate)),
     gender: gender,
-    allergies: allergies.split(',').map((s) => s.trim()).filter(Boolean),
-    medicalHistory: medicalHistory.split(',').map((s) => s.trim()).filter(Boolean),
+    allergies: allergies
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
+    medicalHistory: medicalHistory
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean),
   }
 
   const success = await databaseStore.setUserProfile(uid, profileData)

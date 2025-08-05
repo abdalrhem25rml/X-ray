@@ -3,7 +3,7 @@ import { computed, inject } from 'vue'
 
 const props = defineProps({
   show: Boolean,
-  content: Object
+  content: Object,
 })
 
 const emit = defineEmits(['close'])
@@ -106,7 +106,7 @@ const helpBody = computed(() => {
   transition: background-color 0.2s;
 }
 .action-button:hover {
-    background-color: #6a7483;
+  background-color: #6a7483;
 }
 .modal-fade-enter-active,
 .modal-fade-leave-active {

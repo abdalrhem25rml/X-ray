@@ -78,9 +78,22 @@ const onProfileSaved = async (formData) => {
     gender: formData.gender,
     weight: Number(formData.weight) || null, // Add weight, ensuring it's a number
     isPregnant: formData.isPregnant,
-    estimatedDueDate: formData.isPregnant && formData.estimatedDueDate ? Timestamp.fromDate(new Date(formData.estimatedDueDate)) : null,
-    allergies: Array.isArray(formData.allergies) ? formData.allergies : formData.allergies.split(',').map((s) => s.trim()).filter(Boolean),
-    medicalHistory: Array.isArray(formData.medicalHistory) ? formData.medicalHistory : formData.medicalHistory.split(',').map((s) => s.trim()).filter(Boolean),
+    estimatedDueDate:
+      formData.isPregnant && formData.estimatedDueDate
+        ? Timestamp.fromDate(new Date(formData.estimatedDueDate))
+        : null,
+    allergies: Array.isArray(formData.allergies)
+      ? formData.allergies
+      : formData.allergies
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+    medicalHistory: Array.isArray(formData.medicalHistory)
+      ? formData.medicalHistory
+      : formData.medicalHistory
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
   }
 
   const success = await databaseStore.setUserProfile(userId.value, profileToSave)
@@ -133,13 +146,24 @@ const handleDeleteScan = async () => {
 }
 
 // --- Modal Opening Functions ---
-const openAddScanModal = () => { scanToEdit.value = null; showScanFormModal.value = true }
-const openEditScanModal = (scan) => { scanToEdit.value = scan; showScanFormModal.value = true }
-const openDeleteConfirmation = (scan) => { scanToDelete.value = scan; showDeleteModal.value = true }
+const openAddScanModal = () => {
+  scanToEdit.value = null
+  showScanFormModal.value = true
+}
+const openEditScanModal = (scan) => {
+  scanToEdit.value = scan
+  showScanFormModal.value = true
+}
+const openDeleteConfirmation = (scan) => {
+  scanToDelete.value = scan
+  showDeleteModal.value = true
+}
 
 // --- Lifecycle Hook ---
 onMounted(() => {
-  watch(() => authStore.isAuthReady, (isReady) => {
+  watch(
+    () => authStore.isAuthReady,
+    (isReady) => {
       if (isReady && userId.value) {
         fetchScans()
       }
@@ -154,39 +178,109 @@ onMounted(() => {
     <div class="profile-section card">
       <div class="card-header">
         <h2>{{ currentLanguage === 'en' ? 'My Profile' : 'ملفي الشخصي' }}</h2>
-        <button @click="showProfileFormModal = true" class="action-button">{{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}</button>
+        <button @click="showProfileFormModal = true" class="action-button">
+          {{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}
+        </button>
       </div>
       <div v-if="authStore.isProfileLoading" class="loading-state">Loading profile...</div>
       <div v-else-if="userProfile" class="profile-details">
-        <p><strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong><span>{{ userProfile.displayName }}</span></p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong><span>{{ userProfile.email }}</span></p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong><span class="role-tag" v-if="userProfile.role === 'doctor'">{{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}</span><span class="role-tag" v-else>{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</span></p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong><span>{{ userProfile.birthDate || 'Not set' }}</span></p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong
+          ><span>{{ userProfile.displayName }}</span>
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong
+          ><span>{{ userProfile.email }}</span>
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong
+          ><span class="role-tag" v-if="userProfile.role === 'doctor'">{{
+            currentLanguage === 'en' ? 'Doctor' : 'طبيب'
+          }}</span
+          ><span class="role-tag" v-else>{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</span>
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong
+          ><span>{{ userProfile.birthDate || 'Not set' }}</span>
+        </p>
 
         <!-- ✅ ADDED: Display Weight in the profile details -->
-        <p><strong>{{ currentLanguage === 'en' ? 'Weight:' : 'الوزن:' }}</strong><span>{{ userProfile.weight ? `${userProfile.weight} kg` : 'Not set' }}</span></p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Weight:' : 'الوزن:' }}</strong
+          ><span>{{ userProfile.weight ? `${userProfile.weight} kg` : 'Not set' }}</span>
+        </p>
 
-        <p><strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong><span v-if="userProfile.gender === 'male'">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</span><span v-else-if="userProfile.gender === 'female'">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</span><span v-else>Not set</span></p>
-        <p v-if="userProfile.gender === 'female'"><strong>{{ currentLanguage === 'en' ? 'Pregnant: ' : 'حامل: ' }}</strong><span v-if="userProfile.isPregnant">{{ currentLanguage === 'en' ? 'Yes' : 'نعم' }} ({{ currentLanguage === 'en' ? 'Due:' : 'المتوقع:' }} {{ userProfile.estimatedDueDate }})</span><span v-else>{{ currentLanguage === 'en' ? 'No' : 'لا' }}</span></p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong><span>{{ userProfile.allergies?.join(', ') || 'None' }}</span></p>
-        <p><strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ الطبي:' }}</strong><span>{{ userProfile.medicalHistory?.join(', ') || 'None' }}</span></p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong
+          ><span v-if="userProfile.gender === 'male'">{{
+            currentLanguage === 'en' ? 'Male' : 'ذكر'
+          }}</span
+          ><span v-else-if="userProfile.gender === 'female'">{{
+            currentLanguage === 'en' ? 'Female' : 'أنثى'
+          }}</span
+          ><span v-else>Not set</span>
+        </p>
+        <p v-if="userProfile.gender === 'female'">
+          <strong>{{ currentLanguage === 'en' ? 'Pregnant: ' : 'حامل: ' }}</strong
+          ><span v-if="userProfile.isPregnant"
+            >{{ currentLanguage === 'en' ? 'Yes' : 'نعم' }} ({{
+              currentLanguage === 'en' ? 'Due:' : 'المتوقع:'
+            }}
+            {{ userProfile.estimatedDueDate }})</span
+          ><span v-else>{{ currentLanguage === 'en' ? 'No' : 'لا' }}</span>
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong
+          ><span>{{ userProfile.allergies?.join(', ') || 'None' }}</span>
+        </p>
+        <p>
+          <strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ الطبي:' }}</strong
+          ><span>{{ userProfile.medicalHistory?.join(', ') || 'None' }}</span>
+        </p>
       </div>
     </div>
 
     <div class="history-section card">
       <div class="card-header">
         <h2>{{ currentLanguage === 'en' ? 'Personal Scan History' : 'تاريخ الفحوصات الشخصية' }}</h2>
-        <button @click="openAddScanModal" class="action-button">{{ currentLanguage === 'en' ? 'Add Personal Scan' : 'إضافة فحص شخصي' }}</button>
+        <button @click="openAddScanModal" class="action-button">
+          {{ currentLanguage === 'en' ? 'Add Personal Scan' : 'إضافة فحص شخصي' }}
+        </button>
       </div>
-      <HistoryTable :scans="personalScans" :is-loading="databaseStore.loading" :is-personal-view="true" @edit="openEditScanModal" @delete="openDeleteConfirmation" />
+      <HistoryTable
+        :scans="personalScans"
+        :is-loading="databaseStore.loading"
+        :is-personal-view="true"
+        @edit="openEditScanModal"
+        @delete="openDeleteConfirmation"
+      />
     </div>
 
-    <ProfileFormModal :show="showProfileFormModal" :profile-data="userProfile" @close="showProfileFormModal = false" @save="onProfileSaved" />
-    <PersonalScanFormModal :show="showScanFormModal" :scan="scanToEdit" :is-saving="databaseStore.loading" @close="showScanFormModal = false" @save="handleSaveScan" />
-    <ConfirmDeleteModal :show="showDeleteModal" :title="'Delete Scan'" :message="'Are you sure you want to delete this scan?'" @close="showDeleteModal = false" @confirm="handleDeleteScan" />
+    <ProfileFormModal
+      :show="showProfileFormModal"
+      :profile-data="userProfile"
+      @close="showProfileFormModal = false"
+      @save="onProfileSaved"
+    />
+    <PersonalScanFormModal
+      :show="showScanFormModal"
+      :scan="scanToEdit"
+      :is-saving="databaseStore.loading"
+      @close="showScanFormModal = false"
+      @save="handleSaveScan"
+    />
+    <ConfirmDeleteModal
+      :show="showDeleteModal"
+      :title="'Delete Scan'"
+      :message="'Are you sure you want to delete this scan?'"
+      @close="showDeleteModal = false"
+      @confirm="handleDeleteScan"
+    />
 
     <div class="switch-link-container">
-      <a href="#" @click.prevent="router.push('/dashboard')">{{ currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم' }}</a>
+      <a href="#" @click.prevent="router.push('/dashboard')">{{
+        currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم'
+      }}</a>
     </div>
   </div>
 </template>

@@ -174,58 +174,58 @@ export const useDatabaseStore = defineStore('database', {
     },
 
     // --- SCAN ACTIONS ---
-  async createScan(scanData) {
-        this.loading = true
-        this.error = null
-        const essentials = this._getDBEssentials()
-        if (!essentials) return null
-        try {
-          const { db, appId, userId } = essentials
-          const scansCollectionRef = collection(db, 'artifacts', appId, 'scans')
+    async createScan(scanData) {
+      this.loading = true
+      this.error = null
+      const essentials = this._getDBEssentials()
+      if (!essentials) return null
+      try {
+        const { db, appId, userId } = essentials
+        const scansCollectionRef = collection(db, 'artifacts', appId, 'scans')
 
-          // ✅ CORRECTED: Trust the incoming scanData to be correctly formatted.
-          // The conversion to Timestamp is now done in the component layer.
-          const newScanData = {
-            ...scanData,
-            creatorId: userId,
-            isPersonalScan: scanData.patientId === userId,
-            createdAt: Timestamp.now(),
-          }
-
-          const docRef = await addDoc(scansCollectionRef, newScanData)
-          return docRef.id
-        } catch (err) {
-          this.error = err.message
-          return null
-        } finally {
-          this.loading = false
+        // ✅ CORRECTED: Trust the incoming scanData to be correctly formatted.
+        // The conversion to Timestamp is now done in the component layer.
+        const newScanData = {
+          ...scanData,
+          creatorId: userId,
+          isPersonalScan: scanData.patientId === userId,
+          createdAt: Timestamp.now(),
         }
-      },
 
-      async updateScan(scanId, scanData) {
-        this.loading = true
-        this.error = null
-        const essentials = this._getDBEssentials()
-        if (!essentials) return false
-        try {
-          const { db, appId } = essentials
-          const scanDocRef = doc(db, 'artifacts', appId, 'scans', scanId)
+        const docRef = await addDoc(scansCollectionRef, newScanData)
+        return docRef.id
+      } catch (err) {
+        this.error = err.message
+        return null
+      } finally {
+        this.loading = false
+      }
+    },
 
-          // ✅ CORRECTED: Trust the incoming scanData to be correctly formatted.
-          const dataToUpdate = {
-            ...scanData,
-            updatedAt: Timestamp.now(),
-          }
+    async updateScan(scanId, scanData) {
+      this.loading = true
+      this.error = null
+      const essentials = this._getDBEssentials()
+      if (!essentials) return false
+      try {
+        const { db, appId } = essentials
+        const scanDocRef = doc(db, 'artifacts', appId, 'scans', scanId)
 
-          await updateDoc(scanDocRef, dataToUpdate)
-          return true
-        } catch (err) {
-          this.error = err.message
-          return false
-        } finally {
-          this.loading = false
+        // ✅ CORRECTED: Trust the incoming scanData to be correctly formatted.
+        const dataToUpdate = {
+          ...scanData,
+          updatedAt: Timestamp.now(),
         }
-      },
+
+        await updateDoc(scanDocRef, dataToUpdate)
+        return true
+      } catch (err) {
+        this.error = err.message
+        return false
+      } finally {
+        this.loading = false
+      }
+    },
 
     async deleteScan(scanId) {
       this.loading = true
@@ -299,7 +299,14 @@ export const useDatabaseStore = defineStore('database', {
       if (!essentials) return null
       try {
         const { db, appId, userId } = essentials
-        const pregnancyCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'pregnancies')
+        const pregnancyCollectionRef = collection(
+          db,
+          'artifacts',
+          appId,
+          'users',
+          userId,
+          'pregnancies',
+        )
         const newDeclaration = {
           ...declarationData,
           status: 'active',
@@ -323,7 +330,14 @@ export const useDatabaseStore = defineStore('database', {
       if (!essentials) return []
       try {
         const { db, appId, userId } = essentials
-        const pregnancyCollectionRef = collection(db, 'artifacts', appId, 'users', userId, 'pregnancies')
+        const pregnancyCollectionRef = collection(
+          db,
+          'artifacts',
+          appId,
+          'users',
+          userId,
+          'pregnancies',
+        )
         const q = query(pregnancyCollectionRef, orderBy('declarationDate', 'desc'))
         const querySnapshot = await getDocs(q)
         return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
@@ -342,7 +356,15 @@ export const useDatabaseStore = defineStore('database', {
       if (!essentials) return false
       try {
         const { db, appId, userId } = essentials
-        const pregnancyDocRef = doc(db, 'artifacts', appId, 'users', userId, 'pregnancies', pregnancyId)
+        const pregnancyDocRef = doc(
+          db,
+          'artifacts',
+          appId,
+          'users',
+          userId,
+          'pregnancies',
+          pregnancyId,
+        )
         await updateDoc(pregnancyDocRef, { ...updates, updatedAt: Timestamp.now() })
         return true
       } catch (err) {

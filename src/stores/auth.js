@@ -37,7 +37,7 @@ export const useAuthStore = defineStore('auth', {
       if (!auth) return
       this.authInstance = auth
 
-onAuthStateChanged(this.authInstance, async (user) => {
+      onAuthStateChanged(this.authInstance, async (user) => {
         if (user) {
           this.user = user
           // ✅ 1. Set profile loading to TRUE before starting the fetch.
