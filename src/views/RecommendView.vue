@@ -197,7 +197,7 @@ const getRecommendations = async () => {
 Tasks:
 1. **Recommendation (recommendationText):** Justify if the scan is appropriate, considering the specific protocol, existing dose, and pregnancy status.
 2. **Patient Dose (patientCalculatedMsv):** Estimate the patient's effective dose in mSv from THIS SCAN.
-3. **Occupational Dose (doctorOccupationalMsv):** If practitioner, estimate occupational dose. If patient, this MUST be 0.
+3. **Occupational Dose (doctorOccupationalMsv):** If practitioner, estimate occupational dose.
 4. **Warning (Warning):** Warn if the patient's new total dose will exceed the 1 mSv public limit, or if the doctor's new occupational dose exceeds their limit.
 
 Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
