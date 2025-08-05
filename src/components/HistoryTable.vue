@@ -60,7 +60,7 @@ const formatDate = (timestamp) => {
               {{ currentLanguage === 'en' ? 'Scan Protocol' : 'بروتوكول الفحص' }}
             </th>
             <th>{{ currentLanguage === 'en' ? 'Date' : 'التاريخ' }}</th>
-            <th>{{ currentLanguage === 'en' ? 'Patient Dose' : 'جرعة المريض' }} (mSv)</th>
+            <th>{{ currentLanguage === 'en' ? 'Dose' : 'الجرعة' }} (mSv)</th>
             <th class="details-column">
               {{ currentLanguage === 'en' ? 'Reason for Scan' : 'سبب الفحص' }}
             </th>

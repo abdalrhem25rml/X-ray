@@ -23,8 +23,6 @@ const scanSubtypes = {
     { value: 'Other', en: 'Other...', ar: 'أخرى...' },
   ],
   'X-ray': [
-    { value: 'Barium Swallow', en: 'Barium Swallow', ar: 'بلع الباريوم' },
-    { value: 'Barium Meal', en: 'Barium Meal', ar: 'وجبة الباريوم' },
     { value: 'Barium Enema', en: 'Barium Enema', ar: 'حقنة الباريوم الشرجية' },
     { value: 'IV Urogram (IVP)', en: 'IV Urogram (IVP)', ar: 'أشعة المسالك البولية (IVP)' },
     { value: 'HSG', en: 'HSG', ar: 'أشعة الرحم (HSG)' },
