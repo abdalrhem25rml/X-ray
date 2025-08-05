@@ -50,12 +50,10 @@ const userProfile = computed(() => {
     email: authStore.user?.email,
     birthDate: toDateString(authStore.userProfile.birthDate),
     estimatedDueDate: toDateString(authStore.userProfile.estimatedDueDate),
-    // ✅ Ensure weight is passed through, default to 'Not set'
-    weight: authStore.userProfile.weight || null,
   }
 })
 
-// --- Data Fetching (Only for scans) ---
+// --- Data Fetching ---
 const fetchScans = async () => {
   if (!userId.value) return
   const scans = await databaseStore.fetchScansForPatient(userId.value)
@@ -68,7 +66,6 @@ const fetchScans = async () => {
 const onProfileSaved = async (formData) => {
   if (!userId.value) return
 
-  // ✅ UPDATED: Include weight in the object to be saved
   const profileToSave = {
     ...authStore.userProfile,
     displayName: authStore.user.displayName,
@@ -76,24 +73,11 @@ const onProfileSaved = async (formData) => {
     role: formData.role,
     birthDate: Timestamp.fromDate(new Date(formData.birthDate)),
     gender: formData.gender,
-    weight: Number(formData.weight) || null, // Add weight, ensuring it's a number
+    weight: Number(formData.weight) || null, // Make sure weight is a number
     isPregnant: formData.isPregnant,
-    estimatedDueDate:
-      formData.isPregnant && formData.estimatedDueDate
-        ? Timestamp.fromDate(new Date(formData.estimatedDueDate))
-        : null,
-    allergies: Array.isArray(formData.allergies)
-      ? formData.allergies
-      : formData.allergies
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
-    medicalHistory: Array.isArray(formData.medicalHistory)
-      ? formData.medicalHistory
-      : formData.medicalHistory
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean),
+    estimatedDueDate: formData.isPregnant && formData.estimatedDueDate ? Timestamp.fromDate(new Date(formData.estimatedDueDate)) : null,
+    allergies: Array.isArray(formData.allergies) ? formData.allergies : formData.allergies.split(',').map((s) => s.trim()).filter(Boolean),
+    medicalHistory: Array.isArray(formData.medicalHistory) ? formData.medicalHistory : formData.medicalHistory.split(',').map((s) => s.trim()).filter(Boolean),
   }
 
   const success = await databaseStore.setUserProfile(userId.value, profileToSave)
@@ -114,9 +98,11 @@ const handleSaveScan = async (scanDataFromModal) => {
   const dataToSave = {
     patientId: userId.value,
     scanType: scanDataFromModal.scanType,
+    scanPlace: scanDataFromModal.scanPlace, // Include place
+    scanDetail: scanDataFromModal.scanDetail, // Include detail
     scanDate: Timestamp.fromDate(new Date(scanDataFromModal.scanDate)),
     patientDose: Number(scanDataFromModal.patientDose),
-    doctorDose: 0,
+    doctorDose: 0, // Personal scans have no doctor dose
     reason: scanDataFromModal.reason,
     notes: scanDataFromModal.notes,
   }
@@ -146,12 +132,13 @@ const handleDeleteScan = async () => {
 }
 
 // --- Modal Opening Functions ---
+// ✅ CORRECTED: This now correctly sets up the modals for adding or editing
 const openAddScanModal = () => {
-  scanToEdit.value = null
+  scanToEdit.value = null // Clear the scan to ensure "Add Mode"
   showScanFormModal.value = true
 }
 const openEditScanModal = (scan) => {
-  scanToEdit.value = scan
+  scanToEdit.value = scan // Set the scan to be edited
   showScanFormModal.value = true
 }
 const openDeleteConfirmation = (scan) => {
@@ -161,9 +148,7 @@ const openDeleteConfirmation = (scan) => {
 
 // --- Lifecycle Hook ---
 onMounted(() => {
-  watch(
-    () => authStore.isAuthReady,
-    (isReady) => {
+  watch(() => authStore.isAuthReady, (isReady) => {
       if (isReady && userId.value) {
         fetchScans()
       }
@@ -178,75 +163,31 @@ onMounted(() => {
     <div class="profile-section card">
       <div class="card-header">
         <h2>{{ currentLanguage === 'en' ? 'My Profile' : 'ملفي الشخصي' }}</h2>
-        <button @click="showProfileFormModal = true" class="action-button">
-          {{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}
-        </button>
+        <button @click="showProfileFormModal = true" class="action-button">{{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}</button>
       </div>
       <div v-if="authStore.isProfileLoading" class="loading-state">Loading profile...</div>
       <div v-else-if="userProfile" class="profile-details">
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong
-          ><span>{{ userProfile.displayName }}</span>
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong
-          ><span>{{ userProfile.email }}</span>
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong
-          ><span class="role-tag" v-if="userProfile.role === 'doctor'">{{
-            currentLanguage === 'en' ? 'Doctor' : 'طبيب'
-          }}</span
-          ><span class="role-tag" v-else>{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</span>
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong
-          ><span>{{ userProfile.birthDate || 'Not set' }}</span>
-        </p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Name:' : 'اﻹسم:' }}</strong><span>{{ userProfile.displayName }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong><span>{{ userProfile.email }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong><span class="role-tag" v-if="userProfile.role === 'doctor'">{{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}</span><span class="role-tag" v-else>{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong><span>{{ userProfile.birthDate || 'Not set' }}</span></p>
 
-        <!-- ✅ ADDED: Display Weight in the profile details -->
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Weight:' : 'الوزن:' }}</strong
-          ><span>{{ userProfile.weight ? `${userProfile.weight} kg` : 'Not set' }}</span>
-        </p>
+        <!-- Displays Weight in the profile -->
+        <p><strong>{{ currentLanguage === 'en' ? 'Weight:' : 'الوزن:' }}</strong><span>{{ userProfile.weight ? `${userProfile.weight} kg` : 'Not set' }}</span></p>
 
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong
-          ><span v-if="userProfile.gender === 'male'">{{
-            currentLanguage === 'en' ? 'Male' : 'ذكر'
-          }}</span
-          ><span v-else-if="userProfile.gender === 'female'">{{
-            currentLanguage === 'en' ? 'Female' : 'أنثى'
-          }}</span
-          ><span v-else>Not set</span>
-        </p>
-        <p v-if="userProfile.gender === 'female'">
-          <strong>{{ currentLanguage === 'en' ? 'Pregnant: ' : 'حامل: ' }}</strong
-          ><span v-if="userProfile.isPregnant"
-            >{{ currentLanguage === 'en' ? 'Yes' : 'نعم' }} ({{
-              currentLanguage === 'en' ? 'Due:' : 'المتوقع:'
-            }}
-            {{ userProfile.estimatedDueDate }})</span
-          ><span v-else>{{ currentLanguage === 'en' ? 'No' : 'لا' }}</span>
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong
-          ><span>{{ userProfile.allergies?.join(', ') || 'None' }}</span>
-        </p>
-        <p>
-          <strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ الطبي:' }}</strong
-          ><span>{{ userProfile.medicalHistory?.join(', ') || 'None' }}</span>
-        </p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong><span v-if="userProfile.gender === 'male'">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</span><span v-else-if="userProfile.gender === 'female'">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</span><span v-else>Not set</span></p>
+        <p v-if="userProfile.gender === 'female'"><strong>{{ currentLanguage === 'en' ? 'Pregnant: ' : 'حامل: ' }}</strong><span v-if="userProfile.isPregnant">{{ currentLanguage === 'en' ? 'Yes' : 'نعم' }} ({{ currentLanguage === 'en' ? 'Due:' : 'المتوقع:' }} {{ userProfile.estimatedDueDate }})</span><span v-else>{{ currentLanguage === 'en' ? 'No' : 'لا' }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong><span>{{ userProfile.allergies?.join(', ') || 'None' }}</span></p>
+        <p><strong>{{ currentLanguage === 'en' ? 'Medical History:' : 'التاريخ الطبي:' }}</strong><span>{{ userProfile.medicalHistory?.join(', ') || 'None' }}</span></p>
       </div>
     </div>
 
     <div class="history-section card">
       <div class="card-header">
         <h2>{{ currentLanguage === 'en' ? 'Personal Scan History' : 'تاريخ الفحوصات الشخصية' }}</h2>
-        <button @click="openAddScanModal" class="action-button">
-          {{ currentLanguage === 'en' ? 'Add Personal Scan' : 'إضافة فحص شخصي' }}
-        </button>
+        <button @click="openAddScanModal" class="action-button">{{ currentLanguage === 'en' ? 'Add Personal Scan' : 'إضافة فحص شخصي' }}</button>
       </div>
+      <!-- ✅ The HistoryTable component itself is correct and emits the right events -->
       <HistoryTable
         :scans="personalScans"
         :is-loading="databaseStore.loading"
@@ -256,12 +197,8 @@ onMounted(() => {
       />
     </div>
 
-    <ProfileFormModal
-      :show="showProfileFormModal"
-      :profile-data="userProfile"
-      @close="showProfileFormModal = false"
-      @save="onProfileSaved"
-    />
+    <!-- ✅ This section correctly passes the scan data for editing -->
+    <ProfileFormModal :show="showProfileFormModal" :profile-data="userProfile" @close="showProfileFormModal = false" @save="onProfileSaved" />
     <PersonalScanFormModal
       :show="showScanFormModal"
       :scan="scanToEdit"
@@ -278,15 +215,13 @@ onMounted(() => {
     />
 
     <div class="switch-link-container">
-      <a href="#" @click.prevent="router.push('/dashboard')">{{
-        currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم'
-      }}</a>
+      <a href="#" @click.prevent="router.push('/dashboard')">{{ currentLanguage === 'en' ? 'Back to dashboard' : 'العودة إلى لوحة التحكم' }}</a>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* All your styles remain the same */
+/* All styles are unchanged */
 .profile-page {
   padding: 2rem;
   max-width: 1100px;
@@ -390,54 +325,15 @@ a {
 }
 
 @media (max-width: 767px) {
-  .profile-page {
-    padding: 1rem;
-    gap: 1.5rem;
-  }
-
-  .card {
-    padding: 1.25rem;
-  }
-
-  .card-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.75rem;
-  }
-
-  .card-header h2 {
-    font-size: 1.35em;
-  }
-
-  .action-button {
-    width: 100%;
-    padding: 12px;
-    font-size: 1em;
-    text-align: center;
-  }
-
-  .profile-details {
-    grid-template-columns: 1fr;
-    padding: 1rem;
-  }
-
-  .profile-details p {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 0.5rem 0;
-  }
-
-  .profile-details strong {
-    padding-right: 0;
-    margin-bottom: 0.25rem;
-  }
-
-  .profile-details span {
-    text-align: left;
-  }
-
-  .switch-link-container {
-    margin-top: 20px;
-  }
+  .profile-page { padding: 1rem; gap: 1.5rem; }
+  .card { padding: 1.25rem; }
+  .card-header { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+  .card-header h2 { font-size: 1.35em; }
+  .action-button { width: 100%; padding: 12px; font-size: 1em; text-align: center; }
+  .profile-details { grid-template-columns: 1fr; padding: 1rem; }
+  .profile-details p { flex-direction: column; align-items: flex-start; padding: 0.5rem 0; }
+  .profile-details strong { padding-right: 0; margin-bottom: 0.25rem; }
+  .profile-details span { text-align: left; }
+  .switch-link-container { margin-top: 20px; }
 }
 </style>

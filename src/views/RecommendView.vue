@@ -3,6 +3,7 @@ import { ref, watch, computed, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDatabaseStore } from '@/stores/database'
+import { Timestamp } from 'firebase/firestore' // Added Timestamp for saving the new scan
 
 // --- Pinia and Vue Router ---
 const router = useRouter()
@@ -14,6 +15,7 @@ const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
 const currentTotalMsv = inject('currentMsv')
 const doseLimit = inject('doseLimit')
+const triggerMsvRecalculation = inject('triggerMsvRecalculation') // Added to refresh dose after saving
 
 // --- Data for Dropdowns ---
 const scanSubtypes = {
@@ -72,6 +74,7 @@ const form = ref({
 
 // --- UI states ---
 const isLoading = ref(false)
+const isSaving = ref(false) // State for the new save button
 const isFetchingPatient = ref(false)
 const aiResponse = ref(null)
 const errorMessage = ref('')
@@ -366,6 +369,56 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
     isLoading.value = false
   }
 }
+
+// --- ✅ NEW FEATURE: Function to Save the Recommendation as a Scan ---
+const saveScanFromRecommendation = async () => {
+  if (!aiResponse.value || !form.value.patientId) {
+    alert('No recommendation data to save or patient ID is missing.')
+    return
+  }
+
+  isSaving.value = true
+  try {
+    const finalScanPlaceValue = form.value.scanPlace === 'other'
+      ? form.value.otherScanPlaceDescription
+      : form.value.scanPlace
+
+    const finalScanDetailValue = form.value.subScanType === 'Other'
+      ? form.value.otherScanDescription
+      : form.value.subScanType
+
+    const scanToSave = {
+      patientId: form.value.patientId,
+      scanType: form.value.scanType,
+      scanPlace: finalScanPlaceValue,
+      scanDetail: finalScanDetailValue,
+      scanDate: Timestamp.now(), // Use today's date for the scan
+      patientDose: Number(aiResponse.value.patientCalculatedMsv) || 0,
+      doctorDose: Number(aiResponse.value.doctorOccupationalMsv) || 0,
+      reason: form.value.currentSymptoms || 'As per AI recommendation', // Use symptoms as reason
+      notes: aiResponse.value.recommendationText, // Use AI recommendation as notes
+      isPersonalScan: recommendationMode.value === 'personal'
+    }
+
+    const success = await databaseStore.createScan(scanToSave)
+    if (success) {
+      alert(currentLanguage.value === 'en' ? 'Scan record saved successfully!' : '!تم حفظ سجل الفحص بنجاح')
+      // Refresh the global dose calculation
+      if (triggerMsvRecalculation) {
+        triggerMsvRecalculation()
+      }
+      // Clear the recommendation to prevent duplicate saves
+      aiResponse.value = null
+    } else {
+      throw new Error(databaseStore.error)
+    }
+  } catch (error) {
+    console.error('Error saving scan from recommendation:', error)
+    alert(currentLanguage.value === 'en' ? `Failed to save scan: ${error.message}` : `فشل حفظ الفحص: ${error.message}`)
+  } finally {
+    isSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -642,6 +695,25 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
               <p>{{ aiResponse.recommendationText }}</p>
             </div>
           </div>
+
+          <!-- ✅ NEW FEATURE: Save Recommendation as a Scan Button -->
+          <div class="save-recommendation-section">
+            <button
+              @click="saveScanFromRecommendation"
+              :disabled="isSaving"
+              class="action-button save-button"
+            >
+              {{
+                isSaving
+                  ? (currentLanguage === 'en' ? 'Saving...' : '...جاري الحفظ')
+                  : (currentLanguage === 'en' ? 'Save Recommendation as Scan' : 'حفظ التوصية كفحص')
+              }}
+            </button>
+            <p class="save-note">
+              {{ currentLanguage === 'en' ? 'This will create a new scan record with today\'s date using the estimated doses.' : 'سيؤدي هذا إلى إنشاء سجل فحص جديد بتاريخ اليوم باستخدام الجرعات المقدرة.'}}
+            </p>
+          </div>
+
         </div>
 
         <p class="switch-link-container">
@@ -847,5 +919,23 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
+}
+.save-recommendation-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid #8d99ae;
+}
+.save-button {
+  background-color: #28a745;
+}
+.save-button:disabled {
+  background-color: #94d3a2;
+  cursor: not-allowed;
+}
+.save-note {
+  text-align: center;
+  font-size: 0.9em;
+  color: #6c757d;
+  margin-top: 0.75rem;
 }
 </style>
