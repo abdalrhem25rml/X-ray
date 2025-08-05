@@ -7,6 +7,7 @@ const props = defineProps({
   scan: Object,
   isSaving: Boolean,
 })
+// ✅ CORRECTED: The emit definition is now correct.
 const emit = defineEmits(['close', 'save'])
 
 const authStore = useAuthStore()
@@ -49,8 +50,9 @@ const form = reactive({
   scanType: 'X-ray',
   subScanType: '',
   otherScanDescription: '',
-  scanPlace: '', // New field
-  otherScanPlaceDescription: '', // New field for "Other"
+  scanPlace: '',
+  otherScanPlaceDescription: '',
+  numberOfScans: 1,
   scanDate: '',
   patientDose: null,
   reason: '',
@@ -74,6 +76,7 @@ watch(
         otherScanDescription: '',
         scanPlace: '',
         otherScanPlaceDescription: '',
+        numberOfScans: 1,
         scanDate: new Date().toISOString().split('T')[0],
         patientDose: null,
         reason: '',
@@ -87,6 +90,7 @@ watch(
         form.patientDose = props.scan.patientDose
         form.reason = props.scan.reason
         form.notes = props.scan.notes
+        form.numberOfScans = props.scan.numberOfScans || 1
 
         const savedSubtype = props.scan.scanDetail
         const isStandardSubtype = currentScanSubtypes.value.some(
@@ -152,7 +156,11 @@ const estimateDose = async () => {
       currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar
   }
 
-  const prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`
+  let prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan`
+  if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
+    prompt += ` (number of scans: ${form.numberOfScans})`
+  }
+  prompt += ` of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`
 
   const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }
 
@@ -202,6 +210,12 @@ const handleSubmit = async () => {
     )
     return
   }
+
+  if (form.scanType === 'X-ray' && (form.numberOfScans === null || form.numberOfScans < 1)) {
+    alert(currentLanguage.value === 'en' ? 'Number of scans must be at least 1 for X-ray.' : 'عدد الفحوصات لأشعة إكس يجب أن يكون 1 على الأقل.');
+    return;
+  }
+
   if (!form.patientDose && form.patientDose !== 0) {
     if (!(await estimateDose())) return
   }
@@ -216,6 +230,7 @@ const handleSubmit = async () => {
     scanType: form.scanType,
     scanDetail: finalScanDetailValue,
     scanPlace: finalScanPlaceValue,
+    numberOfScans: form.scanType === 'X-ray' ? form.numberOfScans : 1,
     scanDate: form.scanDate,
     patientDose: form.patientDose,
     reason: form.reason,
@@ -304,6 +319,11 @@ const handleSubmit = async () => {
               "
               required
             />
+          </div>
+
+          <div v-if="form.scanType === 'X-ray'" class="form-group">
+            <label>{{ currentLanguage === 'en' ? 'Number of Scans' : 'عدد الفحوصات' }}</label>
+            <input type="number" v-model="form.numberOfScans" min="1" required />
           </div>
 
           <div class="form-group">

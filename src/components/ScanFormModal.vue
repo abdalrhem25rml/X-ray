@@ -46,8 +46,10 @@ const scanPlaces = [
 ]
 
 // --- Form State ---
+// ✅ CORRECTED: getTodayString now correctly returns only the date part.
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
+// ✅ CORRECTED: Removed the extra comma that caused a syntax error.
 const form = reactive({
   id: null,
   isPregnant: false,
@@ -57,6 +59,7 @@ const form = reactive({
   otherScanDescription: '',
   scanPlace: '',
   otherScanPlaceDescription: '',
+  numberOfScans: 1,
   scanDate: getTodayString(),
   dose: null,
   doctorDose: null,
@@ -84,6 +87,7 @@ watch(
         otherScanDescription: '',
         scanPlace: '',
         otherScanPlaceDescription: '',
+        numberOfScans: 1,
         scanDate: getTodayString(),
         dose: null,
         doctorDose: null,
@@ -100,12 +104,15 @@ watch(
         const date = props.scan.scanDate?.toDate
           ? props.scan.scanDate.toDate()
           : new Date(props.scan.scanDate)
+        // ✅ CORRECTED: Date formatting now correctly takes the first part of the split.
         form.scanDate = !isNaN(date) ? date.toISOString().split('T')[0] : getTodayString()
         form.dose = props.scan.patientDose
         form.doctorDose = props.scan.doctorDose
         form.reason = props.scan.reason
         form.notes = props.scan.notes
         form.doctorAdditionalContext = props.scan.doctorAdditionalContext
+        form.numberOfScans = props.scan.numberOfScans || 1
+
         const savedSubtype = props.scan.scanDetail
         const isStandardSubtype = (currentScanSubtypes.value || []).some(
           (opt) => opt.value === savedSubtype,
@@ -137,7 +144,6 @@ watch(
   },
 )
 
-// ✅ ADDED: AI Dose Estimation Logic
 const estimateDose = async (doseFor) => {
   if (!props.patient) {
     alert('Cannot estimate dose without a patient context.')
@@ -147,7 +153,7 @@ const estimateDose = async (doseFor) => {
   const age = props.patient.birthDate
     ? new Date().getFullYear() - new Date(props.patient.birthDate.toDate()).getFullYear()
     : 'N/A'
-  const weight = props.patient.weight || 70 // Use weight from prop, default to 70kg
+  const weight = props.patient.weight || 70
 
   const selectedSubtypeObject = currentScanSubtypes.value.find(
     (opt) => opt.value === form.subScanType,
@@ -171,10 +177,17 @@ const estimateDose = async (doseFor) => {
 
   let prompt = ''
   if (doseFor === 'patient') {
-    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`
+    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan`
+    if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
+      prompt += ` (number of scans: ${form.numberOfScans})`
+    }
+    prompt += ` of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`
   } else {
-    // doseFor === 'doctor'
-    prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a patient's ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
+    prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a patient's ${form.scanType} scan`
+    if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
+      prompt += ` (number of scans: ${form.numberOfScans})`
+    }
+    prompt += ` of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
   }
 
   let validationRules = {}
@@ -218,7 +231,6 @@ const estimateDose = async (doseFor) => {
   }
 }
 
-// ✅ UPDATED: handleSubmit now calls the estimation logic
 const handleSubmit = async () => {
   if (
     !form.scanDate ||
@@ -231,16 +243,19 @@ const handleSubmit = async () => {
     return
   }
 
-  // If patient dose is empty, try to estimate it
-  if (form.dose === null || form.dose === '') {
-    const patientDoseEstimated = await estimateDose('patient')
-    if (!patientDoseEstimated) return // Stop if estimation fails
+  if (form.scanType === 'X-ray' && (form.numberOfScans === null || form.numberOfScans < 1)) {
+    alert(currentLanguage.value === 'en' ? 'Number of scans must be at least 1 for X-ray.' : 'عدد الفحوصات لأشعة إكس يجب أن يكون 1 على الأقل.');
+    return;
   }
 
-  // If doctor dose is empty, try to estimate it
-  if (form.doctorDose === null || form.doctorDose === '') {
+  if ((form.dose === null || form.dose === '')) {
+    const patientDoseEstimated = await estimateDose('patient')
+    if (!patientDoseEstimated) return
+  }
+
+  if ((form.doctorDose === null || form.doctorDose === '')) {
     const doctorDoseEstimated = await estimateDose('doctor')
-    if (!doctorDoseEstimated) return // Stop if estimation fails
+    if (!doctorDoseEstimated) return
   }
 
   const dataToSave = {
@@ -250,6 +265,7 @@ const handleSubmit = async () => {
     scanType: form.scanType,
     scanDetail: form.subScanType === 'Other' ? form.otherScanDescription : form.subScanType,
     scanPlace: form.scanPlace === 'other' ? form.otherScanPlaceDescription : form.scanPlace,
+    numberOfScans: form.scanType === 'X-ray' ? form.numberOfScans : 1,
     scanDate: form.scanDate,
     patientDose: form.dose,
     doctorDose: form.doctorDose,
@@ -368,13 +384,17 @@ const handleSubmit = async () => {
             />
           </div>
 
+          <div v-if="form.scanType === 'X-ray'" class="form-group">
+            <label>{{ currentLanguage === 'en' ? 'Number of Scans' : 'عدد الفحوصات' }}</label>
+            <input type="number" v-model="form.numberOfScans" min="1" required />
+          </div>
+
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Scan Date' : 'تاريخ الفحص' }}</label>
             <input type="date" v-model="form.scanDate" required />
           </div>
 
           <div class="form-row">
-            <!-- ✅ UPDATED: Added placeholder text for AI estimation -->
             <div class="form-group">
               <label>{{
                 currentLanguage === 'en' ? "Patient's Dose (mSv)" : 'جرعة المريض (mSv)'
