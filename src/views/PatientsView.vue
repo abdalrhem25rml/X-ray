@@ -39,6 +39,56 @@ const fetchPatients = async () => {
   }
 }
 
+const calculateAge = (birthDate) => {
+  // Return 'N/A' if the birthDate is invalid or missing
+  if (!birthDate?.toDate) {
+    return 'N/A';
+  }
+
+  const birth = birthDate.toDate();
+  const today = new Date();
+
+  let years = today.getFullYear() - birth.getFullYear();
+  let months = today.getMonth() - birth.getMonth();
+
+  // Decrement months if the birth day of the month hasn't been reached yet
+  if (today.getDate() < birth.getDate()) {
+    months--;
+  }
+
+  // If months are negative, it means the birth month hasn't been reached this year
+  if (months < 0) {
+    years--;
+    months += 12;
+  }
+
+  // Apply conditional formatting based on the user's request
+  if (years >= 2) {
+    return `${years} ${currentLanguage.value === 'ar' ? 'سنوات' : 'years'}`;
+  } else {
+    // Handle cases under 2 years
+    const yearText = currentLanguage.value === 'ar' ? 'سنة' : 'year';
+    const monthTextPlural = currentLanguage.value === 'ar' ? 'أشهر' : 'months';
+    const monthTextSingular = currentLanguage.value === 'ar' ? 'شهر' : 'month';
+
+    if (years > 0) {
+      const monthText = months === 1 ? monthTextSingular : monthTextPlural;
+      // e.g., "1 year, 6 months"
+      return `${years} ${yearText}, ${months} ${monthText}`;
+    } else {
+      // Handle cases under 1 year
+      if (months > 0) {
+        const monthText = months === 1 ? monthTextSingular : monthTextPlural;
+        // e.g., "8 months"
+        return `${months} ${monthText}`;
+      } else {
+        // Handle newborns less than a month old
+        return currentLanguage.value === 'ar' ? 'أقل من شهر' : 'Less than a month';
+      }
+    }
+  }
+};
+
 const handleSavePatient = async (patientDataFromModal) => {
   const { id, ...dataToSave } = patientDataFromModal
   let success = false
@@ -154,7 +204,7 @@ watch(
               <tbody>
                 <tr v-for="patient in patients" :key="patient.id">
                   <td>{{ patient.name ?? 'N/A' }}</td>
-                  <td>{{ patient.age ?? 'N/A' }}</td>
+                  <td>{{ calculateAge(patient.birthDate) }}</td>
                   <td>
                     {{
                       currentLanguage === 'en'
