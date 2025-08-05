@@ -398,5 +398,113 @@ export const useDatabaseStore = defineStore('database', {
         this.loading = false
       }
     },
+
+    async createOtherScan(otherScanData) {
+      this.loading = true;
+      this.error = null;
+      const essentials = this._getDBEssentials();
+      if (!essentials) return null;
+      try {
+        const { db, appId, userId } = essentials;
+        const otherScansCollectionRef = collection(db, 'artifacts', appId, 'other_scans');
+        const dataToSave = {
+          ...otherScanData,
+          userId: userId, // Ensure the user's ID is stored
+          createdAt: Timestamp.now(),
+        };
+        const docRef = await addDoc(otherScansCollectionRef, dataToSave);
+        return docRef.id;
+      } catch (err) {
+        this.error = err.message;
+        return null;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async updateOtherScan(scanId, otherScanData) {
+      this.loading = true;
+      this.error = null;
+      const essentials = this._getDBEssentials();
+      if (!essentials) return false;
+      try {
+        const { db, appId } = essentials;
+        const scanDocRef = doc(db, 'artifacts', appId, 'other_scans', scanId);
+        await updateDoc(scanDocRef, { ...otherScanData, updatedAt: Timestamp.now() });
+        return true;
+      } catch (err) {
+        this.error = err.message;
+        return false;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async deleteOtherScan(scanId) {
+      this.loading = true;
+      this.error = null;
+      const essentials = this._getDBEssentials();
+      if (!essentials) return false;
+      try {
+        const { db, appId } = essentials;
+        const scanDocRef = doc(db, 'artifacts', appId, 'other_scans', scanId);
+        await deleteDoc(scanDocRef);
+        return true;
+      } catch (err) {
+        this.error = err.message;
+        return false;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchOtherScansForUser(userId) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const db = getFirestore();
+        const appId = import.meta.env.VITE_APP_ID;
+        const q = query(
+          collection(db, 'artifacts', appId, 'other_scans'),
+          where('userId', '==', userId),
+          orderBy('date', 'desc')
+        );
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      } catch (err) {
+        this.error = err.message;
+        return [];
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    async fetchAllDosesForUser(userId) {
+      this.loading = true;
+      this.error = null;
+      try {
+        const personalScans = await this.fetchScansForPatient(userId);
+        const otherScans = await this.fetchOtherScansForUser(userId);
+
+        const formattedPersonalScans = personalScans.map(scan => ({
+          scanDate: scan.scanDate,
+          patientDose: scan.patientDose || 0,
+          doctorDose: scan.doctorDose || 0,
+        }));
+
+        const formattedOtherScans = otherScans.map(scan => ({
+          scanDate: scan.date, // Note the different field name 'date'
+          patientDose: scan.dosage || 0, // Note the different field name 'dosage'
+          doctorDose: 0, // 'other_scans' don't have a doctor dose component
+        }));
+
+        return [...formattedPersonalScans, ...formattedOtherScans];
+      } catch (err) {
+        this.error = `Failed to fetch all doses: ${err.message}`;
+        return [];
+      } finally {
+        this.loading = false;
+      }
+    },
   },
 })
