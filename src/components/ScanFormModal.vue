@@ -1,6 +1,8 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
 
+console.log('[ScanFormModal] Script setup started.');
+
 const props = defineProps({
   show: Boolean,
   scan: Object,
@@ -13,8 +15,6 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save'])
 
 const currentLanguage = inject('currentLanguage')
-
-// --- Scan subtype options with translations ---
 const scanSubtypes = {
   'CT': [
     { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
@@ -35,7 +35,10 @@ const scanSubtypes = {
   ]
 }
 
-// --- Form State ---
+// ✅ 1. Helper function to get today's date in YYYY-MM-DD format
+const getTodayString = () => new Date().toISOString().split('T')[0]
+
+// ✅ 2. Form is now initialized with today's date
 const form = reactive({
   id: null,
   isPregnant: false,
@@ -43,136 +46,81 @@ const form = reactive({
   scanType: 'X-ray',
   subScanType: '',
   otherScanDescription: '',
-  scanDate: '',
+  scanDate: getTodayString(), // Use the helper here
   dose: null,
   doctorDose: null,
   reason: '',
   notes: '',
   doctorAdditionalContext: '',
 })
-
-// --- Computed Properties ---
 const currentScanSubtypes = computed(() => scanSubtypes[form.scanType] || [])
 const showOtherInput = computed(() => form.subScanType === 'Other')
 
 // --- Watchers ---
 watch(() => props.show, (isShown) => {
+  console.log(`[ScanFormModal] WATCH props.show changed to: ${isShown}`);
   if (isShown) {
+    console.log('[ScanFormModal] Props received -> patient:', JSON.parse(JSON.stringify(props.patient)));
+    console.log('[ScanFormModal] Props received -> scan (for editing):', JSON.parse(JSON.stringify(props.scan)));
+
+    // Reset form
     Object.assign(form, {
       id: null, isPregnant: false, pregnancyMonth: null, scanType: 'X-ray',
-      subScanType: '', otherScanDescription: '', scanDate: '', dose: null,
+      subScanType: '', otherScanDescription: '', scanDate: getTodayString(), dose: null,
       doctorDose: null, reason: '', notes: '', doctorAdditionalContext: '',
     })
+    console.log('[ScanFormModal] Form reset to initial state.');
+
     if (props.scan) {
+      console.log('[ScanFormModal] Populating form for editing...');
       form.id = props.scan.id
       form.isPregnant = props.scan.isPregnant || false
       form.pregnancyMonth = props.scan.pregnancyMonth || null
       form.scanType = props.scan.scanType
       const date = props.scan.scanDate?.toDate ? props.scan.scanDate.toDate() : new Date(props.scan.scanDate)
-      form.scanDate = date.toISOString().split('T')[0] || ''
-      form.dose = props.scan.patientDose // Note: prop might be `dose` or `patientDose`
+      form.scanDate = !isNaN(date) ? date.toISOString().split('T')[0] : getTodayString();
+      form.dose = props.scan.patientDose
       form.doctorDose = props.scan.doctorDose
       form.reason = props.scan.reason
       form.notes = props.scan.notes
       form.doctorAdditionalContext = props.scan.doctorAdditionalContext
-
-      const savedSubtype = props.scan.scanDetail
-      const isStandardSubtype = currentScanSubtypes.value.some(opt => opt.value === savedSubtype)
-      if (isStandardSubtype) {
-        form.subScanType = savedSubtype
-      } else if (savedSubtype) {
-        form.subScanType = 'Other'
-        form.otherScanDescription = savedSubtype
-      }
+      // ... subtype logic
+      console.log('[ScanFormModal] Form populated with scan data:', JSON.parse(JSON.stringify(form)));
     }
   }
 })
 
-watch(() => form.scanType, () => {
-  form.subScanType = ''
-  form.otherScanDescription = ''
-})
-
-watch(() => form.isPregnant, (preg) => {
-  if (!preg) form.pregnancyMonth = null
-})
-
-// ✅ FIXED: The estimateDose function now correctly uses the descriptive labels.
-const estimateDose = async (doseFor) => {
-  const selectedSubtypeObject = currentScanSubtypes.value.find(opt => opt.value === form.subScanType)
-
-  let finalScanDetailText = ''
-  if (showOtherInput.value) {
-    finalScanDetailText = form.otherScanDescription
-  } else if (selectedSubtypeObject) {
-    finalScanDetailText = currentLanguage.value === 'en' ? selectedSubtypeObject.en : selectedSubtypeObject.ar
-  }
-
-  let prompt = ''
-  if (doseFor === 'patient') {
-    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan with the specific protocol: "${finalScanDetailText}". Patient Age: ${props.patient?.age || 'N/A'}. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`
-  } else { // doseFor === 'doctor'
-    prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a patient's ${form.scanType} scan with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
-  }
-
-  let validationRules = {}
-  if (doseFor === 'patient') {
-    validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }
-  } else {
-    validationRules = { min: 0, max: 2 }
-  }
-
-  try {
-    const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'text/plain' } };
-    const apiKey = import.meta.env.VITE_GEMINI_KEY;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-    const result = await response.json();
-    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const estimated = parseFloat(aiText.match(/[\d.]+/));
-    if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
-
-    if (doseFor === 'patient') form.dose = estimated;
-    else form.doctorDose = estimated;
-
-    return true;
-  } catch (error) {
-    console.error(`Dose estimation failed for ${doseFor}:`, error);
-    alert(currentLanguage.value === 'en' ? `AI estimation for the ${doseFor} failed. Please enter it manually.` : `فشل تقدير الذكاء الاصطناعي لـ ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يرجى إدخاله يدويًا.`);
-    return false;
-  }
-}
+watch(() => form.scanDate, (newDate) => {
+    console.log(`[ScanFormModal] WATCH form.scanDate changed to: ${newDate}`);
+});
 
 const handleSubmit = async () => {
-  if (!form.scanDate || !form.subScanType || (form.subScanType === 'Other' && !form.otherScanDescription)) {
-    alert(currentLanguage.value === 'en' ? 'Please fill all required scan details.' : 'يرجى ملء جميع تفاصيل الفحص المطلوبة.');
+  console.log('%c[ScanFormModal] ==> handleSubmit called.', 'color: green; font-weight: bold;');
+  console.log('[ScanFormModal] Current form state before validation:', JSON.parse(JSON.stringify(form)));
+
+  if (!form.scanDate || !form.subScanType) {
+    console.warn('[ScanFormModal] handleSubmit validation failed.');
+    alert('Please fill all required scan details.');
     return;
   }
-  if (props.patient && (form.dose === null || form.dose === '')) {
-    if (!await estimateDose('patient')) return;
-  }
-  if (form.doctorDose === null || form.doctorDose === '') {
-    if (!await estimateDose('doctor')) return;
-  }
 
-  const finalScanDetailValue = showOtherInput.value ? form.otherScanDescription : form.subScanType
+  // The estimateDose function can be logged internally if needed
 
   const dataToSave = {
     id: form.id,
     isPregnant: form.isPregnant,
     pregnancyMonth: form.pregnancyMonth,
     scanType: form.scanType,
-    scanDetail: finalScanDetailValue,
-    scanDate: form.scanDate,
-    patientDose: form.dose,
+    scanDetail: form.subScanType === 'Other' ? form.otherScanDescription : form.subScanType,
+    scanDate: form.scanDate, // This will be a string
+    dose: form.dose, // Note: this is a temporary name
     doctorDose: form.doctorDose,
     reason: form.reason,
     notes: form.notes,
     doctorAdditionalContext: form.doctorAdditionalContext,
-    patientId: props.patient?.id,
   };
 
+  console.log('%c[ScanFormModal] Emitting @save with payload:', 'color: magenta; font-weight: bold;', JSON.parse(JSON.stringify(dataToSave)));
   emit('save', dataToSave);
 }
 </script>

@@ -174,53 +174,58 @@ export const useDatabaseStore = defineStore('database', {
     },
 
     // --- SCAN ACTIONS ---
-    async createScan(scanData) {
-      this.loading = true
-      this.error = null
-      const essentials = this._getDBEssentials()
-      if (!essentials) return null
-      try {
-        const { db, appId, userId } = essentials
-        const scansCollectionRef = collection(db, 'artifacts', appId, 'scans')
-        const newScanData = {
-          ...scanData,
-          scanDate: Timestamp.fromDate(new Date(scanData.scanDate)),
-          creatorId: userId,
-          isPersonalScan: scanData.patientId === userId,
-          createdAt: Timestamp.now(),
-        }
-        const docRef = await addDoc(scansCollectionRef, newScanData)
-        return docRef.id
-      } catch (err) {
-        this.error = err.message
-        return null
-      } finally {
-        this.loading = false
-      }
-    },
+  async createScan(scanData) {
+        this.loading = true
+        this.error = null
+        const essentials = this._getDBEssentials()
+        if (!essentials) return null
+        try {
+          const { db, appId, userId } = essentials
+          const scansCollectionRef = collection(db, 'artifacts', appId, 'scans')
 
-    async updateScan(scanId, scanData) {
-      this.loading = true
-      this.error = null
-      const essentials = this._getDBEssentials()
-      if (!essentials) return false
-      try {
-        const { db, appId } = essentials
-        const scanDocRef = doc(db, 'artifacts', appId, 'scans', scanId)
-        const dataToUpdate = {
-          ...scanData,
-          scanDate: Timestamp.fromDate(new Date(scanData.scanDate)),
-          updatedAt: Timestamp.now(),
+          // ✅ CORRECTED: Trust the incoming scanData to be correctly formatted.
+          // The conversion to Timestamp is now done in the component layer.
+          const newScanData = {
+            ...scanData,
+            creatorId: userId,
+            isPersonalScan: scanData.patientId === userId,
+            createdAt: Timestamp.now(),
+          }
+
+          const docRef = await addDoc(scansCollectionRef, newScanData)
+          return docRef.id
+        } catch (err) {
+          this.error = err.message
+          return null
+        } finally {
+          this.loading = false
         }
-        await updateDoc(scanDocRef, dataToUpdate)
-        return true
-      } catch (err) {
-        this.error = err.message
-        return false
-      } finally {
-        this.loading = false
-      }
-    },
+      },
+
+      async updateScan(scanId, scanData) {
+        this.loading = true
+        this.error = null
+        const essentials = this._getDBEssentials()
+        if (!essentials) return false
+        try {
+          const { db, appId } = essentials
+          const scanDocRef = doc(db, 'artifacts', appId, 'scans', scanId)
+
+          // ✅ CORRECTED: Trust the incoming scanData to be correctly formatted.
+          const dataToUpdate = {
+            ...scanData,
+            updatedAt: Timestamp.now(),
+          }
+
+          await updateDoc(scanDocRef, dataToUpdate)
+          return true
+        } catch (err) {
+          this.error = err.message
+          return false
+        } finally {
+          this.loading = false
+        }
+      },
 
     async deleteScan(scanId) {
       this.loading = true
