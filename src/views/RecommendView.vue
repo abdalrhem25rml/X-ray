@@ -15,7 +15,7 @@ const currentLanguage = inject('currentLanguage')
 const currentTotalMsv = inject('currentMsv')
 const doseLimit = inject('doseLimit')
 
-// --- Scan subtype options with translations ---
+// --- Scan subtype options with translations (unchanged) ---
 const scanSubtypes = {
   'CT': [
     { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
@@ -43,14 +43,14 @@ const form = ref({
   patientName: '',
   birthDate: '',
   gender: 'male',
+  weight: null, // ✅ Includes weight in the form state
   patientCumulativeDose: 0,
   medicalHistory: '',
   currentSymptoms: '',
   allergies: '',
   isPregnant: false,
   estimatedDueDate: '',
-  // ✅ MODIFIED: Form structure for detailed scan selection
-  scanType: 'CT', // Default to CT
+  scanType: 'CT',
   subScanType: '',
   otherScanDescription: '',
   doctorAdditionalContext: '',
@@ -62,15 +62,13 @@ const isFetchingPatient = ref(false)
 const aiResponse = ref(null)
 const errorMessage = ref('')
 
-// --- Computed Properties ---
+// --- Computed Properties (unchanged) ---
 const userRole = computed(() => authStore.role)
 const isDoctorPersonalScan = computed(() => userRole.value === 'doctor' && recommendationMode.value === 'personal')
 const currentScanSubtypes = computed(() => scanSubtypes[form.value.scanType] || [])
 const showOtherInput = computed(() => form.value.subScanType === 'Other')
-
 const patientDoseLabel = computed(() => recommendationMode.value === 'personal' ? (currentLanguage.value === 'en' ? 'Your Estimated Dose' : 'جرعتك المقدرة') : (currentLanguage.value === 'en' ? 'Patient Dose' : 'جرعة المريض'))
 const doctorDoseLabel = computed(() => currentLanguage.value === 'en' ? 'Occupational Dose' : 'الجرعة المهنية')
-
 const showDoctorDoseBox = computed(() => {
   if (!aiResponse.value || aiResponse.value.doctorOccupationalMsv == null) return false
   return !(userRole.value === 'doctor' && recommendationMode.value === 'personal')
@@ -79,7 +77,7 @@ const showDoctorDoseBox = computed(() => {
 // --- Helpers ---
 const clearForm = () => {
   form.value = {
-    patientId: null, patientName: '', birthDate: '', gender: 'male', patientCumulativeDose: 0,
+    patientId: null, patientName: '', birthDate: '', gender: 'male', weight: null, patientCumulativeDose: 0,
     medicalHistory: '', currentSymptoms: '', allergies: '', isPregnant: false, estimatedDueDate: '',
     scanType: 'CT', subScanType: '', otherScanDescription: '', doctorAdditionalContext: ''
   }
@@ -91,6 +89,7 @@ const toDateString = (input) => {
   return d.toISOString().split('T')[0]
 }
 
+// ✅ Correctly loads weight from the patient's record
 const loadPatientData = async (id) => {
   if (!id) return
   isFetchingPatient.value = true
@@ -101,6 +100,7 @@ const loadPatientData = async (id) => {
       form.value.patientId = id
       form.value.patientName = patientData.displayName || patientData.name || ''
       form.value.birthDate = toDateString(patientData.birthDate)
+      form.value.weight = patientData.weight || null // Get weight
       form.value.gender = patientData.gender || 'male'
       form.value.isPregnant = patientData.isPregnant || false
       form.value.estimatedDueDate = toDateString(patientData.estimatedDueDate)
@@ -123,7 +123,7 @@ const loadPatientData = async (id) => {
   }
 }
 
-// --- Watchers ---
+// --- Watchers (unchanged) ---
 watch(recommendationMode, (newMode) => {
   aiResponse.value = null
   if (newMode === 'personal' && authStore.user) {
@@ -132,7 +132,6 @@ watch(recommendationMode, (newMode) => {
     clearForm()
   }
 })
-
 watch(() => route.query.patientId, (newId) => {
   if (newId) {
     recommendationMode.value = 'general'
@@ -142,17 +141,16 @@ watch(() => route.query.patientId, (newId) => {
     loadPatientData(authStore.user.uid)
   }
 }, { immediate: true })
-
 watch(() => form.value.isPregnant, (isPregnant) => {
   if (!isPregnant) form.value.estimatedDueDate = ''
 })
-
 watch(() => form.value.scanType, () => {
     form.value.subScanType = '';
     form.value.otherScanDescription = '';
 });
 
 // --- Main Recommendation Logic ---
+// ✅ Correctly uses weight in the AI prompts
 const getRecommendations = async () => {
   isLoading.value = true
   errorMessage.value = ''
@@ -170,42 +168,67 @@ const getRecommendations = async () => {
   }
 
   const age = new Date().getFullYear() - new Date(form.value.birthDate).getFullYear()
+  // This creates the text snippet for the prompt
+  const weightContext = form.value.weight ? `Weight: ${form.value.weight} kg.` : 'Weight: Not provided.';
+
   let pregnancyContext = `Not pregnant.`
   if (form.value.isPregnant && form.value.estimatedDueDate) {
     pregnancyContext = `Pregnant with an estimated due date of ${form.value.estimatedDueDate}. The AI must carefully weigh risks, especially during the first trimester.`
   }
 
-  // ✅ FIXED: The prompt now includes the detailed scan protocol.
   const finalScanDetail = showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType
 
   let prompt = ''
   let responseSchema = {}
 
   if (userRole.value === 'doctor') {
-    prompt = `As a medical radiation safety advisor, provide a recommendation for a patient scan, adhering strictly to the ALARA principle.
-- Scenario Context: A doctor is considering a scan. ${isDoctorPersonalScan.value ? "The doctor IS THE PATIENT." : "The doctor is the PRACTITIONER."}
-- Doctor's State: Annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
+    if (isDoctorPersonalScan.value) {
+      prompt = `
+As a medical radiation safety advisor, provide a recommendation for a doctor who is also the patient.
+- Scenario Context: The doctor IS THE PATIENT.
+- Doctor's State: My annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
+- Patient Details (My Details):
+  - Age: ${age}, Gender: ${form.value.gender}.
+  - ${weightContext}
+  - Pregnancy Status: ${pregnancyContext}
+  - My cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
+- Scan I am considering:
+  - Category: ${form.value.scanType}
+  - Protocol: "${finalScanDetail}"
+- My Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
+Tasks:
+1. **Recommendation (recommendationText):** Justify if the scan is appropriate for me.
+2. **Patient Dose (patientCalculatedMsv):** Estimate my effective dose in mSv from THIS SCAN.
+3. **Occupational Dose (doctorOccupationalMsv):** This MUST be 0 because I am the patient.
+4. **Warning (Warning):** Warn if my new total dose (occupational + patient) exceeds any limits.
+Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
+    } else {
+      prompt = `
+As a medical radiation safety advisor, provide a recommendation for a patient scan, adhering strictly to the ALARA principle.
+- Scenario Context: A doctor is the PRACTITIONER for another patient.
+- Doctor's State: The doctor's annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
 - Patient Details:
   - Age: ${age}, Gender: ${form.value.gender}.
+  - ${weightContext}
   - Pregnancy Status: ${pregnancyContext}
   - Patient's cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
-- Scan being considered:
+- Scan being considered for the patient:
   - Category: ${form.value.scanType}
   - Protocol: "${finalScanDetail}"
 - Doctor's Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
-
 Tasks:
-1. **Recommendation (recommendationText):** Justify if the scan is appropriate, considering the specific protocol, existing dose, and pregnancy status.
+1. **Recommendation (recommendationText):** Justify if the scan is appropriate for the patient.
 2. **Patient Dose (patientCalculatedMsv):** Estimate the patient's effective dose in mSv from THIS SCAN.
-3. **Occupational Dose (doctorOccupationalMsv):** If practitioner, estimate occupational dose.
-4. **Warning (Warning):** Warn if the patient's new total dose will exceed the 1 mSv public limit, or if the doctor's new occupational dose exceeds their limit.
-
+3. **Occupational Dose (doctorOccupationalMsv):** Estimate the doctor's occupational dose in mSv from performing this procedure.
+4. **Warning (Warning):** Warn if the patient's new total dose will exceed the public limit, OR if the doctor's new occupational dose exceeds their limit.
 Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
+    }
     responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, doctorOccupationalMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'doctorOccupationalMsv', 'Warning'] }
   } else {
-    prompt = `As a patient advocate, explain a medical scan.
+    prompt = `
+As a patient advocate, explain a medical scan.
 - My estimated radiation dose this year: ${form.value.patientCumulativeDose} mSv.
-- My Details: Born on ${form.value.birthDate}, Gender: ${form.value.gender}, Pregnancy: ${pregnancyContext}.
+- My Details: Born on ${form.value.birthDate}, Gender: ${form.value.gender}, ${weightContext}, Pregnancy: ${pregnancyContext}.
 - Scan being considered:
   - Category: ${form.value.scanType}
   - Protocol: "${finalScanDetail}"
@@ -213,7 +236,6 @@ Tasks:
 1. **Information (recommendationText):** Explain the purpose of this scan in simple terms.
 2. **Dose Estimation (patientCalculatedMsv):** Estimate my dose in mSv from THIS SCAN.
 3. **Warning (Warning):** If my new total dose exceeds 1 mSv, provide a clear warning.
-
 Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
     responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'Warning'] }
   }
@@ -262,18 +284,27 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
           <span>{{ currentLanguage === 'en' ? 'Loading Patient Data...' : 'جاري تحميل بيانات المريض...' }}</span>
         </div>
 
+        <!-- ✅ Correctly displays the weight -->
         <div v-if="form.patientId && form.patientName" class="patient-info-display">
           {{ currentLanguage === 'en' ? 'Getting recommendation for:' : 'الحصول على توصية لـ:' }}
-          <strong>{{ form.patientName }}</strong>
+          <strong>{{ form.patientName }}</strong> ({{ form.weight ? `${form.weight} kg` : 'Weight N/A' }})
         </div>
 
         <form @submit.prevent="getRecommendations" class="recommend-form">
+          <!-- ✅ Correctly adds an input for weight -->
+          <div class="form-group">
+            <label>
+              {{ currentLanguage === 'en' ? 'Weight (kg)' : 'الوزن (كجم)' }}
+            </label>
+            <input type="number" step="0.1" v-model="form.weight" :disabled="recommendationMode === 'personal'" placeholder="e.g. 70.5" />
+          </div>
+
           <div class="form-group">
             <label>
               {{ currentLanguage === 'en' ? 'Date of Birth' : 'تاريخ الميلاد' }}
               <span class="required-indicator">*</span>
             </label>
-            <input type="date" v-model="form.birthDate" :disabled="recommendationMode==='personal'" required />
+            <input type="date" v-model="form.birthDate" :disabled="recommendationMode === 'personal'" required />
           </div>
 
           <div class="form-group">
@@ -281,7 +312,7 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
               {{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}
               <span class="required-indicator">*</span>
             </label>
-            <select v-model="form.gender" :disabled="recommendationMode==='personal'" required>
+            <select v-model="form.gender" :disabled="recommendationMode === 'personal'" required>
               <option value="male">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</option>
               <option value="female">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</option>
             </select>
@@ -325,7 +356,6 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
             </div>
           </div>
 
-          <!-- ✅ REPLACED: New block for detailed scan selection -->
           <h3 class="section-title">{{ currentLanguage === 'en' ? 'Scan to Consider' : 'الفحص المقترح' }}</h3>
           <div class="form-row">
             <div class="form-group">
@@ -359,7 +389,6 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
             </label>
             <input type="text" v-model="form.otherScanDescription" :placeholder="currentLanguage === 'en' ? 'e.g., Chest X-ray' : 'مثال: أشعة سينية للصدر'" required />
           </div>
-
 
           <button type="submit" :disabled="isLoading" class="action-button">
             {{
@@ -440,7 +469,7 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
 .switch-link-container { text-align: center; margin-top: 2rem; }
 .switch-link-container a { color: #8d99ae; }
 .loading-overlay { text-align: center; padding: 2rem; color: #8d99ae; }
-.recommend-form { display: flex; flex-direction: column; gap: 5px; } /* Reduced gap */
+.recommend-form { display: flex; flex-direction: column; gap: 5px; }
 .patient-info-display { padding: 15px; border-radius: 8px; background-color: #e9ecef; text-align: start; margin-bottom: 1rem; }
 .checkbox-group label { display: flex; align-items: center; gap: 10px; font-weight: normal; }
 .checkbox-group input { width: auto; }

@@ -191,13 +191,12 @@ watch(
                 <tr>
                   <th>{{ currentLanguage === 'en' ? 'Name' : 'الاسم' }}</th>
                   <th>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}</th>
+
+                  <th>{{ currentLanguage === 'en' ? 'Weight' : 'الوزن' }}</th>
+
                   <th>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</th>
-                  <th class="details-column">
-                    {{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}
-                  </th>
-                  <th class="details-column">
-                    {{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}
-                  </th>
+                  <th class="details-column">{{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}</th>
+                  <th class="details-column">{{ currentLanguage === 'en' ? 'Allergies' : 'الحساسية' }}</th>
                   <th>{{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}</th>
                 </tr>
               </thead>
@@ -205,6 +204,9 @@ watch(
                 <tr v-for="patient in patients" :key="patient.id">
                   <td>{{ patient.name ?? 'N/A' }}</td>
                   <td>{{ calculateAge(patient.birthDate) }}</td>
+
+                  <!-- ✅ ADDED: Weight data cell -->
+                  <td>{{ patient.weight ? `${patient.weight} kg` : 'N/A' }}</td>
                   <td>
                     {{
                       currentLanguage === 'en'

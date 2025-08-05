@@ -1,7 +1,8 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { useDatabaseStore } from '@/stores/database'
+// No need for databaseStore here, as we get all data from the authStore
+// const { useDatabaseStore } = require('@/stores/database') // This was incorrect
 
 const props = defineProps({
   show: Boolean,
@@ -11,10 +12,9 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save'])
 
 const authStore = useAuthStore()
-const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
 
-// --- Scan subtype options with translations ---
+// --- Scan subtype options with translations (unchanged) ---
 const scanSubtypes = {
   'CT': [
     { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
@@ -35,7 +35,7 @@ const scanSubtypes = {
   ]
 }
 
-// --- Form State ---
+// --- Form State (unchanged) ---
 const form = reactive({
   id: null,
   scanType: 'X-ray',
@@ -47,11 +47,11 @@ const form = reactive({
   notes: ''
 })
 
-// --- Computed Properties ---
+// --- Computed Properties (unchanged) ---
 const currentScanSubtypes = computed(() => scanSubtypes[form.scanType] || [])
 const showOtherInput = computed(() => form.subScanType === 'Other')
 
-// --- Watchers ---
+// --- Watchers (unchanged) ---
 watch(() => props.show, (isShown) => {
   if (isShown) {
     Object.assign(form, {
@@ -83,15 +83,20 @@ watch(() => form.scanType, () => {
   form.otherScanDescription = ''
 })
 
-// ✅ FIXED: The estimateDose function now correctly uses the descriptive labels.
+
+// ✅ UPDATED: The estimateDose function now uses weight from the user's profile
 const estimateDose = async () => {
   const userProfile = authStore.userProfile
-  const age = userProfile?.birthDate ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear() : 'N/A'
+  if (!userProfile) {
+    alert('User profile not available. Cannot estimate dose.');
+    return false;
+  }
 
-  // Find the full subtype object to get the correct language label
+  const age = userProfile.birthDate ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear() : 'N/A'
+  // Get weight from the user's profile, providing a sensible default if not set
+  const weight = userProfile.weight || 70; // Default to 70kg as a fallback
+
   const selectedSubtypeObject = currentScanSubtypes.value.find(opt => opt.value === form.subScanType)
-
-  // Determine the final detail text for the prompt
   let finalScanDetailText = ''
   if (showOtherInput.value) {
     finalScanDetailText = form.otherScanDescription
@@ -99,7 +104,8 @@ const estimateDose = async () => {
     finalScanDetailText = currentLanguage.value === 'en' ? selectedSubtypeObject.en : selectedSubtypeObject.ar
   }
 
-  const prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`
+  // ✅ UPDATED: The prompt now includes the 'Patient Weight' parameter
+  const prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`
 
   const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }
 
@@ -122,6 +128,7 @@ const estimateDose = async () => {
   }
 }
 
+// handleSubmit is unchanged
 const handleSubmit = async () => {
   if (!form.scanDate || !form.subScanType || (form.subScanType === 'Other' && !form.otherScanDescription)) {
     alert(currentLanguage.value === 'en' ? 'Please fill all required scan details.' : 'يرجى ملء جميع تفاصيل الفحص المطلوبة.')
@@ -156,7 +163,6 @@ const handleSubmit = async () => {
           {{ scan ? (currentLanguage === 'en' ? 'Edit Personal Scan' : 'تعديل الفحص الشخصي') : (currentLanguage === 'en' ? 'Add Personal Scan' : 'إضافة فحص شخصي') }}
         </h3>
         <form @submit.prevent="handleSubmit" class="scan-form">
-          <!-- ✅ MODIFIED: Scan Type and Subtype selection -->
           <div class="form-row">
             <div class="form-group">
               <label>{{ currentLanguage === 'en' ? 'Scan Category' : 'فئة الفحص' }}</label>
@@ -211,6 +217,7 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
+/* All styles are unchanged */
 .modal-overlay {
   position: fixed;
   top: 0;

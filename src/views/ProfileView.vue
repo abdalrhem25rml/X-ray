@@ -50,6 +50,8 @@ const userProfile = computed(() => {
     email: authStore.user?.email,
     birthDate: toDateString(authStore.userProfile.birthDate),
     estimatedDueDate: toDateString(authStore.userProfile.estimatedDueDate),
+    // ✅ Ensure weight is passed through, default to 'Not set'
+    weight: authStore.userProfile.weight || null,
   }
 })
 
@@ -66,6 +68,7 @@ const fetchScans = async () => {
 const onProfileSaved = async (formData) => {
   if (!userId.value) return
 
+  // ✅ UPDATED: Include weight in the object to be saved
   const profileToSave = {
     ...authStore.userProfile,
     displayName: authStore.user.displayName,
@@ -73,6 +76,7 @@ const onProfileSaved = async (formData) => {
     role: formData.role,
     birthDate: Timestamp.fromDate(new Date(formData.birthDate)),
     gender: formData.gender,
+    weight: Number(formData.weight) || null, // Add weight, ensuring it's a number
     isPregnant: formData.isPregnant,
     estimatedDueDate: formData.isPregnant && formData.estimatedDueDate ? Timestamp.fromDate(new Date(formData.estimatedDueDate)) : null,
     allergies: Array.isArray(formData.allergies) ? formData.allergies : formData.allergies.split(',').map((s) => s.trim()).filter(Boolean),
@@ -82,11 +86,8 @@ const onProfileSaved = async (formData) => {
   const success = await databaseStore.setUserProfile(userId.value, profileToSave)
 
   if (success) {
-    authStore.setUserProfile(profileToSave) // Update local state instantly
+    authStore.setUserProfile(profileToSave)
     showProfileFormModal.value = false
-
-    // ✅ FIX: Trigger the mSv recalculation after the profile has been successfully saved.
-    // This ensures the dose limit is updated if pregnancy status has changed.
     if (triggerMsvRecalculation) {
       triggerMsvRecalculation()
     }
@@ -161,6 +162,10 @@ onMounted(() => {
         <p><strong>{{ currentLanguage === 'en' ? 'Email:' : 'البريد اﻹلكتروني:' }}</strong><span>{{ userProfile.email }}</span></p>
         <p><strong>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}:</strong><span class="role-tag" v-if="userProfile.role === 'doctor'">{{ currentLanguage === 'en' ? 'Doctor' : 'طبيب' }}</span><span class="role-tag" v-else>{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</span></p>
         <p><strong>{{ currentLanguage === 'en' ? 'Birth Date:' : 'تاريخ الميلاد:' }}</strong><span>{{ userProfile.birthDate || 'Not set' }}</span></p>
+
+        <!-- ✅ ADDED: Display Weight in the profile details -->
+        <p><strong>{{ currentLanguage === 'en' ? 'Weight:' : 'الوزن:' }}</strong><span>{{ userProfile.weight ? `${userProfile.weight} kg` : 'Not set' }}</span></p>
+
         <p><strong>{{ currentLanguage === 'en' ? 'Gender: ' : 'الجنس: ' }}</strong><span v-if="userProfile.gender === 'male'">{{ currentLanguage === 'en' ? 'Male' : 'ذكر' }}</span><span v-else-if="userProfile.gender === 'female'">{{ currentLanguage === 'en' ? 'Female' : 'أنثى' }}</span><span v-else>Not set</span></p>
         <p v-if="userProfile.gender === 'female'"><strong>{{ currentLanguage === 'en' ? 'Pregnant: ' : 'حامل: ' }}</strong><span v-if="userProfile.isPregnant">{{ currentLanguage === 'en' ? 'Yes' : 'نعم' }} ({{ currentLanguage === 'en' ? 'Due:' : 'المتوقع:' }} {{ userProfile.estimatedDueDate }})</span><span v-else>{{ currentLanguage === 'en' ? 'No' : 'لا' }}</span></p>
         <p><strong>{{ currentLanguage === 'en' ? 'Allergies:' : 'الحساسية:' }}</strong><span>{{ userProfile.allergies?.join(', ') || 'None' }}</span></p>

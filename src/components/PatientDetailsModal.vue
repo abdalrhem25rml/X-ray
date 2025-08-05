@@ -148,7 +148,7 @@ const formatDate = (timestamp) => {
 
 <template>
   <!-- The entire template is correct and does not need to be changed. -->
-  <Transition name="modal-fade">
+<Transition name="modal-fade">
     <div v-if="show" class="modal-overlay" @click.self="$emit('close')">
       <div class="modal-content-details" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
         <button class="close-modal-button" @click="$emit('close')">&times;</button>

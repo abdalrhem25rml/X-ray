@@ -21,7 +21,7 @@ const currentLanguage = inject('currentLanguage')
       <font-awesome-icon icon="spinner" spin />
       {{ currentLanguage === 'en' ? 'Loading patients...' : 'جاري تحميل المرضى...' }}
     </div>
-    <div v-else-if="patients.length === 0" class="no-patients-message">
+    <div v-else-if="!patients || patients.length === 0" class="no-patients-message">
       {{ currentLanguage === 'en' ? 'No patients added yet.' : 'لم يتم إضافة أي مرضى بعد.' }}
     </div>
     <div v-else class="patient-table-container">
@@ -30,8 +30,11 @@ const currentLanguage = inject('currentLanguage')
           <tr>
             <th>{{ currentLanguage === 'en' ? 'Name' : 'الاسم' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}</th>
+
+            <!-- ✅ ADDED: Weight column header -->
+            <th>{{ currentLanguage === 'en' ? 'Weight' : 'الوزن' }}</th>
+
             <th>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</th>
-            <!-- ✅ NEW: Headers for Medical History and Allergies -->
             <th class="details-column">
               {{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}
             </th>
@@ -45,6 +48,10 @@ const currentLanguage = inject('currentLanguage')
           <tr v-for="patient in patients" :key="patient.id">
             <td>{{ patient.name }}</td>
             <td>{{ patient.age }}</td>
+
+            <!-- ✅ ADDED: Weight data cell -->
+            <td>{{ patient.weight ? `${patient.weight} kg` : 'N/A' }}</td>
+
             <td>
               {{
                 currentLanguage === 'en'
@@ -54,7 +61,6 @@ const currentLanguage = inject('currentLanguage')
                     : 'أنثى'
               }}
             </td>
-            <!-- ✅ NEW: Cells to display the new data -->
             <td class="details-column">
               {{
                 patient.medicalHistory?.join(', ') ||
@@ -66,7 +72,6 @@ const currentLanguage = inject('currentLanguage')
             </td>
             <td>
               <div class="action-buttons-wrapper">
-                <!-- This button opens the Scan History (PatientDetailsModal) -->
                 <button
                   @click="$emit('view', patient)"
                   class="action-button-sm view-button"
@@ -74,7 +79,6 @@ const currentLanguage = inject('currentLanguage')
                 >
                   <font-awesome-icon icon="eye" />
                 </button>
-                <!-- This button opens the Patient Details Editor (PatientFormModal) -->
                 <button
                   @click="$emit('edit', patient)"
                   class="action-button-sm edit-button"
@@ -82,7 +86,6 @@ const currentLanguage = inject('currentLanguage')
                 >
                   <font-awesome-icon icon="edit" />
                 </button>
-                <!-- This button opens the Delete Confirmation -->
                 <button
                   @click="$emit('delete', patient)"
                   class="action-button-sm delete-button"
@@ -90,7 +93,6 @@ const currentLanguage = inject('currentLanguage')
                 >
                   <font-awesome-icon icon="trash-alt" />
                 </button>
-                <!-- This button opens the Recommendation page -->
                 <button
                   @click="$emit('recommend', patient.id)"
                   class="action-button-sm recommend-button"
@@ -108,6 +110,7 @@ const currentLanguage = inject('currentLanguage')
 </template>
 
 <style scoped>
+/* All styles are unchanged */
 .patient-list-section {
   margin-top: 2rem;
 }
@@ -147,22 +150,19 @@ const currentLanguage = inject('currentLanguage')
   border-bottom: 1px solid #eee;
   vertical-align: middle;
 }
-
-/* ✅ NEW: Styling to handle long text in the new columns */
 .details-column {
-  white-space: normal; /* Allow text to wrap */
-  max-width: 250px; /* Prevent column from getting too wide */
+  white-space: normal;
+  max-width: 250px;
   overflow: hidden;
-  text-overflow: ellipsis; /* Add '...' if content still overflows */
+  text-overflow: ellipsis;
 }
-
 .patient-table th {
   background-color: #f7f7f7;
   color: #555;
   font-weight: 600;
   text-transform: uppercase;
   font-size: 0.9em;
-  white-space: nowrap; /* Keep headers on one line */
+  white-space: nowrap;
 }
 .patient-table tbody tr:hover {
   background-color: #f0f4f8;

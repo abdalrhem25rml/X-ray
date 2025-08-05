@@ -13,27 +13,28 @@ const emit = defineEmits(['close', 'save'])
 
 const currentLanguage = inject('currentLanguage')
 
-// This form's state is completely internal to the modal
+// ✅ UPDATED: Form now includes the 'weight' attribute
 const form = reactive({
   role: '',
   birthDate: '',
   gender: 'male',
+  weight: null, // Add the new weight field
   isPregnant: false,
   estimatedDueDate: '',
   allergies: '',
   medicalHistory: '',
 })
 
-// --- FIX: The watcher now correctly triggers when the modal is SHOWN ---
-// This is more reliable than watching the data prop itself.
+// Watcher to populate the form when the modal is shown
 watch(
   () => props.show,
   (isShown) => {
     if (isShown && props.profileData) {
-      console.log('ProfileFormModal: Modal is shown, populating form with data:', props.profileData);
+      // ✅ UPDATED: Populate the weight field
       form.role = props.profileData.role || 'patient';
       form.birthDate = props.profileData.birthDate || '';
       form.gender = props.profileData.gender || 'male';
+      form.weight = props.profileData.weight || null; // Populate weight
       form.isPregnant = props.profileData.isPregnant || false;
       form.estimatedDueDate = props.profileData.estimatedDueDate || '';
       form.allergies = Array.isArray(props.profileData.allergies) ? props.profileData.allergies.join(', ') : '';
@@ -43,7 +44,7 @@ watch(
   { immediate: true },
 )
 
-// If gender is changed to male, ensure pregnancy fields are reset
+// Watchers for form logic (unchanged)
 watch(() => form.gender, (newGender) => {
     if (newGender === 'male') {
         form.isPregnant = false;
@@ -51,7 +52,6 @@ watch(() => form.gender, (newGender) => {
     }
 });
 
-// If isPregnant is unchecked, clear the due date
 watch(() => form.isPregnant, (isNowPregnant) => {
     if (!isNowPregnant) {
         form.estimatedDueDate = '';
@@ -60,6 +60,7 @@ watch(() => form.isPregnant, (isNowPregnant) => {
 
 
 const handleSaveChanges = () => {
+  // Validation is unchanged
   if (!form.role || !form.birthDate || !form.gender) {
     alert('Role, Birth Date, and Gender are required.');
     return;
@@ -68,6 +69,7 @@ const handleSaveChanges = () => {
     alert('Estimated due date is required for pregnant patients.');
     return;
   }
+  // ✅ The form object, which now includes 'weight', is emitted
   emit('save', form)
 }
 </script>
@@ -78,6 +80,7 @@ const handleSaveChanges = () => {
       <div class="modal-content" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
         <button class="close-button" @click="emit('close')">&times;</button>
         <h3 class="modal-title">{{ currentLanguage === 'en' ? 'Edit Profile' : 'تعديل الملف الشخصي' }}</h3>
+
         <form @submit.prevent="handleSaveChanges" class="profile-form">
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Role' : 'الدور' }}</label>
@@ -86,6 +89,13 @@ const handleSaveChanges = () => {
               <option value="patient">{{ currentLanguage === 'en' ? 'Patient' : 'مريض' }}</option>
             </select>
           </div>
+
+          <!-- ✅ ADDED: Weight input field -->
+          <div class="form-group">
+            <label>{{ currentLanguage === 'en' ? 'Weight (kg)' : 'الوزن (كجم)' }}</label>
+            <input type="number" step="0.1" v-model="form.weight" placeholder="e.g., 70.5" />
+          </div>
+
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Birth Date' : 'تاريخ الميلاد' }}</label>
             <input type="date" v-model="form.birthDate" required />
@@ -98,6 +108,7 @@ const handleSaveChanges = () => {
             </select>
           </div>
 
+          <!-- Pregnancy section is unchanged -->
           <div v-if="form.gender === 'female'" class="pregnancy-section">
             <div class="form-group checkbox-group">
                 <label><input type="checkbox" v-model="form.isPregnant" /><span>{{ currentLanguage === 'en' ? 'Currently Pregnant?' : 'هل أنت حامل حاليًا؟' }}</span></label>
@@ -108,6 +119,7 @@ const handleSaveChanges = () => {
             </div>
           </div>
 
+          <!-- Other form fields are unchanged -->
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Allergies (comma-separated)' : 'الحساسية (مفصولة بفاصلة)' }}</label>
             <textarea v-model="form.allergies" rows="2"></textarea>

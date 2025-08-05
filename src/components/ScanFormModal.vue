@@ -35,10 +35,8 @@ const scanSubtypes = {
   ]
 }
 
-// ✅ 1. Helper function to get today's date in YYYY-MM-DD format
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
-// ✅ 2. Form is now initialized with today's date
 const form = reactive({
   id: null,
   isPregnant: false,
@@ -46,65 +44,67 @@ const form = reactive({
   scanType: 'X-ray',
   subScanType: '',
   otherScanDescription: '',
-  scanDate: getTodayString(), // Use the helper here
+  scanDate: getTodayString(),
   dose: null,
   doctorDose: null,
   reason: '',
   notes: '',
   doctorAdditionalContext: '',
 })
+
 const currentScanSubtypes = computed(() => scanSubtypes[form.scanType] || [])
 const showOtherInput = computed(() => form.subScanType === 'Other')
 
 // --- Watchers ---
 watch(() => props.show, (isShown) => {
-  console.log(`[ScanFormModal] WATCH props.show changed to: ${isShown}`);
   if (isShown) {
-    console.log('[ScanFormModal] Props received -> patient:', JSON.parse(JSON.stringify(props.patient)));
-    console.log('[ScanFormModal] Props received -> scan (for editing):', JSON.parse(JSON.stringify(props.scan)));
-
-    // Reset form
+    // Reset form to its default state
     Object.assign(form, {
       id: null, isPregnant: false, pregnancyMonth: null, scanType: 'X-ray',
       subScanType: '', otherScanDescription: '', scanDate: getTodayString(), dose: null,
       doctorDose: null, reason: '', notes: '', doctorAdditionalContext: '',
     })
-    console.log('[ScanFormModal] Form reset to initial state.');
 
+    // If a scan prop is passed, it means we are in "Edit Mode"
     if (props.scan) {
-      console.log('[ScanFormModal] Populating form for editing...');
       form.id = props.scan.id
       form.isPregnant = props.scan.isPregnant || false
       form.pregnancyMonth = props.scan.pregnancyMonth || null
       form.scanType = props.scan.scanType
+
       const date = props.scan.scanDate?.toDate ? props.scan.scanDate.toDate() : new Date(props.scan.scanDate)
       form.scanDate = !isNaN(date) ? date.toISOString().split('T')[0] : getTodayString();
+
       form.dose = props.scan.patientDose
       form.doctorDose = props.scan.doctorDose
       form.reason = props.scan.reason
       form.notes = props.scan.notes
       form.doctorAdditionalContext = props.scan.doctorAdditionalContext
-      // ... subtype logic
-      console.log('[ScanFormModal] Form populated with scan data:', JSON.parse(JSON.stringify(form)));
+
+      // Logic to correctly populate subScanType or "Other" from scanDetail
+      const savedSubtype = props.scan.scanDetail;
+      const isStandardSubtype = (currentScanSubtypes.value || []).some(opt => opt.value === savedSubtype);
+
+      if (isStandardSubtype) {
+        form.subScanType = savedSubtype;
+      } else if (savedSubtype) {
+        form.subScanType = 'Other';
+        form.otherScanDescription = savedSubtype;
+      }
     }
   }
 })
 
-watch(() => form.scanDate, (newDate) => {
-    console.log(`[ScanFormModal] WATCH form.scanDate changed to: ${newDate}`);
+watch(() => form.scanType, () => {
+  form.subScanType = '';
+  form.otherScanDescription = '';
 });
 
 const handleSubmit = async () => {
-  console.log('%c[ScanFormModal] ==> handleSubmit called.', 'color: green; font-weight: bold;');
-  console.log('[ScanFormModal] Current form state before validation:', JSON.parse(JSON.stringify(form)));
-
-  if (!form.scanDate || !form.subScanType) {
-    console.warn('[ScanFormModal] handleSubmit validation failed.');
+  if (!form.scanDate || !form.subScanType || (showOtherInput.value && !form.otherScanDescription)) {
     alert('Please fill all required scan details.');
     return;
   }
-
-  // The estimateDose function can be logged internally if needed
 
   const dataToSave = {
     id: form.id,
@@ -112,15 +112,14 @@ const handleSubmit = async () => {
     pregnancyMonth: form.pregnancyMonth,
     scanType: form.scanType,
     scanDetail: form.subScanType === 'Other' ? form.otherScanDescription : form.subScanType,
-    scanDate: form.scanDate, // This will be a string
-    dose: form.dose, // Note: this is a temporary name
+    scanDate: form.scanDate,
+    patientDose: form.dose, // The parent component renames this to patientDose
     doctorDose: form.doctorDose,
     reason: form.reason,
     notes: form.notes,
     doctorAdditionalContext: form.doctorAdditionalContext,
   };
 
-  console.log('%c[ScanFormModal] Emitting @save with payload:', 'color: magenta; font-weight: bold;', JSON.parse(JSON.stringify(dataToSave)));
   emit('save', dataToSave);
 }
 </script>
@@ -134,10 +133,9 @@ const handleSubmit = async () => {
           {{ scan ? (currentLanguage === 'en' ? 'Edit Scan Record' : 'تعديل سجل الفحص') : (currentLanguage === 'en' ? 'Add New Scan Record' : 'إضافة سجل فحص جديد') }}
         </h3>
         <div v-if="patient" class="patient-context-display">
-          {{ currentLanguage === 'en' ? 'For Patient' : 'للمريض' }}: <strong>{{ patient.name }}</strong>
+          {{ currentLanguage === 'en' ? 'For Patient' : 'للمريض' }}: <strong>{{ patient.name }} ({{ patient.weight ? `${patient.weight} kg` : 'Weight N/A' }})</strong>
         </div>
         <form @submit.prevent="handleSubmit" class="scan-form">
-          <!-- Pregnancy Section remains the same -->
           <div v-if="patient?.gender === 'female'" class="form-row pregnancy-section">
             <div class="form-group checkbox-group">
               <label><input type="checkbox" v-model="form.isPregnant" /><span>{{ currentLanguage === 'en' ? 'Is Pregnant?' : 'هل المريضة حامل؟' }}</span></label>
@@ -148,7 +146,6 @@ const handleSubmit = async () => {
             </div>
           </div>
 
-          <!-- ✅ MODIFIED: Scan Type and Subtype selection -->
           <div class="form-row">
             <div class="form-group">
               <label>{{ currentLanguage === 'en' ? 'Scan Category' : 'فئة الفحص' }}</label>
@@ -178,7 +175,6 @@ const handleSubmit = async () => {
             <input type="date" v-model="form.scanDate" required />
           </div>
 
-          <!-- Other form fields remain the same -->
           <div class="form-row">
             <div class="form-group">
               <label>{{ currentLanguage === 'en' ? "Patient's Dose (mSv)" : 'جرعة المريض (mSv)' }}</label>

@@ -1,11 +1,16 @@
 <script setup>
-import { inject, computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
+import { inject } from 'vue'
 
-defineProps({
-  scans: Array,
-  isLoading: Boolean,
-  // This new prop makes the component more reusable and context-aware
+const props = defineProps({
+  scans: {
+    type: Array,
+    required: true,
+  },
+  isLoading: {
+    type: Boolean,
+    default: false,
+  },
   isPersonalView: {
     type: Boolean,
     default: false,
@@ -13,129 +18,149 @@ defineProps({
 })
 
 const emit = defineEmits(['edit', 'delete'])
-const authStore = useAuthStore()
+
 const currentLanguage = inject('currentLanguage')
 
-const userRole = computed(() => authStore.role)
-
+// Helper function to format Firestore Timestamps into a readable date string
 const formatDate = (timestamp) => {
-  if (!timestamp) return 'N/A'
-  const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp)
-  if (isNaN(date)) return 'Invalid Date'
-  return new Date(date).toLocaleDateString('en-GB') // Changed to GB format DD/MM/YYYY
-}
-
-const formatDose = (dose) => {
-  return typeof dose === 'number' ? dose.toFixed(3) : 'N/A'
+  if (!timestamp || !timestamp.toDate) {
+    return 'N/A'
+  }
+  return timestamp.toDate().toLocaleDateString()
 }
 </script>
 
 <template>
-  <div class="history-table-container">
-    <div v-if="isLoading" class="loading-message">...</div>
-    <div v-else-if="scans.length === 0" class="no-items-message">
-      {{ currentLanguage === 'en' ? 'No scan history found.' : 'لم يتم العثور على سجل فحوصات.' }}
+  <div class="history-table-wrapper" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+    <div v-if="isLoading" class="loading-state">
+      <font-awesome-icon icon="spinner" spin />
+      <span>{{ currentLanguage === 'en' ? 'Loading history...' : 'جاري تحميل السجل...' }}</span>
     </div>
-    <table v-else class="history-table">
-      <thead>
-        <tr>
-          <!-- Column is now conditional based on the view context -->
-          <th v-if="!isPersonalView">{{ currentLanguage === 'en' ? 'Patient Name' : 'اسم المريض' }}</th>
-          <th>{{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}</th>
-          <th>{{ currentLanguage === 'en' ? 'Scan Date' : 'تاريخ الفحص' }}</th>
-          <th class="reason-column">{{ currentLanguage === 'en' ? 'Reason' : 'السبب' }}</th>
-          <th>{{ currentLanguage === 'en' ? "Patient's Dose" : 'جرعة المريض' }}</th>
-          <!-- Column is now conditional based on the view context -->
-          <th v-if="!isPersonalView">
-            {{ currentLanguage === 'en' ? "Doctor's Dose" : 'جرعة الطبيب' }}
-          </th>
-          <th class="actions-column">
-            {{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="scan in scans" :key="scan.id">
-          <!-- Column is now conditional -->
-          <td v-if="!isPersonalView">{{ scan.patientName }}</td>
-          <td>{{ scan.scanType }}</td>
-          <td>{{ formatDate(scan.scanDate) }}</td>
-          <td class="reason-column">{{ scan.reason || 'N/A' }}</td>
-          <td>{{ formatDose(scan.patientDose) }}</td>
-          <!-- Column is now conditional -->
-          <td v-if="!isPersonalView">{{ formatDose(scan.doctorDose) }}</td>
-          <td>
-            <div class="action-buttons-wrapper">
-              <button @click="$emit('edit', scan)" class="action-button-sm edit-button">
-                {{ currentLanguage === 'en' ? 'Edit' : 'تعديل' }}
-              </button>
-              <button @click="$emit('delete', scan)" class="action-button-sm delete-button">
-                {{ currentLanguage === 'en' ? 'Delete' : 'حذف' }}
-              </button>
-            </div>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+
+    <div v-else-if="!scans || scans.length === 0" class="empty-state">
+      <p>{{ currentLanguage === 'en' ? 'No scan records found.' : 'لم يتم العثور على سجلات فحوصات.' }}</p>
+    </div>
+
+    <div v-else class="table-container">
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>{{ currentLanguage === 'en' ? 'Scan Type' : 'نوع الفحص' }}</th>
+            <!-- ✅ ADDED: Scan Protocol Header -->
+            <th class="details-column">{{ currentLanguage === 'en' ? 'Scan Protocol' : 'بروتوكول الفحص' }}</th>
+            <th>{{ currentLanguage === 'en' ? 'Date' : 'التاريخ' }}</th>
+            <th>{{ currentLanguage === 'en' ? 'Patient Dose' : 'جرعة المريض' }} (mSv)</th>
+            <!-- ✅ ADDED: Reason for Scan Header -->
+            <th class="details-column">{{ currentLanguage === 'en' ? 'Reason for Scan' : 'سبب الفحص' }}</th>
+            <!-- ✅ ADDED: Additional Notes Header -->
+            <th class="details-column">{{ currentLanguage === 'en' ? 'Additional Notes' : 'ملاحظات إضافية' }}</th>
+            <th>{{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="scan in scans" :key="scan.id">
+            <td>{{ scan.scanType || 'N/A' }}</td>
+            <!-- ✅ ADDED: Scan Protocol Data -->
+            <td class="details-column">{{ scan.scanDetail || 'N/A' }}</td>
+            <td>{{ formatDate(scan.scanDate) }}</td>
+            <td>{{ scan.patientDose ?? 'N/A' }}</td>
+            <!-- ✅ ADDED: Reason for Scan Data -->
+            <td class="details-column">{{ scan.reason || 'N/A' }}</td>
+            <!-- ✅ ADDED: Additional Notes Data -->
+            <td class="details-column">{{ scan.notes || 'N/A' }}</td>
+            <td>
+              <div class="action-buttons">
+                <button @click="$emit('edit', scan)" class="action-button-icon edit-button" :title="currentLanguage === 'en' ? 'Edit' : 'تعديل'">
+                  <font-awesome-icon icon="edit" />
+                </button>
+                <button @click="$emit('delete', scan)" class="action-button-icon delete-button" :title="currentLanguage === 'en' ? 'Delete' : 'حذف'">
+                  <font-awesome-icon icon="trash-alt" />
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </template>
 
 <style scoped>
-.history-table-container {
-  margin-top: 20px;
+.history-table-wrapper {
+  width: 100%;
+}
+.loading-state,
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 3rem;
+  color: #6c757d;
+  font-size: 1.1em;
+}
+.table-container {
   overflow-x: auto;
-  border-radius: 8px;
   border: 1px solid #e9ecef;
+  border-radius: 8px;
 }
 .history-table {
   width: 100%;
   border-collapse: collapse;
   text-align: start;
 }
-.history-table th, .history-table td {
-  padding: 16px 20px;
+.history-table th,
+.history-table td {
+  padding: 1rem;
   border-bottom: 1px solid #e9ecef;
   vertical-align: middle;
   white-space: nowrap;
 }
-.reason-column {
-  white-space: normal;
-  min-width: 200px;
-  max-width: 350px;
-}
-.history-table th.actions-column {
-  min-width: 150px;
-  text-align: center;
-}
-.action-buttons-wrapper {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-.action-button-sm {
-  flex: 1 1 80px;
-  padding: 8px 12px;
-  border-radius: 6px;
-  border: none;
-  font-weight: 600;
-  cursor: pointer;
-  color: white;
-  text-align: center;
-}
-.loading-message, .no-items-message {
-  padding: 40px;
-  text-align: center;
-  color: #6c757d;
-  font-size: 1.2rem;
-}
 .history-table th {
   background-color: #f8f9fa;
-  color: #495057;
   font-weight: 600;
+  color: #495057;
+  font-size: 0.9em;
+  text-transform: uppercase;
+}
+.history-table tbody tr:last-child td {
+  border-bottom: none;
 }
 .history-table tbody tr:hover {
   background-color: #f1f3f5;
 }
-.action-button-sm.edit-button { background-color: #f0ad4e; }
-.action-button-sm.delete-button { background-color: #d9534f; }
+.action-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+.action-button-icon {
+  background: none;
+  border: none;
+  color: #8d99ae;
+  font-size: 1.2em;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+.action-button-icon.edit-button:hover {
+  color: #f0ad4e;
+}
+.action-button-icon.delete-button:hover {
+  color: #d9534f;
+}
+
+/* ✅ ADDED: Responsive styling for the new columns */
+.details-column {
+  white-space: normal; /* Allow text wrapping */
+  min-width: 150px; /* Give them some space */
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* On smaller screens, hide the less critical details columns */
+@media (max-width: 1200px) {
+  .details-column {
+    display: none;
+  }
+}
 </style>

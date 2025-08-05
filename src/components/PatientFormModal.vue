@@ -10,14 +10,15 @@ const emit = defineEmits(['close', 'save'])
 
 const currentLanguage = inject('currentLanguage')
 
-// --- Form now includes isPregnant and estimatedDueDate ---
+// ✅ UPDATED: Form now includes weight
 const form = reactive({
   id: null,
   name: '',
   birthDate: '',
   gender: 'male',
+  weight: null, // Add weight field
   isPregnant: false,
-  estimatedDueDate: '', // Changed from null to empty string for v-model
+  estimatedDueDate: '',
   medicalHistory: '',
   allergies: '',
 })
@@ -33,24 +34,20 @@ watch(
       form.id = props.patient.id
       form.name = props.patient.name
       form.gender = props.patient.gender
+      form.weight = props.patient.weight || null // Populate weight
       form.isPregnant = props.patient.isPregnant || false
-
-      // Handle birthDate
       form.birthDate = props.patient.birthDate?.toDate ? props.patient.birthDate.toDate().toISOString().split('T')[0] : ''
-      // Handle estimatedDueDate
       form.estimatedDueDate = props.patient.estimatedDueDate?.toDate ? props.patient.estimatedDueDate.toDate().toISOString().split('T')[0] : ''
-
       form.medicalHistory = Array.isArray(props.patient.medicalHistory) ? props.patient.medicalHistory.join(', ') : ''
       form.allergies = Array.isArray(props.patient.allergies) ? props.patient.allergies.join(', ') : ''
     } else {
       // --- Add mode: Reset form ---
-      Object.assign(form, { id: null, name: '', birthDate: '', gender: 'male', isPregnant: false, estimatedDueDate: '', medicalHistory: '', allergies: '' })
+      Object.assign(form, { id: null, name: '', birthDate: '', gender: 'male', weight: null, isPregnant: false, estimatedDueDate: '', medicalHistory: '', allergies: '' })
     }
   },
   { immediate: true },
 )
 
-// If the user unchecks "isPregnant", clear the due date.
 watch(() => form.isPregnant, (isPregnant) => {
     if (!isPregnant) {
         form.estimatedDueDate = '';
@@ -66,15 +63,15 @@ const handleSubmit = () => {
     alert('Please provide the estimated due date for the pregnancy.')
     return
   }
-
-  // Sanitize data before saving
   if (form.gender === 'male' || !form.isPregnant) {
       form.isPregnant = false
       form.estimatedDueDate = null
   }
 
+  // ✅ UPDATED: Include weight in the object to be saved
   const dataToSave = {
     ...form,
+    weight: Number(form.weight) || null, // Ensure weight is a number or null
     birthDate: new Date(form.birthDate),
     estimatedDueDate: form.estimatedDueDate ? new Date(form.estimatedDueDate) : null,
     medicalHistory: form.medicalHistory.split(',').map((s) => s.trim()).filter(Boolean),
@@ -98,6 +95,13 @@ const handleSubmit = () => {
             <label>{{ currentLanguage === 'en' ? 'Name' : 'الاسم' }}</label>
             <input type="text" v-model="form.name" required />
           </div>
+
+          <!-- ✅ ADDED: Weight input field -->
+          <div class="form-group">
+            <label>{{ currentLanguage === 'en' ? 'Weight (kg)' : 'الوزن (كجم)' }}</label>
+            <input type="number" step="0.1" v-model="form.weight" placeholder="e.g., 70.5" />
+          </div>
+
           <div class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Date of Birth' : 'تاريخ الميلاد' }}</label>
             <input type="date" v-model="form.birthDate" required />
