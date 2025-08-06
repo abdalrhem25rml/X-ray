@@ -47,19 +47,29 @@ const scanPlaces = [
 const fallbackDoseEstimates = {
   patient: {
     'CT': {
-      'Abdomen & Pelvis': 10,
-      'Brain with contrast': 4,
-      'Angiography CTA': 7,
-      'Urography': 5,
-      'Enterography': 6,
-      'default': 5, // Default for 'Other' or unlisted CT
+      'Abdomen & Pelvis': 14,
+      'Brain with contrast': 2,
+      'Angiography CTA': 12,
+      'Urography': 8,
+      'Enterography': 8,
+      'default': 6,
     },
     'X-ray': {
       'Barium Enema': 7,
       'IV Urogram (IVP)': 2.5,
       'HSG': 1.5,
       'VCUG': 1.0,
-      'default': 1, // Default for 'Other' or unlisted X-ray
+      'default': 0.5,
+    }
+  },
+  doctor: {
+    'CT': { 'default': 0.113 },
+    'X-ray': {
+      'Barium Enema': 0.1,
+      'IV Urogram (IVP)': 0.05,
+      'HSG': 0.2,
+      'VCUG': 0.15,
+      'default': 0.00005
     }
   }
 };

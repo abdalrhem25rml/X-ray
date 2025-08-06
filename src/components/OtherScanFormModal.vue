@@ -45,17 +45,13 @@ const scanSubtypes = {
 // ✅ FIX: The fallback table now contains typical DOCTOR occupational doses, which are much lower.
 const fallbackDoseEstimates = {
   doctor: {
-    'CT': {
-      'default': 0.01 // Consistent low dose for shielded CT
-    },
-    'X-ray': { // Higher for fluoroscopic procedures
+    'CT': { 'default': 0.113 },
+    'X-ray': {
       'Barium Enema': 0.1,
       'IV Urogram (IVP)': 0.05,
-      'default': 0.05
-    },
-    'Background': {
-        'Annual Natural Background': 2.4, // This is an exception and remains high
-        'default': 2.4,
+      'HSG': 0.2,
+      'VCUG': 0.15,
+      'default': 0.00005
     }
   }
 };
