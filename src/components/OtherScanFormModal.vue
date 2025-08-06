@@ -1,11 +1,11 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
 import { Timestamp } from 'firebase/firestore'
-import { useAuthStore } from '@/stores/auth' // Needed for AI estimation context
+import { useAuthStore } from '@/stores/auth'
 
 const props = defineProps({
   show: Boolean,
-  scan: Object, // Existing scan data when editing
+  scan: Object,
   isSaving: Boolean,
 })
 const emit = defineEmits(['close', 'save'])
@@ -13,7 +13,7 @@ const emit = defineEmits(['close', 'save'])
 const authStore = useAuthStore()
 const currentLanguage = inject('currentLanguage')
 
-// --- Data for Dropdowns (reused from other modals) ---
+// --- Data for Dropdowns ---
 const scanPlaces = [
   { value: 'head', en: 'Head', ar: 'الرأس' },
   { value: 'neck', en: 'Neck', ar: 'الرقبة' },
@@ -29,16 +29,17 @@ const scanPlaces = [
 const scanSubtypes = {
   CT: [
     { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
+    { value: 'Brain with contrast', en: 'Brain with contrast', ar: 'الدماغ بمادة تباين' },
     { value: 'Other', en: 'Other...', ar: 'أخرى...' },
   ],
   'X-ray': [
     { value: 'Barium Enema', en: 'Barium Enema', ar: 'حقنة الباريوم الشرجية' },
+    { value: 'IV Urogram (IVP)', en: 'IV Urogram (IVP)', ar: 'أشعة المسالك البولية (IVP)' },
     { value: 'Other', en: 'Other...', ar: 'أخرى...' },
   ],
-  // Add other scan types if needed, like 'Background'
-  'Background': [
-      { value: 'Annual Natural Background', en: 'Annual Natural Background', ar: 'الخلفية الطبيعية السنوية'}
-  ]
+  Background: [
+    { value: 'Annual Natural Background', en: 'Annual Natural Background', ar: 'الخلفية الطبيعية السنوية' },
+  ],
 }
 
 // --- Form State ---
@@ -61,87 +62,82 @@ const showOtherScanDetailInput = computed(() => form.scanDetail === 'Other')
 
 // --- Watchers ---
 watch(() => props.show, (isShown) => {
-  if (isShown) {
-    // Reset form to defaults
-    Object.assign(form, {
-      id: null,
-      scanPlace: '',
-      otherScanPlaceDescription: '',
-      scanType: 'X-ray',
-      scanDetail: '',
-      otherScanDetailDescription: '',
-      numberOfScans: 1,
-      date: new Date().toISOString().split('T')[0],
-      dosage: null,
-    })
-    // Populate with existing data if in edit mode
-    if (props.scan) {
-      form.id = props.scan.id
-      form.scanPlace = props.scan.scanPlace || ''
-      form.scanType = props.scan.scanType || 'X-ray'
-      form.scanDetail = props.scan.scanDetail || ''
-      form.numberOfScans = props.scan.numberOfScans || 1
-      form.dosage = props.scan.dosage
-      form.date = props.scan.date?.toDate ? props.scan.date.toDate().toISOString().split('T')[0] : ''
+    if (isShown) {
+        // Reset form to defaults
+        Object.assign(form, {
+            id: null,
+            scanPlace: '',
+            otherScanPlaceDescription: '',
+            scanType: 'X-ray',
+            scanDetail: '',
+            otherScanDetailDescription: '',
+            numberOfScans: 1,
+            date: new Date().toISOString().split('T')[0],
+            dosage: null,
+        });
+        // Populate with existing data if in edit mode
+        if (props.scan) {
+            form.id = props.scan.id;
+            form.scanPlace = props.scan.scanPlace || '';
+            form.scanType = props.scan.scanType || 'X-ray';
+            form.scanDetail = props.scan.scanDetail || '';
+            form.numberOfScans = props.scan.numberOfScans || 1;
+            form.dosage = props.scan.dosage;
+            form.date = props.scan.date?.toDate ? props.scan.date.toDate().toISOString().split('T')[0] : '';
+        }
     }
-  }
-})
+});
 
 watch(() => form.scanType, () => {
     form.scanDetail = '';
     form.otherScanDetailDescription = '';
 });
 
-
 // --- AI Dose Estimation ---
 const estimateDose = async () => {
-  const userProfile = authStore.userProfile;
-  if (!userProfile) {
-    alert('User profile is not available. Cannot estimate dose.');
-    return false;
-  }
-  const age = userProfile.birthDate ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear() : 'N/A';
-  const weight = userProfile.weight || 70;
-
-  const finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
-  const finalScanDetailText = showOtherScanDetailInput.value ? form.otherScanDetailDescription : form.scanDetail;
-
-  let prompt = `Estimate the typical effective dose (in mSv) for a person from a ${form.scanType} scan`;
-  if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-    prompt += ` (number of scans: ${form.numberOfScans})`;
-  }
-  prompt += ` of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Respond ONLY with a single number.`;
-
-  const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 };
-
-  try {
-    const payload = {
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'text/plain' },
-    };
-    const apiKey = import.meta.env.VITE_GEMINI_KEY;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-    const result = await response.json();
-    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const estimated = parseFloat(aiText.match(/[\d.]+/));
-    if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) {
-      throw new Error('AI returned an invalid or out-of-range value.');
+    // This logic is assumed to be correct from previous steps
+    const userProfile = authStore.userProfile;
+    if (!userProfile) {
+        alert('User profile is not available. Cannot estimate dose.');
+        return false;
     }
-    form.dosage = estimated;
-    return true;
-  } catch (error) {
-    console.error(`Dose estimation failed:`, error);
-    alert('AI estimation failed. Please enter the dose manually.');
-    return false;
-  }
+    const age = userProfile.birthDate ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear() : 'N/A';
+    const weight = userProfile.weight || 70;
+    const finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
+    const finalScanDetailText = showOtherScanDetailInput.value ? form.otherScanDetailDescription : form.scanDetail;
+    let prompt = `Estimate the typical effective dose (in mSv) for a person from a ${form.scanType} source/scan`;
+    if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
+        prompt += ` (number of scans: ${form.numberOfScans})`;
+    }
+    prompt += ` of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Respond ONLY with a single number.`;
+    const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 };
+    try {
+        const payload = {
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'text/plain' },
+        };
+        const apiKey = import.meta.env.VITE_GEMINI_KEY;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+        const result = await response.json();
+        const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const estimated = parseFloat(aiText.match(/[\d.]+/));
+        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) {
+            throw new Error('AI returned an invalid or out-of-range value.');
+        }
+        form.dosage = estimated;
+        return true;
+    } catch (error) {
+        console.error(`Dose estimation failed:`, error);
+        alert('AI estimation failed. Please enter the dose manually.');
+        return false;
+    }
 };
-
 
 // --- Form Submission ---
 const handleSubmit = async () => {
@@ -150,16 +146,13 @@ const handleSubmit = async () => {
     return
   }
 
-  // If dosage is empty, try to estimate it
   if (form.dosage === null) {
       const estimationSuccess = await estimateDose();
       if (!estimationSuccess) {
-          // Halt submission if estimation fails and user needs to enter manually
           return;
       }
   }
 
-  // Safely parse the date string
   const parts = form.date.split('-');
   const safeDate = new Date(Date.UTC(parts[0], parseInt(parts[1], 10) - 1, parts[2]));
   if (isNaN(safeDate.getTime())) {
@@ -177,8 +170,8 @@ const handleSubmit = async () => {
     dosage: Number(form.dosage),
   };
 
-  // For simplicity, we combine the details into the 'type' field to match the existing simple schema
-  dataToEmit.type = `${dataToEmit.scanType} - ${dataToEmit.scanDetail || dataToEmit.scanPlace}`;
+  // ✅ FIX: This line has been removed to prevent overwriting the detailed fields.
+  // dataToEmit.type = `${dataToEmit.scanType} - ${dataToEmit.scanDetail || dataToEmit.scanPlace}`;
 
   emit('save', dataToEmit)
 }
@@ -193,12 +186,11 @@ const handleSubmit = async () => {
         <p class="subtitle">For miscellaneous radiation sources like background radiation or occupational exposure.</p>
 
         <form @submit.prevent="handleSubmit" class="scan-form">
-          <!-- Place of Scan -->
           <div class="form-group">
             <label>Place of Scan</label>
             <select v-model="form.scanPlace" required>
               <option disabled value="">Select...</option>
-              <option v-for="option in scanPlaces" :key="option.value" :value="option.value">{{ option.en }}</option>
+              <option v-for="option in scanPlaces" :key="option.value" :value="option.value">{{ currentLanguage === 'en' ? option.en : option.ar }}</option>
             </select>
           </div>
           <div v-if="showOtherScanPlaceInput" class="form-group">
@@ -206,23 +198,20 @@ const handleSubmit = async () => {
             <input type="text" v-model="form.otherScanPlaceDescription" required />
           </div>
 
-          <!-- Scan Type -->
           <div class="form-group">
             <label>Scan Type</label>
             <select v-model="form.scanType" required>
               <option value="X-ray">X-ray</option>
               <option value="CT">CT</option>
-              <option value="Background">Background</option>
             </select>
           </div>
 
-           <!-- Scan Detail / Protocol -->
           <div class="form-group">
             <label>Scan Detail / Protocol</label>
             <select v-model="form.scanDetail" :disabled="!currentScanSubtypes.length">
                 <option disabled value="">Select...</option>
                 <option v-for="option in currentScanSubtypes" :key="option.value" :value="option.value">
-                    {{ option.en }}
+                    {{ currentLanguage === 'en' ? option.en : option.ar }}
                 </option>
             </select>
           </div>
@@ -231,28 +220,24 @@ const handleSubmit = async () => {
             <input type="text" v-model="form.otherScanDetailDescription" required />
           </div>
 
-          <!-- Number of Scans (for X-ray) -->
           <div v-if="form.scanType === 'X-ray'" class="form-group">
             <label>Number of Scans</label>
             <input type="number" v-model.number="form.numberOfScans" min="1" required />
           </div>
 
-          <!-- History (Date) -->
           <div class="form-group">
             <label>History (Date)</label>
             <input type="date" v-model="form.date" required />
           </div>
 
-          <!-- Dosage -->
           <div class="form-group">
             <label>Dosage (mSv)</label>
             <input type="number" step="0.01" v-model.number="form.dosage" placeholder="Leave blank for AI estimate" />
           </div>
 
-          <!-- Actions -->
           <div class="modal-actions">
-            <button type="submit" class="action-button" :disabled="isSaving">{{ isSaving ? 'Saving...' : 'Save' }}</button>
-            <button type="button" @click="$emit('close')" class="action-button secondary">Cancel</button>
+            <button type="submit" class="action-button" :disabled="isSaving">{{ isSaving ? (currentLanguage === 'en' ? 'Saving...' : 'جاري الحفظ...') : (currentLanguage === 'en' ? 'Save' : 'حفظ') }}</button>
+            <button type="button" @click="$emit('close')" class="action-button secondary">{{ currentLanguage === 'en' ? 'Cancel' : 'إلغاء' }}</button>
           </div>
         </form>
       </div>
@@ -261,7 +246,7 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-/* Reusing the same styles, as they are clean and effective */
+/* Styles are unchanged */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.7); z-index: 4000; display: flex; justify-content: center; align-items: center; }
 .modal-content { background: #fff; padding: 2rem; border-radius: 12px; max-width: 500px; width: 100%; position: relative; max-height: 90vh; overflow-y: auto; }
 .close-modal-button { position: absolute; top: 10px; right: 15px; font-size: 2rem; border: none; background: none; cursor: pointer; }
