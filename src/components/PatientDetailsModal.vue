@@ -44,41 +44,32 @@ watch(() => props.show, (isShown) => {
 )
 
 // ✅ CORRECTED: This function now correctly handles ALL fields from the form, including scanPlace.
-const handleSavePatientScan = async (scanDataFromForm) => {
+const handleSavePatientScan = async (scanDataFromModal) => {
+  // 1. Check if a patient context exists
   if (!props.patient?.id) {
-    alert('Critical error: Patient context was lost.')
-    return
+    alert('Error: No patient selected to save this scan for.');
+    return;
   }
 
-  // Use the spread operator to copy all fields from the form, including the new `scanPlace`.
-  const payload = {
-    ...scanDataFromForm,
-    patientId: props.patient.id, // Ensure patientId is correctly assigned
-    scanDate: Timestamp.fromDate(new Date(scanDataFromForm.scanDate)), // Convert date string to Firestore Timestamp
-    // The child modal now provides the correct property names (`patientDose`, `doctorDose`),
-    // so no renaming is needed here. We just ensure they are numbers.
-    patientDose: Number(scanDataFromForm.patientDose) || 0,
-    doctorDose: Number(scanDataFromForm.doctorDose) || 0,
+  // 2. Enrich the scan data with the patient's ID
+  const dataToSave = {
+    ...scanDataFromModal,
+    patientId: props.patient.id, // This is the crucial line
+  };
+
+  // 3. Call the createScan action
+  const success = await databaseStore.createScan(dataToSave);
+
+  if (success) {
+    showScanFormModal.value = false; // Close the modal on success
+    // Optionally, you might want to emit an event to refresh the scan list
+    // emit('scan-saved');
+    alert('Scan saved successfully!');
+  } else {
+    // The error from the store is now more detailed
+    alert(`Error saving patient scan: ${databaseStore.error}`);
   }
-
-  // The 'dose' property is no longer used, so we don't need to delete it.
-
-  try {
-    const success = payload.id
-      ? await databaseStore.updateScan(payload.id, payload)
-      : await databaseStore.createScan(payload)
-
-    if (success) {
-      showScanFormModal.value = false
-      await fetchScans() // Refresh the list
-      if (triggerMsvRecalculation) triggerMsvRecalculation()
-    } else {
-      alert(`Error saving patient scan: ${databaseStore.error}`);
-    }
-  } catch (error) {
-    alert(`A critical error occurred: ${error.message}`);
-  }
-}
+};
 
 const handleDeleteScan = async () => {
   if (!scanToDelete.value?.id) return

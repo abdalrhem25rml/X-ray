@@ -1,5 +1,6 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
+import { Timestamp } from 'firebase/firestore' // Import Timestamp
 
 const props = defineProps({
   show: Boolean,
@@ -46,10 +47,8 @@ const scanPlaces = [
 ]
 
 // --- Form State ---
-// ✅ CORRECTED: getTodayString now correctly returns only the date part.
 const getTodayString = () => new Date().toISOString().split('T')[0]
 
-// ✅ CORRECTED: Removed the extra comma that caused a syntax error.
 const form = reactive({
   id: null,
   isPregnant: false,
@@ -104,7 +103,6 @@ watch(
         const date = props.scan.scanDate?.toDate
           ? props.scan.scanDate.toDate()
           : new Date(props.scan.scanDate)
-        // ✅ CORRECTED: Date formatting now correctly takes the first part of the split.
         form.scanDate = !isNaN(date) ? date.toISOString().split('T')[0] : getTodayString()
         form.dose = props.scan.patientDose
         form.doctorDose = props.scan.doctorDose
@@ -149,12 +147,10 @@ const estimateDose = async (doseFor) => {
     alert('Cannot estimate dose without a patient context.')
     return false
   }
-
   const age = props.patient.birthDate
     ? new Date().getFullYear() - new Date(props.patient.birthDate.toDate()).getFullYear()
     : 'N/A'
   const weight = props.patient.weight || 70
-
   const selectedSubtypeObject = currentScanSubtypes.value.find(
     (opt) => opt.value === form.subScanType,
   )
@@ -165,7 +161,6 @@ const estimateDose = async (doseFor) => {
     finalScanDetailText =
       currentLanguage.value === 'en' ? selectedSubtypeObject.en : selectedSubtypeObject.ar
   }
-
   const selectedPlaceObject = scanPlaces.find((opt) => opt.value === form.scanPlace)
   let finalScanPlaceText = ''
   if (showOtherScanPlaceInput.value) {
@@ -174,7 +169,6 @@ const estimateDose = async (doseFor) => {
     finalScanPlaceText =
       currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar
   }
-
   let prompt = ''
   if (doseFor === 'patient') {
     prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan`
@@ -189,14 +183,12 @@ const estimateDose = async (doseFor) => {
     }
     prompt += ` of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
   }
-
   let validationRules = {}
   if (doseFor === 'patient') {
     validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }
   } else {
     validationRules = { min: 0, max: 2 }
   }
-
   try {
     const payload = {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -215,10 +207,8 @@ const estimateDose = async (doseFor) => {
     const estimated = parseFloat(aiText.match(/[\d.]+/))
     if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max)
       throw new Error('AI returned an invalid or out-of-range value.')
-
     if (doseFor === 'patient') form.dose = estimated
     else form.doctorDose = estimated
-
     return true
   } catch (error) {
     console.error(`Dose estimation failed for ${doseFor}:`, error)
@@ -233,11 +223,9 @@ const estimateDose = async (doseFor) => {
 
 const handleSubmit = async () => {
   if (
-    !form.scanDate ||
-    !form.scanPlace ||
+    !form.scanDate || !form.scanPlace ||
     (showOtherScanPlaceInput.value && !form.otherScanPlaceDescription) ||
-    !form.subScanType ||
-    (showOtherInput.value && !form.otherScanDescription)
+    !form.subScanType || (showOtherInput.value && !form.otherScanDescription)
   ) {
     alert('Please fill all required scan details.')
     return
@@ -249,14 +237,25 @@ const handleSubmit = async () => {
   }
 
   if ((form.dose === null || form.dose === '')) {
-    const patientDoseEstimated = await estimateDose('patient')
-    if (!patientDoseEstimated) return
+    if (!(await estimateDose('patient'))) return
   }
 
   if ((form.doctorDose === null || form.doctorDose === '')) {
-    const doctorDoseEstimated = await estimateDose('doctor')
-    if (!doctorDoseEstimated) return
+    if (!(await estimateDose('doctor'))) return
   }
+
+  // ✅ DEFINITIVE FIX: Manually parse the date to prevent all timezone/locale issues.
+  if (!form.scanDate || !/^\d{4}-\d{2}-\d{2}$/.test(form.scanDate)) {
+    alert('Invalid date format. Please select a valid date.');
+    return;
+  }
+
+  // 1. Split "YYYY-MM-DD" into parts.
+  const parts = form.scanDate.split('-'); // e.g., ["2025", "08", "06"]
+
+  // 2. Create a Date object using UTC components. Month is 0-indexed (0-11).
+  //    Using Date.UTC ensures it's timezone-agnostic.
+  const safeDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 12, 0, 0));
 
   const dataToSave = {
     id: form.id,
@@ -265,14 +264,15 @@ const handleSubmit = async () => {
     scanType: form.scanType,
     scanDetail: form.subScanType === 'Other' ? form.otherScanDescription : form.subScanType,
     scanPlace: form.scanPlace === 'other' ? form.otherScanPlaceDescription : form.scanPlace,
-    numberOfScans: form.scanType === 'X-ray' ? form.numberOfScans : 1,
-    scanDate: form.scanDate,
+    numberOfScans: form.scanType === 'X-ray' ? Number(form.numberOfScans) : 1,
+    scanDate: Timestamp.fromDate(safeDate), // This will now receive a valid Date object.
     patientDose: form.dose,
     doctorDose: form.doctorDose,
     reason: form.reason,
     notes: form.notes,
     doctorAdditionalContext: form.doctorAdditionalContext,
   }
+  console.log(dataToSave)
 
   emit('save', dataToSave)
 }
@@ -315,7 +315,7 @@ const handleSubmit = async () => {
               <label>{{ currentLanguage === 'en' ? 'Month of Pregnancy' : 'شهر الحمل' }}</label>
               <input
                 type="number"
-                v-model="form.pregnancyMonth"
+                v-model.number="form.pregnancyMonth"
                 min="1"
                 max="9"
                 placeholder="1-9"
@@ -384,9 +384,10 @@ const handleSubmit = async () => {
             />
           </div>
 
+          <!-- ✅ CORRECTED: Use v-model.number to ensure the value is a number -->
           <div v-if="form.scanType === 'X-ray'" class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Number of Scans' : 'عدد الفحوصات' }}</label>
-            <input type="number" v-model="form.numberOfScans" min="1" required />
+            <input type="number" v-model.number="form.numberOfScans" min="1" required />
           </div>
 
           <div class="form-group">
@@ -402,7 +403,7 @@ const handleSubmit = async () => {
               <input
                 type="number"
                 step="0.01"
-                v-model="form.dose"
+                v-model.number="form.dose"
                 :placeholder="
                   currentLanguage === 'en'
                     ? 'Leave blank for AI estimate'
@@ -417,7 +418,7 @@ const handleSubmit = async () => {
               <input
                 type="number"
                 step="0.01"
-                v-model="form.doctorDose"
+                v-model.number="form.doctorDose"
                 :placeholder="
                   currentLanguage === 'en'
                     ? 'Leave blank for AI estimate'
@@ -465,117 +466,5 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
-  z-index: 3000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-  box-sizing: border-box;
-}
-.modal-content {
-  background-color: white;
-  padding: 30px;
-  border-radius: 12px;
-  max-width: 600px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  position: relative;
-}
-.close-modal-button {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  background: none;
-  border: none;
-  font-size: 2.5em;
-  cursor: pointer;
-  line-height: 1;
-}
-.modal-content h3 {
-  text-align: center;
-  margin-bottom: 25px;
-  font-size: 1.8em;
-}
-.patient-context-display {
-  background-color: #e9ecef;
-  padding: 10px 15px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  text-align: center;
-  font-size: 1.1em;
-}
-.scan-form {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-  align-items: center;
-}
-.form-group {
-  grid-column: span 2 / span 2;
-}
-.form-row > .form-group {
-  grid-column: span 1 / span 1;
-}
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-.form-group input,
-.form-group textarea,
-.form-group select {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  box-sizing: border-box;
-}
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 15px;
-  margin-top: 20px;
-}
-.action-button {
-  padding: 12px 25px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  background-color: #8d99ae;
-  color: white;
-}
-.action-button.secondary {
-  background-color: #6c757d;
-}
-.pregnancy-section {
-  padding: 15px;
-  border-radius: 8px;
-  border: 1px solid #e9ecef;
-}
-.checkbox-group label {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-  font-weight: normal;
-}
-.checkbox-group input[type='checkbox'] {
-  width: auto;
-  margin-inline-end: 10px;
-  height: 20px;
-  width: 20px;
-}
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,.7);z-index:3000;display:flex;justify-content:center;align-items:center;padding:20px;box-sizing:border-box}.modal-content{background-color:#fff;padding:30px;border-radius:12px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto;position:relative}.close-modal-button{position:absolute;top:15px;right:15px;background:none;border:none;font-size:2.5em;cursor:pointer;line-height:1}.modal-content h3{text-align:center;margin-bottom:25px;font-size:1.8em}.patient-context-display{background-color:#e9ecef;padding:10px 15px;border-radius:6px;margin-bottom:20px;text-align:center;font-size:1.1em}.scan-form{display:flex;flex-direction:column;gap:15px}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:15px;align-items:center}.form-group{grid-column:span 2 / span 2}.form-row>.form-group{grid-column:span 1 / span 1}.form-group label{display:block;margin-bottom:8px;font-weight:600}.form-group input,.form-group select,.form-group textarea{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box}.modal-actions{display:flex;justify-content:flex-end;gap:15px;margin-top:20px}.action-button{padding:12px 25px;border-radius:8px;border:none;cursor:pointer;font-weight:600;background-color:#8d99ae;color:#fff}.action-button.secondary{background-color:#6c757d}.pregnancy-section{padding:15px;border-radius:8px;border:1px solid #e9ecef}.checkbox-group label{display:flex;align-items:center;cursor:pointer;font-weight:400}.checkbox-group input[type=checkbox]{width:auto;margin-inline-end:10px;height:20px;width:20px}
 </style>

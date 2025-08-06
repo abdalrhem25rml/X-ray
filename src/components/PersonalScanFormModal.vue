@@ -1,13 +1,13 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { Timestamp } from 'firebase/firestore' // Import Timestamp
 
 const props = defineProps({
   show: Boolean,
   scan: Object,
   isSaving: Boolean,
 })
-// ✅ CORRECTED: The emit definition is now correct.
 const emit = defineEmits(['close', 'save'])
 
 const authStore = useAuthStore()
@@ -53,7 +53,7 @@ const form = reactive({
   scanPlace: '',
   otherScanPlaceDescription: '',
   numberOfScans: 1,
-  scanDate: '',
+  scanDate: new Date().toISOString().split('T')[0],
   patientDose: null,
   reason: '',
   notes: '',
@@ -130,12 +130,10 @@ const estimateDose = async () => {
     alert('User profile not available. Cannot estimate dose.')
     return false
   }
-
   const age = userProfile.birthDate
     ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear()
     : 'N/A'
   const weight = userProfile.weight || 70
-
   const selectedSubtypeObject = currentScanSubtypes.value.find(
     (opt) => opt.value === form.subScanType,
   )
@@ -146,7 +144,6 @@ const estimateDose = async () => {
     finalScanDetailText =
       currentLanguage.value === 'en' ? selectedSubtypeObject.en : selectedSubtypeObject.ar
   }
-
   const selectedPlaceObject = scanPlaces.find((opt) => opt.value === form.scanPlace)
   let finalScanPlaceText = ''
   if (showOtherScanPlaceInput.value) {
@@ -155,15 +152,12 @@ const estimateDose = async () => {
     finalScanPlaceText =
       currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar
   }
-
   let prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan`
   if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
     prompt += ` (number of scans: ${form.numberOfScans})`
   }
   prompt += ` of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`
-
   const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }
-
   try {
     const payload = {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -196,13 +190,14 @@ const estimateDose = async () => {
 }
 
 const handleSubmit = async () => {
+  console.log('[PersonalScanFormModal] handleSubmit started.');
+
   if (
-    !form.scanDate ||
-    !form.scanPlace ||
+    !form.scanDate || !form.scanPlace ||
     (showOtherScanPlaceInput.value && !form.otherScanPlaceDescription) ||
-    !form.subScanType ||
-    (showOtherInput.value && !form.otherScanDescription)
+    !form.subScanType || (showOtherInput.value && !form.otherScanDescription)
   ) {
+    console.error('[PersonalScanFormModal] Validation failed: A required field is missing.');
     alert(
       currentLanguage.value === 'en'
         ? 'Please fill all required scan details.'
@@ -210,33 +205,42 @@ const handleSubmit = async () => {
     )
     return
   }
+  console.log('[PersonalScanFormModal] Initial validation passed.');
 
   if (form.scanType === 'X-ray' && (form.numberOfScans === null || form.numberOfScans < 1)) {
+    console.error('[PersonalScanFormModal] Validation failed: Invalid number of scans for X-ray.');
     alert(currentLanguage.value === 'en' ? 'Number of scans must be at least 1 for X-ray.' : 'عدد الفحوصات لأشعة إكس يجب أن يكون 1 على الأقل.');
     return;
   }
+  console.log('[PersonalScanFormModal] X-ray number of scans validation passed.');
 
   if (!form.patientDose && form.patientDose !== 0) {
-    if (!(await estimateDose())) return
+    console.log('[PersonalScanFormModal] Patient dose is empty. Attempting AI estimation...');
+    const estimationSuccess = await estimateDose();
+    if (!estimationSuccess) {
+      console.error('[PersonalScanFormModal] AI dose estimation failed. Halting submission.');
+      return; // This is the likely point of silent failure.
+    }
+    console.log('[PersonalScanFormModal] AI dose estimation successful.');
   }
 
-  const finalScanDetailValue = showOtherInput.value ? form.otherScanDescription : form.subScanType
-  const finalScanPlaceValue = showOtherScanPlaceInput.value
-    ? form.otherScanPlaceDescription
-    : form.scanPlace
+  const finalScanDetailValue = showOtherInput.value ? form.otherScanDescription : form.subScanType;
+  const finalScanPlaceValue = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
 
   const dataToSave = {
     id: form.id,
     scanType: form.scanType,
     scanDetail: finalScanDetailValue,
     scanPlace: finalScanPlaceValue,
-    numberOfScans: form.scanType === 'X-ray' ? form.numberOfScans : 1,
-    scanDate: form.scanDate,
+    numberOfScans: form.scanType === 'X-ray' ? Number(form.numberOfScans) : 1,
+    scanDate: Timestamp.fromDate(new Date(form.scanDate)),
     patientDose: form.patientDose,
     reason: form.reason,
     notes: form.notes,
     isPersonalScan: true,
   }
+
+  console.log('[PersonalScanFormModal] Preparing to emit "save" with payload:', dataToSave);
   emit('save', dataToSave)
 }
 </script>
@@ -321,9 +325,10 @@ const handleSubmit = async () => {
             />
           </div>
 
+          <!-- ✅ CORRECTED: Use v-model.number to ensure the value is a number -->
           <div v-if="form.scanType === 'X-ray'" class="form-group">
             <label>{{ currentLanguage === 'en' ? 'Number of Scans' : 'عدد الفحوصات' }}</label>
-            <input type="number" v-model="form.numberOfScans" min="1" required />
+            <input type="number" v-model.number="form.numberOfScans" min="1" required />
           </div>
 
           <div class="form-group">
@@ -336,7 +341,7 @@ const handleSubmit = async () => {
             <input
               type="number"
               step="0.01"
-              v-model="form.patientDose"
+              v-model.number="form.patientDose"
               :placeholder="
                 currentLanguage === 'en'
                   ? 'Leave blank for AI estimate'
@@ -377,119 +382,5 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
-/* All styles are unchanged */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.7);
-  z-index: 3000;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-  box-sizing: border-box;
-}
-
-.modal-content {
-  background-color: white;
-  padding: 30px;
-  border-radius: 12px;
-  max-width: 550px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-  position: relative;
-}
-
-.close-modal-button {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  background: none;
-  border: none;
-  font-size: 2.2rem;
-  line-height: 1;
-  color: #aaa;
-  cursor: pointer;
-}
-
-.modal-content h3 {
-  text-align: center;
-  margin-bottom: 25px;
-  font-size: 1.6rem;
-  font-weight: 600;
-  color: #333;
-}
-
-.scan-form {
-  display: flex;
-  flex-direction: column;
-  gap: 15px;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 15px;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 8px;
-  font-weight: 500;
-  color: #555;
-}
-
-.form-group input,
-.form-group textarea,
-.form-group select {
-  width: 100%;
-  padding: 12px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  box-sizing: border-box;
-  font-size: 1rem;
-}
-
-.form-group input::placeholder,
-.form-group textarea::placeholder {
-  color: #999;
-}
-
-.modal-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 1rem;
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid #eee;
-}
-
-.action-button {
-  padding: 12px 25px;
-  border-radius: 8px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 1rem;
-  transition: all 0.2s ease;
-}
-
-.action-button[type='submit'] {
-  background-color: #8d99ae;
-  color: white;
-}
-
-.action-button.secondary {
-  background-color: #e9ecef;
-  color: #333;
-}
-
-.action-button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,.7);z-index:3000;display:flex;justify-content:center;align-items:center;padding:20px;box-sizing:border-box}.modal-content{background-color:#fff;padding:30px;border-radius:12px;max-width:550px;width:100%;max-height:90vh;overflow-y:auto;position:relative}.close-modal-button{position:absolute;top:15px;right:15px;background:none;border:none;font-size:2.2rem;line-height:1;color:#aaa;cursor:pointer}.modal-content h3{text-align:center;margin-bottom:25px;font-size:1.6rem;font-weight:600;color:#333}.scan-form{display:flex;flex-direction:column;gap:15px}.form-row{display:grid;grid-template-columns:1fr 1fr;gap:15px}.form-group label{display:block;margin-bottom:8px;font-weight:500;color:#555}.form-group input,.form-group select,.form-group textarea{width:100%;padding:12px;border:1px solid #ccc;border-radius:8px;box-sizing:border-box;font-size:1rem}.form-group input::placeholder,.form-group textarea::placeholder{color:#999}.modal-actions{display:flex;justify-content:flex-end;gap:1rem;margin-top:1.5rem;padding-top:1.5rem;border-top:1px solid #eee}.action-button{padding:12px 25px;border-radius:8px;border:none;cursor:pointer;font-weight:600;font-size:1rem;transition:all .2s ease}.action-button[type=submit]{background-color:#8d99ae;color:#fff}.action-button.secondary{background-color:#e9ecef;color:#333}.action-button:disabled{background-color:#ccc;cursor:not-allowed}
 </style>

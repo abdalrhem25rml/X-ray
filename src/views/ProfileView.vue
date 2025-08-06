@@ -89,19 +89,27 @@ const onProfileSaved = async (formData) => {
 }
 
 const handleSaveScan = async (scanDataFromModal) => {
-  if (!userId.value) return
-  const success = scanDataFromModal.id
-    ? await databaseStore.updateScan(scanDataFromModal.id, scanDataFromModal)
-    : await databaseStore.createScan(scanDataFromModal)
+  if (!userId.value) return;
+
+  // ✅ ROBUST FIX: The parent component enriches the data from the modal.
+  // This ensures the patientId is always set for a personal scan.
+  const dataToSave = {
+    ...scanDataFromModal,
+    patientId: userId.value, // Explicitly set the patientId here.
+  };
+
+  const success = dataToSave.id
+    ? await databaseStore.updateScan(dataToSave.id, dataToSave)
+    : await databaseStore.createScan(dataToSave); // Pass the enriched object
 
   if (success) {
-    showScanFormModal.value = false
-    await fetchAllScans()
-    if (triggerMsvRecalculation) triggerMsvRecalculation()
+    showScanFormModal.value = false;
+    await fetchAllScans();
+    if (triggerMsvRecalculation) triggerMsvRecalculation();
   } else {
-    alert(`Failed to save scan: ${databaseStore.error}`)
+    alert(`Failed to save scan: ${databaseStore.error}`);
   }
-}
+};
 
 const handleDeleteScan = async () => {
   if (!scanToDelete.value?.id) return
