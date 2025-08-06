@@ -1,8 +1,8 @@
 <script setup>
 import { ref, watch, inject, computed } from 'vue'
 import { useDatabaseStore } from '@/stores/database'
-import { Timestamp } from 'firebase/firestore'
 
+// Component Imports
 import ScanFormModal from './ScanFormModal.vue'
 import ConfirmDeleteModal from './ConfirmDeleteModal.vue'
 import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
@@ -12,12 +12,14 @@ const props = defineProps({
   patient: Object,
 })
 
-const emit = defineEmits(['close'])
+// ✅ FIX 1: Declare the 'scan-saved' event that this component will emit.
+const emit = defineEmits(['close', 'scan-saved'])
 
 const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
 const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 
+// --- Local State ---
 const scans = ref([])
 const scanToEdit = ref(null)
 const scanToDelete = ref(null)
@@ -43,30 +45,28 @@ watch(() => props.show, (isShown) => {
   },
 )
 
-// ✅ CORRECTED: This function now correctly handles ALL fields from the form, including scanPlace.
+// ✅ FIX 2: This function now correctly handles both creating AND updating scans.
 const handleSavePatientScan = async (scanDataFromModal) => {
-  // 1. Check if a patient context exists
   if (!props.patient?.id) {
     alert('Error: No patient selected to save this scan for.');
     return;
   }
 
-  // 2. Enrich the scan data with the patient's ID
   const dataToSave = {
     ...scanDataFromModal,
-    patientId: props.patient.id, // This is the crucial line
+    patientId: props.patient.id,
   };
 
-  // 3. Call the createScan action
-  const success = await databaseStore.createScan(dataToSave);
+  const success = dataToSave.id
+    ? await databaseStore.updateScan(dataToSave.id, dataToSave)
+    : await databaseStore.createScan(dataToSave);
 
   if (success) {
-    showScanFormModal.value = false; // Close the modal on success
-    // Optionally, you might want to emit an event to refresh the scan list
-    // emit('scan-saved');
-    alert('Scan saved successfully!');
+    showScanFormModal.value = false;
+    await fetchScans(); // Refresh the list inside this modal
+    emit('scan-saved'); // ✅ FIX 3: Notify the parent to refresh its own data
+    if (triggerMsvRecalculation) triggerMsvRecalculation();
   } else {
-    // The error from the store is now more detailed
     alert(`Error saving patient scan: ${databaseStore.error}`);
   }
 };
@@ -76,7 +76,8 @@ const handleDeleteScan = async () => {
   const success = await databaseStore.deleteScan(scanToDelete.value.id)
   if (success) {
     showConfirmDeleteModal.value = false
-    await fetchScans()
+    await fetchScans() // Refresh the list inside this modal
+    emit('scan-saved')   // ✅ FIX 3: Notify the parent to refresh its own data
     if (triggerMsvRecalculation) triggerMsvRecalculation()
   } else {
     alert(`Failed to delete scan: ${databaseStore.error}`)
@@ -85,14 +86,11 @@ const handleDeleteScan = async () => {
 
 // --- Modal Control Functions ---
 function openAddScanModal() {
-  scanToEdit.value = null // Clear previous edit data
+  scanToEdit.value = null
   showScanFormModal.value = true
 }
 
-// ✅ CORRECTED: This now passes the full, original scan object to the modal.
 function openEditScanModal(scan) {
-  // The ScanFormModal is now smart enough to handle the original scan object directly.
-  // No need to create a temporary `scanForForm` object.
   scanToEdit.value = scan
   showScanFormModal.value = true
 }
@@ -104,7 +102,7 @@ function openConfirmDeleteScanModal(scan) {
 
 const formatDate = (timestamp) => {
   if (!timestamp || !timestamp.toDate) return 'N/A'
-  return timestamp.toDate().toLocaleDateString()
+  return timestamp.toDate().toLocaleDateString(currentLanguage.value === 'ar' ? 'ar-EG' : 'en-US');
 }
 </script>
 

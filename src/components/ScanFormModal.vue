@@ -1,6 +1,6 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
-import { Timestamp } from 'firebase/firestore' // Import Timestamp
+import { Timestamp } from 'firebase/firestore'
 
 const props = defineProps({
   show: Boolean,
@@ -15,7 +15,7 @@ const emit = defineEmits(['close', 'save'])
 
 const currentLanguage = inject('currentLanguage')
 
-// --- Data for Dropdowns ---
+// --- Data for Dropdowns and Fallbacks (Unchanged) ---
 const scanSubtypes = {
   CT: [
     { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
@@ -33,7 +33,6 @@ const scanSubtypes = {
     { value: 'Other', en: 'Other...', ar: 'أخرى...' },
   ],
 }
-
 const scanPlaces = [
   { value: 'head', en: 'Head', ar: 'الرأس' },
   { value: 'neck', en: 'Neck', ar: 'الرقبة' },
@@ -45,37 +44,9 @@ const scanPlaces = [
   { value: 'lower_extremity', en: 'Lower Extremity', ar: 'الطرف السفلي' },
   { value: 'other', en: 'Other', ar: 'أخرى' },
 ]
-
 const fallbackDoseEstimates = {
-  patient: {
-    'CT': {
-      'Abdomen & Pelvis': 10,
-      'Brain with contrast': 4,
-      'Angiography CTA': 7,
-      'Urography': 5,
-      'Enterography': 6,
-      'default': 5, // Default for 'Other' or unlisted CT
-    },
-    'X-ray': {
-      'Barium Enema': 7,
-      'IV Urogram (IVP)': 2.5,
-      'HSG': 1.5,
-      'VCUG': 1.0,
-      'default': 1, // Default for 'Other' or unlisted X-ray
-    }
-  },
-  doctor: {
-    'CT': {
-      'default': 0.01 // Doctor dose is negligible and consistent for shielded CT
-    },
-    'X-ray': { // Higher for some fluoroscopic procedures
-      'Barium Enema': 0.1,
-      'IV Urogram (IVP)': 0.05,
-      'HSG': 0.2,
-      'VCUG': 0.15,
-      'default': 0.05
-    }
-  }
+  patient: { 'CT': { 'Abdomen & Pelvis': 10, 'Brain with contrast': 4, 'Angiography CTA': 7, 'Urography': 5, 'Enterography': 6, 'default': 5 }, 'X-ray': { 'Barium Enema': 7, 'IV Urogram (IVP)': 2.5, 'HSG': 1.5, 'VCUG': 1.0, 'default': 1 } },
+  doctor: { 'CT': { 'default': 0.01 }, 'X-ray': { 'Barium Enema': 0.1, 'IV Urogram (IVP)': 0.05, 'HSG': 0.2, 'VCUG': 0.15, 'default': 0.05 } }
 };
 
 // --- Form State ---
@@ -92,207 +63,186 @@ const form = reactive({
   otherScanPlaceDescription: '',
   numberOfScans: 1,
   scanDate: getTodayString(),
-  dose: null,
+  patientDose: null,
   doctorDose: null,
   reason: '',
   notes: '',
   doctorAdditionalContext: '',
 })
 
-// --- Computed Properties ---
+// --- Computed Properties & Watchers ---
 const currentScanSubtypes = computed(() => scanSubtypes[form.scanType] || [])
 const showOtherInput = computed(() => form.subScanType === 'Other')
 const showOtherScanPlaceInput = computed(() => form.scanPlace === 'other')
 
-// --- Watchers ---
-watch(
-  () => props.show,
-  (isShown) => {
+watch(() => props.show, (isShown) => {
     if (isShown) {
+
+      // Reset form to defaults
       Object.assign(form, {
-        id: null,
-        isPregnant: false,
-        pregnancyMonth: null,
-        scanType: 'X-ray',
-        subScanType: '',
-        otherScanDescription: '',
-        scanPlace: '',
-        otherScanPlaceDescription: '',
-        numberOfScans: 1,
-        scanDate: getTodayString(),
-        dose: null,
-        doctorDose: null,
-        reason: '',
-        notes: '',
-        doctorAdditionalContext: '',
-      })
+        id: null, isPregnant: false, pregnancyMonth: null, scanType: 'X-ray',
+        subScanType: '', otherScanDescription: '', scanPlace: '', otherScanPlaceDescription: '',
+        numberOfScans: 1, scanDate: getTodayString(), patientDose: null, doctorDose: null,
+        reason: '', notes: '', doctorAdditionalContext: '',
+      });
 
+      // Populate with existing data if in edit mode
       if (props.scan) {
-        form.id = props.scan.id
-        form.isPregnant = props.scan.isPregnant || false
-        form.pregnancyMonth = props.scan.pregnancyMonth || null
-        form.scanType = props.scan.scanType
-        const date = props.scan.scanDate?.toDate
-          ? props.scan.scanDate.toDate()
-          : new Date(props.scan.scanDate)
-        form.scanDate = !isNaN(date) ? date.toISOString().split('T')[0] : getTodayString()
-        form.dose = props.scan.patientDose
-        form.doctorDose = props.scan.doctorDose
-        form.reason = props.scan.reason
-        form.notes = props.scan.notes
-        form.doctorAdditionalContext = props.scan.doctorAdditionalContext
-        form.numberOfScans = props.scan.numberOfScans || 1
 
-        const savedSubtype = props.scan.scanDetail
-        const isStandardSubtype = (currentScanSubtypes.value || []).some(
-          (opt) => opt.value === savedSubtype,
-        )
-        if (isStandardSubtype) {
-          form.subScanType = savedSubtype
-        } else if (savedSubtype) {
-          form.subScanType = 'Other'
-          form.otherScanDescription = savedSubtype
-        }
-        const savedPlace = props.scan.scanPlace
-        const isStandardPlace = scanPlaces.some((opt) => opt.value === savedPlace)
-        if (isStandardPlace) {
-          form.scanPlace = savedPlace
-        } else if (savedPlace) {
-          form.scanPlace = 'other'
-          form.otherScanPlaceDescription = savedPlace
-        }
+        form.id = props.scan.id;
+        form.isPregnant = props.scan.isPregnant || false;
+        form.pregnancyMonth = props.scan.pregnancyMonth || null;
+        form.scanType = props.scan.scanType;
+        const date = props.scan.scanDate?.toDate ? props.scan.scanDate.toDate() : new Date(props.scan.scanDate);
+        form.scanDate = !isNaN(date) ? date.toISOString().split('T')[0] : getTodayString();
+        form.patientDose = props.scan.patientDose;
+        form.doctorDose = props.scan.doctorDose;
+        form.reason = props.scan.reason;
+        form.notes = props.scan.notes;
+        form.doctorAdditionalContext = props.scan.doctorAdditionalContext;
+        form.numberOfScans = props.scan.numberOfScans || 1;
+
+        const savedSubtype = props.scan.scanDetail;
+        const isStandardSubtype = (currentScanSubtypes.value || []).some((opt) => opt.value === savedSubtype);
+        if (isStandardSubtype) { form.subScanType = savedSubtype; } else if (savedSubtype) { form.subScanType = 'Other'; form.otherScanDescription = savedSubtype; }
+
+        const savedPlace = props.scan.scanPlace;
+        const isStandardPlace = scanPlaces.some((opt) => opt.value === savedPlace);
+        if (isStandardPlace) { form.scanPlace = savedPlace; } else if (savedPlace) { form.scanPlace = 'other'; form.otherScanPlaceDescription = savedPlace; }
       }
     }
   },
-)
+);
 
-watch(
-  () => form.scanType,
-  () => {
-    form.subScanType = ''
-    form.otherScanDescription = ''
-  },
-)
-
-const getFallbackDose = (doseFor) => {
-  try {
-    const finalScanDetail = form.subScanType === 'Other' ? 'default' : form.subScanType;
-    const doseTable = fallbackDoseEstimates[doseFor];
-    const scanTypeTable = doseTable[form.scanType];
-
-    if (!scanTypeTable) return null;
-
-    // Use specific dose if available, otherwise use the category default.
-    let baseDose = scanTypeTable[finalScanDetail] ?? scanTypeTable['default'];
-
-    if (baseDose === undefined) return null;
-
-    // For X-rays, multiply by the number of scans.
-    if (form.scanType === 'X-ray') {
-      return baseDose * form.numberOfScans;
+watch(() => form.scanType, (newType, oldType) => {
+    if (newType !== oldType) {
+        form.subScanType = '';
+        form.otherScanDescription = '';
     }
+});
 
-    return baseDose;
-  } catch (e) {
-    console.error("Error retrieving fallback dose:", e);
-    return null;
-  }
+// --- Fallback & Estimation Logic (Unchanged) ---
+const getFallbackDose = (doseFor) => {
+    try {
+        const finalScanDetail = form.subScanType === 'Other' ? 'default' : form.subScanType;
+        const doseTable = fallbackDoseEstimates[doseFor];
+        const scanTypeTable = doseTable[form.scanType];
+        if (!scanTypeTable) return null;
+        let baseDose = scanTypeTable[finalScanDetail] ?? scanTypeTable['default'];
+        if (baseDose === undefined) return null;
+        if (form.scanType === 'X-ray') {
+            return baseDose * form.numberOfScans;
+        }
+        return baseDose;
+    } catch (e) {
+        console.error("Error retrieving fallback dose:", e);
+        return null;
+    }
 };
 
-
-// ✅ 3. FALLBACK MECHANISM: The estimateDose function now uses the fallback on failure.
 const estimateDose = async (doseFor) => {
-  if (!props.patient) {
-    alert('Cannot estimate dose without a patient context.')
-    return false
-  }
-  // --- Prompt generation logic remains the same ---
-  const age = props.patient.birthDate ? new Date().getFullYear() - new Date(props.patient.birthDate.toDate()).getFullYear() : 'N/A'
-  const weight = props.patient.weight || 70
-  let finalScanDetailText = showOtherInput.value ? form.otherScanDescription : form.subScanType;
-  let finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
-  let prompt = '';
-  if (doseFor === 'patient') {
-    if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-        prompt = `Estimate the TOTAL effective dose (in mSv) for a patient from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".`;
-    } else {
-        prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".`;
+    if (!props.patient) {
+        alert('Cannot estimate dose without a patient context.');
+        return false;
     }
-    prompt += ` Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`
-  } else {
-    if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-      prompt = `Estimate the TOTAL occupational dose (in mSv) for a doctor from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
+    const age = props.patient.birthDate ? new Date().getFullYear() - new Date(props.patient.birthDate.toDate()).getFullYear() : 'N/A';
+    const weight = props.patient.weight || 70;
+    let finalScanDetailText = showOtherInput.value ? form.otherScanDescription : form.subScanType;
+    let finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
+    let prompt = '';
+    if (doseFor === 'patient') {
+        if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
+            prompt = `Estimate the TOTAL effective dose (in mSv) for a patient from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".`;
+        } else {
+            prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".`;
+        }
+        prompt += ` Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`;
     } else {
-      prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
+        if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
+            prompt = `Estimate the TOTAL occupational dose (in mSv) for a doctor from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
+        } else {
+            prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
+        }
     }
-  }
 
-  try {
-    // --- API call logic remains the same ---
-    let validationRules = doseFor === 'patient' ? (form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }) : { min: 0, max: 2 };
-    const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'text/plain' } };
-    const apiKey = import.meta.env.VITE_GEMINI_KEY;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-    const result = await response.json();
-    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const estimated = parseFloat(aiText.match(/[\d.]+/));
-    if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
-    if (doseFor === 'patient') form.dose = estimated; else form.doctorDose = estimated;
-    return true;
-
-  } catch (error) {
-    console.warn(`AI dose estimation failed for ${doseFor}. Attempting fallback. Error:`, error);
-
-    // --- This is the new fallback logic ---
-    const fallbackDose = getFallbackDose(doseFor);
-
-    if (fallbackDose !== null) {
-      if (doseFor === 'patient') form.dose = fallbackDose; else form.doctorDose = fallbackDose;
-
-      alert(
-        currentLanguage.value === 'en'
-          ? `AI estimation failed. A typical value of ${fallbackDose.toFixed(3)} mSv has been used for the ${doseFor}. You can review and adjust this value.`
-          : `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(3)} ملي سيفرت لـ ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يمكنك مراجعة هذه القيمة وتعديلها.`
-      );
-      return true; // Success! We used a fallback.
-    } else {
-      alert(
-        currentLanguage.value === 'en'
-          ? `AI estimation for the ${doseFor} failed and no fallback value is available. Please enter the dose manually.`
-          : `فشل تقدير الذكاء الاصطناعي لجرعة ${doseFor === 'patient' ? 'المريض' : 'الطبيب'} ولا توجد قيمة بديلة. يرجى إدخالها يدويًا.`
-      );
-      return false; // Total failure.
+    try {
+        let validationRules = doseFor === 'patient' ? (form.scanType === 'CT' ? {
+            min: 0.5,
+            max: 40
+        } : {
+            min: 0.001,
+            max: 10
+        }) : {
+            min: 0,
+            max: 2
+        };
+        const payload = {
+            contents: [{
+                role: 'user',
+                parts: [{
+                    text: prompt
+                }]
+            }],
+            generationConfig: {
+                responseMimeType: 'text/plain'
+            }
+        };
+        const apiKey = import.meta.env.VITE_GEMINI_KEY;
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+        });
+        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+        const result = await response.json();
+      const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const estimated = parseFloat(aiText.match(/[\d.]+/));
+        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
+        if (doseFor === 'patient') form.patientDose = estimated;
+        else form.doctorDose = estimated;
+        return true;
+    } catch (error) {
+        console.warn(`AI dose estimation failed for ${doseFor}. Attempting fallback. Error:`, error);
+        const fallbackDose = getFallbackDose(doseFor);
+        if (fallbackDose !== null) {
+            if (doseFor === 'patient') form.patientDose = fallbackDose;
+            else form.doctorDose = fallbackDose;
+            alert(
+                currentLanguage.value === 'en' ?
+                `AI estimation failed. A typical value of ${fallbackDose.toFixed(3)} mSv has been used for the ${doseFor}. You can review and adjust this value.` :
+                `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(3)} ملي سيفرت لـ ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يمكنك مراجعة هذه القيمة وتعديلها.`
+            );
+            return true;
+        } else {
+            alert(
+                currentLanguage.value === 'en' ?
+                `AI estimation for the ${doseFor} failed and no fallback value is available. Please enter the dose manually.` :
+                `فشل تقدير الذكاء الاصطناعي لجرعة ${doseFor === 'patient' ? 'المريض' : 'الطبيب'} ولا توجد قيمة بديلة. يرجى إدخالها يدويًا.`
+            );
+            return false;
+        }
     }
-  }
-}
+};
 
+// --- Form Submission ---
 const handleSubmit = async () => {
-  if (!form.scanDate || !form.scanPlace || (showOtherScanPlaceInput.value && !form.otherScanPlaceDescription) || !form.subScanType || (showOtherInput.value && !form.otherScanDescription)) {
-    alert('Please fill all required scan details.');
-    return;
-  }
-  if (form.scanType === 'X-ray' && (form.numberOfScans === null || form.numberOfScans < 1)) {
-    alert(currentLanguage.value === 'en' ? 'Number of scans must be at least 1 for X-ray.' : 'عدد الفحوصات لأشعة إكس يجب أن يكون 1 على الأقل.');
-    return;
-  }
+  // Validation (Unchanged)
+  if (!form.scanDate || !form.scanPlace || (showOtherScanPlaceInput.value && !form.otherScanPlaceDescription) || !form.subScanType || (showOtherInput.value && !form.otherScanDescription)) { alert('Please fill all required scan details.'); return; }
+  if (form.scanType === 'X-ray' && (form.numberOfScans === null || form.numberOfScans < 1)) { alert(currentLanguage.value === 'en' ? 'Number of scans must be at least 1 for X-ray.' : 'عدد الفحوصات لأشعة إكس يجب أن يكون 1 على الأقل.'); return; }
 
-  // This logic now works perfectly. If estimateDose returns false, it means both AI and fallback failed.
-  if ((form.dose === null || form.dose === '')) {
-    if (!(await estimateDose('patient'))) return
-  }
-  if ((form.doctorDose === null || form.doctorDose === '')) {
-    if (!(await estimateDose('doctor'))) return
-  }
+  // Dose Estimation (Unchanged)
+  if ((form.patientDose === null || form.patientDose === '')) { if (!(await estimateDose('patient'))) return; }
+  if ((form.doctorDose === null || form.doctorDose === '')) { if (!(await estimateDose('doctor'))) return; }
 
-  // --- Data saving logic remains the same ---
-  if (!form.scanDate || !/^\d{4}-\d{2}-\d{2}$/.test(form.scanDate)) {
-    alert('Invalid date format. Please select a valid date.');
-    return;
-  }
+  // Date Parsing (Unchanged)
+  if (!form.scanDate || !/^\d{4}-\d{2}-\d{2}$/.test(form.scanDate)) { alert('Invalid date format. Please select a valid date.'); return; }
   const parts = form.scanDate.split('-');
   const safeDate = new Date(Date.UTC(parts[0], parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12, 0, 0));
+
+  // ✅ DEBUG: Check the final object just before it's emitted.
   const dataToSave = {
     id: form.id,
     isPregnant: form.isPregnant,
@@ -302,13 +252,14 @@ const handleSubmit = async () => {
     scanPlace: form.scanPlace === 'other' ? form.otherScanPlaceDescription : form.scanPlace,
     numberOfScans: form.scanType === 'X-ray' ? Number(form.numberOfScans) : 1,
     scanDate: Timestamp.fromDate(safeDate),
-    patientDose: form.dose,
+    patientDose: form.patientDose,
     doctorDose: form.doctorDose,
     reason: form.reason,
     notes: form.notes,
     doctorAdditionalContext: form.doctorAdditionalContext,
-  }
-  emit('save', dataToSave)
+  };
+
+  emit('save', dataToSave);
 }
 </script>
 
@@ -437,7 +388,7 @@ const handleSubmit = async () => {
               <input
                 type="number"
                 step="0.01"
-                v-model.number="form.dose"
+                v-model.number="form.patientDose"
                 :placeholder="
                   currentLanguage === 'en'
                     ? 'Leave blank for AI estimate'
