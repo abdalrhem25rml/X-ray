@@ -42,21 +42,20 @@ const scanSubtypes = {
   ],
 }
 
+// ✅ FIX: The fallback table now contains typical DOCTOR occupational doses, which are much lower.
 const fallbackDoseEstimates = {
-  personal: {
+  doctor: {
     'CT': {
-      'Abdomen & Pelvis': 10,
-      'Brain with contrast': 4,
-      'default': 5, // Default for 'Other' CT scans
+      'default': 0.01 // Consistent low dose for shielded CT
     },
-    'X-ray': {
-      'Barium Enema': 7,
-      'IV Urogram (IVP)': 2.5,
-      'default': 1, // Default for 'Other' X-ray scans
+    'X-ray': { // Higher for fluoroscopic procedures
+      'Barium Enema': 0.1,
+      'IV Urogram (IVP)': 0.05,
+      'default': 0.05
     },
     'Background': {
-      'Annual Natural Background': 2.4,
-      'default': 2.4, // Default for all background types
+        'Annual Natural Background': 2.4, // This is an exception and remains high
+        'default': 2.4,
     }
   }
 };
@@ -72,26 +71,21 @@ const form = reactive({
   numberOfScans: 1,
   date: new Date().toISOString().split('T')[0],
   dosage: null,
+  // ✅ FIX: Added context field for more accurate estimation
+  doctorAdditionalContext: '',
 })
 
-// --- Computed Properties ---
+// --- Computed Properties & Watchers ---
 const currentScanSubtypes = computed(() => scanSubtypes[form.scanType] || [])
 const showOtherScanPlaceInput = computed(() => form.scanPlace === 'other')
 const showOtherScanDetailInput = computed(() => form.scanDetail === 'Other')
 
-// --- Watchers ---
 watch(() => props.show, (isShown) => {
     if (isShown) {
         Object.assign(form, {
-            id: null,
-            scanPlace: '',
-            otherScanPlaceDescription: '',
-            scanType: 'X-ray',
-            scanDetail: '',
-            otherScanDetailDescription: '',
-            numberOfScans: 1,
-            date: new Date().toISOString().split('T')[0],
-            dosage: null,
+            id: null, scanPlace: '', otherScanPlaceDescription: '', scanType: 'X-ray',
+            scanDetail: '', otherScanDetailDescription: '', numberOfScans: 1,
+            date: new Date().toISOString().split('T')[0], dosage: null, doctorAdditionalContext: ''
         });
         if (props.scan) {
             form.id = props.scan.id;
@@ -101,6 +95,7 @@ watch(() => props.show, (isShown) => {
             form.numberOfScans = props.scan.numberOfScans || 1;
             form.dosage = props.scan.dosage;
             form.date = props.scan.date?.toDate ? props.scan.date.toDate().toISOString().split('T')[0] : '';
+            form.doctorAdditionalContext = props.scan.doctorAdditionalContext || '';
         }
     }
 });
@@ -110,23 +105,18 @@ watch(() => form.scanType, () => {
     form.otherScanDetailDescription = '';
 });
 
-// --- AI Dose Estimation ---
 const getFallbackDose = () => {
   try {
     const finalScanDetail = form.scanDetail === 'Other' ? 'default' : form.scanDetail;
-    const doseTable = fallbackDoseEstimates.personal;
+    // ✅ FIX: Using the 'doctor' dose table.
+    const doseTable = fallbackDoseEstimates.doctor;
     const scanTypeTable = doseTable[form.scanType];
-
     if (!scanTypeTable) return null;
-
     let baseDose = scanTypeTable[finalScanDetail] ?? scanTypeTable['default'];
-
     if (baseDose === undefined) return null;
-
     if (form.scanType === 'X-ray') {
       return baseDose * form.numberOfScans;
     }
-
     return baseDose;
   } catch (e) {
     console.error("Error retrieving fallback dose:", e);
@@ -134,30 +124,26 @@ const getFallbackDose = () => {
   }
 };
 
-
-// ✅ 3. FALLBACK MECHANISM: The estimateDose function now uses the fallback on failure.
 const estimateDose = async () => {
-    const userProfile = authStore.userProfile;
-    if (!userProfile) {
+    if (!authStore.userProfile) {
         alert('User profile is not available. Cannot estimate dose.');
         return false;
     }
-    // --- Prompt generation logic remains the same ---
-    const age = userProfile.birthDate ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear() : 'N/A';
-    const weight = userProfile.weight || 70;
     const finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
     const finalScanDetailText = showOtherScanDetailInput.value ? form.otherScanDetailDescription : form.scanDetail;
+
+    // ✅ FIX: The prompt now asks for the DOCTOR'S occupational dose.
     let prompt = '';
     if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-      prompt = `Estimate the TOTAL effective dose (in mSv) for a person from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
+      prompt = `Estimate the TOTAL occupational dose (in mSv) for a doctor from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
     } else {
-      prompt = `Estimate the typical effective dose (in mSv) for a person from a single ${form.scanType} source/scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
+      prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} source/scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
     }
-    prompt += ` Patient Age: ${age}. Patient Weight: ${weight} kg. Respond ONLY with a single number.`;
+    prompt += ` Doctor's additional context (positioning, shielding, etc.): "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
 
     try {
-        // --- API call logic remains the same ---
-        const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 };
+        // ✅ FIX: Validation rules are now stricter, for lower occupational doses.
+        const validationRules = { min: 0, max: 5 };
         const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'text/plain' } };
         const apiKey = import.meta.env.VITE_GEMINI_KEY;
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
@@ -169,13 +155,9 @@ const estimateDose = async () => {
         if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
         form.dosage = estimated;
         return true;
-
     } catch (error) {
         console.warn(`AI dose estimation failed. Attempting fallback. Error:`, error);
-
-        // --- This is the new fallback logic ---
         const fallbackDose = getFallbackDose();
-
         if (fallbackDose !== null) {
           form.dosage = fallbackDose;
           alert(
@@ -183,19 +165,18 @@ const estimateDose = async () => {
               ? `AI estimation failed. A typical value of ${fallbackDose.toFixed(3)} mSv has been used. You can review and adjust this value.`
               : `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(3)} ملي سيفرت. يمكنك مراجعة هذه القيمة وتعديلها.`
           );
-          return true; // Success! We used a fallback.
+          return true;
         } else {
           alert(
             currentLanguage.value === 'en'
               ? `AI estimation failed and no fallback value is available. Please enter the dose manually.`
               : `فشل تقدير الذكاء الاصطناعي ولا توجد قيمة بديلة. يرجى إدخال الجرعة يدويًا.`
           );
-          return false; // Total failure.
+          return false;
         }
     }
 };
 
-// --- Form Submission ---
 const handleSubmit = async () => {
   if (!form.scanPlace || !form.scanType || !form.date) {
     alert('Please fill all required fields.')
@@ -224,6 +205,7 @@ const handleSubmit = async () => {
     numberOfScans: form.scanType === 'X-ray' ? Number(form.numberOfScans) : 1,
     date: Timestamp.fromDate(safeDate),
     dosage: Number(form.dosage),
+    doctorAdditionalContext: form.doctorAdditionalContext,
   };
 
   emit('save', dataToEmit)
@@ -283,8 +265,17 @@ const handleSubmit = async () => {
             <input type="date" v-model="form.date" required />
           </div>
 
+        <div class="form-group">
+          <label>{{ currentLanguage === 'en' ? 'Your Exposure Context (Optional)' : 'سياق تعرضك (اختياري)' }}</label>
+          <textarea
+            v-model="form.doctorAdditionalContext"
+            rows="2"
+            :placeholder="currentLanguage === 'en' ? 'e.g., shielding used, distance from source...' : 'مثال: التدريع المستخدم، المسافة من المصدر...'">
+          </textarea>
+        </div>
+
           <div class="form-group">
-            <label>Dosage (mSv)</label>
+          <label>{{ currentLanguage === 'en' ? 'Occupational Dose (mSv)' : 'الجرعة المهنية (mSv)' }}</label>
             <input type="number" step="0.01" v-model.number="form.dosage" placeholder="Leave blank for AI estimate" />
           </div>
 
@@ -312,4 +303,13 @@ h3 { text-align: center; margin-top: 0; margin-bottom: 0.5rem; }
 .action-button { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600; }
 .action-button[type="submit"] { background-color: #8d99ae; color: white; }
 .action-button.secondary { background-color: #e9ecef; }
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  box-sizing: border-box;
+  font-family: inherit; /* Ensures textarea uses the same font */
+  font-size: inherit;   /* Ensures textarea uses the same font size */
+}
 </style>

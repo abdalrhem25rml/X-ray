@@ -19,7 +19,6 @@ const formatDate = (timestamp) => {
 <template>
   <div class="history-table-wrapper" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
 
-    <!-- ✅ UPDATED: The loading state now matches HistoryTable.vue -->
     <div v-if="isLoading" class="loading-state">
       <font-awesome-icon icon="spinner" spin />
       <span>{{ currentLanguage === 'en' ? 'Loading other sources...' : 'جاري تحميل المصادر الأخرى...' }}</span>
@@ -36,6 +35,8 @@ const formatDate = (timestamp) => {
             <th>{{ currentLanguage === 'en' ? 'Place' : 'المكان' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Type' : 'النوع' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Detail' : 'التفاصيل' }}</th>
+            <!-- ✅ NEW COLUMN: Header for the additional context -->
+            <th>{{ currentLanguage === 'en' ? 'Context' : 'السياق' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Date' : 'التاريخ' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Dosage' : 'الجرعة' }} (mSv)</th>
             <th>{{ currentLanguage === 'en' ? 'Actions' : 'الإجراءات' }}</th>
@@ -46,6 +47,10 @@ const formatDate = (timestamp) => {
             <td>{{ scan.scanPlace || 'N/A' }}</td>
             <td>{{ scan.scanType || 'N/A' }}</td>
             <td>{{ scan.scanDetail || 'N/A' }}</td>
+            <!-- ✅ NEW COLUMN: Data cell for the additional context -->
+            <td class="context-cell" :title="scan.doctorAdditionalContext">
+              {{ scan.doctorAdditionalContext || 'N/A' }}
+            </td>
             <td>{{ formatDate(scan.date) }}</td>
             <td>{{ scan.dosage ?? 'N/A' }}</td>
             <td>
@@ -70,7 +75,6 @@ const formatDate = (timestamp) => {
   width: 100%;
 }
 
-/* ✅ UPDATED: Styles for loading and empty states now match HistoryTable.vue */
 .loading-state,
 .empty-state {
   display: flex;
@@ -125,5 +129,14 @@ const formatDate = (timestamp) => {
 }
 .action-button-icon.delete-button:hover {
   color: #d9534f;
+}
+
+/* ✅ NEW STYLE: Handles long text in the context column */
+.context-cell {
+  max-width: 250px; /* Adjust width as needed */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help; /* Indicates to the user they can hover */
 }
 </style>
