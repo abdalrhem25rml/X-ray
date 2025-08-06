@@ -12,24 +12,26 @@ const currentLanguage = inject('currentLanguage')
 
 const formatDate = (timestamp) => {
   if (!timestamp || !timestamp.toDate) return 'N/A'
-  // Using toLocaleDateString is good for internationalization
   return timestamp.toDate().toLocaleDateString(currentLanguage.value === 'ar' ? 'ar-EG' : 'en-US')
 }
 </script>
 
 <template>
   <div class="history-table-wrapper" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
+
+    <!-- ✅ UPDATED: The loading state now matches HistoryTable.vue -->
     <div v-if="isLoading" class="loading-state">
-      <!-- You can put a loading spinner component here -->
-      <p>Loading...</p>
+      <font-awesome-icon icon="spinner" spin />
+      <span>{{ currentLanguage === 'en' ? 'Loading other sources...' : 'جاري تحميل المصادر الأخرى...' }}</span>
     </div>
+
     <div v-else-if="!scans || scans.length === 0" class="empty-state">
       <p>{{ currentLanguage === 'en' ? 'No other scan records found.' : 'لم يتم العثور على سجلات فحوصات أخرى.' }}</p>
     </div>
+
     <div v-else class="table-container">
       <table class="history-table">
         <thead>
-          <!-- ✅ UPDATED: Table headers now reflect the new detailed data structure -->
           <tr>
             <th>{{ currentLanguage === 'en' ? 'Place' : 'المكان' }}</th>
             <th>{{ currentLanguage === 'en' ? 'Type' : 'النوع' }}</th>
@@ -40,7 +42,6 @@ const formatDate = (timestamp) => {
           </tr>
         </thead>
         <tbody>
-          <!-- ✅ UPDATED: Table cells now display the new fields from the scan object -->
           <tr v-for="scan in scans" :key="scan.id">
             <td>{{ scan.scanPlace || 'N/A' }}</td>
             <td>{{ scan.scanType || 'N/A' }}</td>
@@ -65,13 +66,64 @@ const formatDate = (timestamp) => {
 </template>
 
 <style scoped>
-/* Styles remain unchanged as they are robust */
-.history-table-wrapper { width: 100%; }
-.table-container { overflow-x: auto; border: 1px solid #e9ecef; border-radius: 8px; }
-.history-table { width: 100%; border-collapse: collapse; text-align: start; }
-.history-table th, .history-table td { padding: 1rem; border-bottom: 1px solid #e9ecef; vertical-align: middle; }
-.history-table th { background-color: #f8f9fa; font-weight: 600; text-transform: uppercase; font-size: 0.9em; }
-.action-buttons { display: flex; gap: 0.75rem; }
-.action-button-icon { background: none; border: none; color: #8d99ae; font-size: 1.2em; cursor: pointer; }
-.empty-state, .loading-state { text-align: center; padding: 2rem; color: #6c757d; }
+.history-table-wrapper {
+  width: 100%;
+}
+
+/* ✅ UPDATED: Styles for loading and empty states now match HistoryTable.vue */
+.loading-state,
+.empty-state {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  padding: 3rem;
+  color: #6c757d;
+  font-size: 1.1em;
+}
+
+.table-container {
+  overflow-x: auto;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: start;
+}
+
+.history-table th,
+.history-table td {
+  padding: 1rem;
+  border-bottom: 1px solid #e9ecef;
+  vertical-align: middle;
+}
+
+.history-table th {
+  background-color: #f8f9fa;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.9em;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.action-button-icon {
+  background: none;
+  border: none;
+  color: #8d99ae;
+  font-size: 1.2em;
+  cursor: pointer;
+}
+.action-button-icon.edit-button:hover {
+  color: #f0ad4e;
+}
+.action-button-icon.delete-button:hover {
+  color: #d9534f;
+}
 </style>

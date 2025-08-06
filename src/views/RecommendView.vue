@@ -3,7 +3,7 @@ import { ref, watch, computed, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useDatabaseStore } from '@/stores/database'
-import { Timestamp } from 'firebase/firestore' // Added Timestamp for saving the new scan
+import { Timestamp } from 'firebase/firestore'
 
 // --- Pinia and Vue Router ---
 const router = useRouter()
@@ -15,7 +15,7 @@ const databaseStore = useDatabaseStore()
 const currentLanguage = inject('currentLanguage')
 const currentTotalMsv = inject('currentMsv')
 const doseLimit = inject('doseLimit')
-const triggerMsvRecalculation = inject('triggerMsvRecalculation') // Added to refresh dose after saving
+const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 
 // --- Data for Dropdowns ---
 const scanSubtypes = {
@@ -67,12 +67,13 @@ const form = ref({
   otherScanPlaceDescription: '',
   subScanType: '',
   otherScanDescription: '',
+  numberOfScans: 1,
   doctorAdditionalContext: '',
 })
 
 // --- UI states ---
 const isLoading = ref(false)
-const isSaving = ref(false) // State for the new save button
+const isSaving = ref(false)
 const isFetchingPatient = ref(false)
 const aiResponse = ref(null)
 const errorMessage = ref('')
@@ -121,6 +122,7 @@ const clearForm = () => {
     otherScanPlaceDescription: '',
     subScanType: '',
     otherScanDescription: '',
+    numberOfScans: 1,
     doctorAdditionalContext: '',
   }
 }
@@ -132,48 +134,35 @@ const toDateString = (input) => {
 }
 
 const loadPatientData = async (id) => {
-  if (!id) return
-  isFetchingPatient.value = true
-  clearForm()
-  try {
-    let patientData =
-      id === authStore.user?.uid
-        ? authStore.userProfile
-        : await databaseStore.fetchSinglePatient(id)
-    if (patientData) {
-      form.value.patientId = id
-      form.value.patientName = patientData.displayName || patientData.name || ''
-      form.value.birthDate = toDateString(patientData.birthDate)
-      form.value.weight = patientData.weight || null
-      form.value.gender = patientData.gender || 'male'
-      form.value.isPregnant = patientData.isPregnant || false
-      form.value.estimatedDueDate = toDateString(patientData.estimatedDueDate)
-      form.value.medicalHistory = Array.isArray(patientData.medicalHistory)
-        ? patientData.medicalHistory.join(', ')
-        : ''
-      form.value.allergies = Array.isArray(patientData.allergies)
-        ? patientData.allergies.join(', ')
-        : ''
-
-      const scans = await databaseStore.fetchScansForPatient(id)
-      if (scans) {
-        const yearStart = new Date(new Date().getFullYear(), 0, 1)
-        const getJsDate = (d) => (d ? (d.toDate ? d.toDate() : new Date(d)) : null)
-        const scansThisYear = scans.filter((scan) => getJsDate(scan.scanDate) >= yearStart)
-        form.value.patientCumulativeDose = parseFloat(
-          scansThisYear.reduce((sum, s) => sum + (s.patientDose || 0), 0).toFixed(3),
-        )
-      }
+    if (!id) return
+    isFetchingPatient.value = true
+    clearForm()
+    try {
+        let patientData = id === authStore.user?.uid ? authStore.userProfile : await databaseStore.fetchSinglePatient(id)
+        if (patientData) {
+            form.value.patientId = id
+            form.value.patientName = patientData.displayName || patientData.name || ''
+            form.value.birthDate = toDateString(patientData.birthDate)
+            form.value.weight = patientData.weight || null
+            form.value.gender = patientData.gender || 'male'
+            form.value.isPregnant = patientData.isPregnant || false
+            form.value.estimatedDueDate = toDateString(patientData.estimatedDueDate)
+            form.value.medicalHistory = Array.isArray(patientData.medicalHistory) ? patientData.medicalHistory.join(', ') : ''
+            form.value.allergies = Array.isArray(patientData.allergies) ? patientData.allergies.join(', ') : ''
+            const scans = await databaseStore.fetchScansForPatient(id)
+            if (scans) {
+                const yearStart = new Date(new Date().getFullYear(), 0, 1)
+                const getJsDate = (d) => (d ? (d.toDate ? d.toDate() : new Date(d)) : null)
+                const scansThisYear = scans.filter((scan) => getJsDate(scan.scanDate) >= yearStart)
+                form.value.patientCumulativeDose = parseFloat(scansThisYear.reduce((sum, s) => sum + (s.patientDose || 0), 0).toFixed(3))
+            }
+        }
+    } catch (e) {
+        console.error('Error fetching patient details:', e)
+        errorMessage.value = currentLanguage.value === 'en' ? 'Failed to load patient data.' : 'فشل في تحميل بيانات المريض.'
+    } finally {
+        isFetchingPatient.value = false
     }
-  } catch (e) {
-    console.error('Error fetching patient details:', e)
-    errorMessage.value =
-      currentLanguage.value === 'en'
-        ? 'Failed to load patient data.'
-        : 'فشل في تحميل بيانات المريض.'
-  } finally {
-    isFetchingPatient.value = false
-  }
 }
 
 // --- Watchers ---
@@ -212,6 +201,7 @@ watch(
   () => {
     form.value.subScanType = ''
     form.value.otherScanDescription = ''
+    form.value.numberOfScans = 1
   },
 )
 
@@ -267,7 +257,10 @@ const getRecommendations = async () => {
       currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar
   }
 
-  const scanConsiderationText = `a ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}"`
+  let scanConsiderationText = `a ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}"`;
+  if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) {
+      scanConsiderationText += ` (procedure involves ${form.value.numberOfScans} scans)`;
+  }
 
   let prompt = ''
   let responseSchema = {}
@@ -278,11 +271,7 @@ const getRecommendations = async () => {
 As a medical radiation safety advisor, provide a recommendation for a doctor who is also the patient.
 - Scenario Context: The doctor IS THE PATIENT.
 - Doctor's State: My annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
-- Patient Details (My Details):
-  - Age: ${age}, Gender: ${form.value.gender}.
-  - ${weightContext}
-  - Pregnancy Status: ${pregnancyContext}
-  - My cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
+- Patient Details (My Details): Age: ${age}, Gender: ${form.value.gender}. ${weightContext}. Pregnancy Status: ${pregnancyContext}. My cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
 - Scan I am considering: ${scanConsiderationText}
 - My Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
 Tasks:
@@ -296,17 +285,17 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
 As a medical radiation safety advisor, provide a recommendation for a patient scan, adhering strictly to the ALARA principle.
 - Scenario Context: A doctor is the PRACTITIONER for another patient.
 - Doctor's State: The doctor's annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
-- Patient Details:
-  - Age: ${age}, Gender: ${form.value.gender}.
-  - ${weightContext}
-  - Pregnancy Status: ${pregnancyContext}
-  - Patient's cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
+- Patient Details: Age: ${age}, Gender: ${form.value.gender}. ${weightContext}. Pregnancy Status: ${pregnancyContext}. Patient's cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
 - Scan being considered for the patient: ${scanConsiderationText}
 - Doctor's Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
 Tasks:
 1. **Recommendation (recommendationText):** Justify if the scan is appropriate for the patient.
 2. **Patient Dose (patientCalculatedMsv):** Estimate the patient's effective dose in mSv from THIS SCAN.
-3. **Occupational Dose (doctorOccupationalMsv):** Estimate the doctor's occupational dose in mSv from performing this procedure.
+3. **Occupational Dose (doctorOccupationalMsv):** Estimate the doctor's occupational dose in mSv from performing this procedure. `
+      if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) {
+          prompt += `This must be the TOTAL dose for all ${form.value.numberOfScans} scans combined.`;
+      }
+      prompt += `
 4. **Warning (Warning):** Warn if the patient's new total dose will exceed the public limit, OR if the doctor's new occupational dose exceeds their limit.
 Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
     }
@@ -343,79 +332,66 @@ Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : '
   }
 
   try {
-    const payload = {
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: 'application/json', responseSchema },
-    }
-    const apiKey = import.meta.env.VITE_GEMINI_KEY
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    })
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
-    const result = await response.json()
-    aiResponse.value = JSON.parse(result.candidates[0].content.parts[0].text)
+      const payload = {
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: 'application/json', responseSchema },
+      }
+      const apiKey = import.meta.env.VITE_GEMINI_KEY
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
+      const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+      })
+      if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
+      const result = await response.json()
+      aiResponse.value = JSON.parse(result.candidates[0].content.parts[0].text)
   } catch (error) {
-    console.error('Error getting recommendation:', error)
-    errorMessage.value =
-      currentLanguage.value === 'en'
-        ? `An error occurred: ${error.message}`
-        : `حدث خطأ: ${error.message}`
+      console.error('Error getting recommendation:', error)
+      errorMessage.value = currentLanguage.value === 'en' ? `An error occurred: ${error.message}` : `حدث خطأ: ${error.message}`
   } finally {
-    isLoading.value = false
+      isLoading.value = false
   }
 }
 
-// --- ✅ NEW FEATURE: Function to Save the Recommendation as a Scan ---
 const saveScanFromRecommendation = async () => {
-  if (!aiResponse.value || !form.value.patientId) {
-    alert('No recommendation data to save or patient ID is missing.')
-    return
-  }
-
-  isSaving.value = true
-  try {
-    const finalScanPlaceValue = form.value.scanPlace === 'other'
-      ? form.value.otherScanPlaceDescription
-      : form.value.scanPlace
-
-    const finalScanDetailValue = form.value.subScanType === 'Other'
-      ? form.value.otherScanDescription
-      : form.value.subScanType
-
-    const scanToSave = {
-      patientId: form.value.patientId,
-      scanType: form.value.scanType,
-      scanPlace: finalScanPlaceValue,
-      scanDetail: finalScanDetailValue,
-      scanDate: Timestamp.now(), // Use today's date for the scan
-      patientDose: Number(aiResponse.value.patientCalculatedMsv) || 0,
-      doctorDose: Number(aiResponse.value.doctorOccupationalMsv) || 0,
-      reason: form.value.currentSymptoms || 'As per AI recommendation', // Use symptoms as reason
-      notes: aiResponse.value.recommendationText, // Use AI recommendation as notes
-      isPersonalScan: recommendationMode.value === 'personal'
+    if (!aiResponse.value || !form.value.patientId) {
+        alert('No recommendation data to save or patient ID is missing.')
+        return
     }
-
-    const success = await databaseStore.createScan(scanToSave)
-    if (success) {
-      alert(currentLanguage.value === 'en' ? 'Scan record saved successfully!' : '!تم حفظ سجل الفحص بنجاح')
-      // Refresh the global dose calculation
-      if (triggerMsvRecalculation) {
-        triggerMsvRecalculation()
-      }
-      // Clear the recommendation to prevent duplicate saves
-      aiResponse.value = null
-    } else {
-      throw new Error(databaseStore.error)
+    isSaving.value = true
+    try {
+        const finalScanPlaceValue = form.value.scanPlace === 'other' ? form.value.otherScanPlaceDescription : form.value.scanPlace
+        const finalScanDetailValue = form.value.subScanType === 'Other' ? form.value.otherScanDescription : form.value.subScanType
+        const scanToSave = {
+            patientId: form.value.patientId,
+            scanType: form.value.scanType,
+            scanPlace: finalScanPlaceValue,
+            scanDetail: finalScanDetailValue,
+            numberOfScans: form.value.numberOfScans,
+            scanDate: Timestamp.now(),
+            patientDose: Number(aiResponse.value.patientCalculatedMsv) || 0,
+            doctorDose: Number(aiResponse.value.doctorOccupationalMsv) || 0,
+            reason: form.value.currentSymptoms || 'As per AI recommendation',
+            notes: aiResponse.value.recommendationText,
+            isPersonalScan: recommendationMode.value === 'personal'
+        }
+        const success = await databaseStore.createScan(scanToSave)
+        if (success) {
+            alert(currentLanguage.value === 'en' ? 'Scan record saved successfully!' : '!تم حفظ سجل الفحص بنجاح')
+            if (triggerMsvRecalculation) {
+                triggerMsvRecalculation()
+            }
+            aiResponse.value = null
+        } else {
+            throw new Error(databaseStore.error)
+        }
+    } catch (error) {
+        console.error('Error saving scan from recommendation:', error)
+        alert(currentLanguage.value === 'en' ? `Failed to save scan: ${error.message}` : `فشل حفظ الفحص: ${error.message}`)
+    } finally {
+        isSaving.value = false
     }
-  } catch (error) {
-    console.error('Error saving scan from recommendation:', error)
-    alert(currentLanguage.value === 'en' ? `Failed to save scan: ${error.message}` : `فشل حفظ الفحص: ${error.message}`)
-  } finally {
-    isSaving.value = false
-  }
 }
 </script>
 

@@ -177,12 +177,16 @@ const estimateDose = async (doseFor) => {
     }
     prompt += ` of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`
   } else {
-    prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a patient's ${form.scanType} scan`
+    // ✅ FIX: The prompt logic for the doctor is now more explicit and less ambiguous.
     if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-      prompt += ` (number of scans: ${form.numberOfScans})`
+      // This prompt is for multiple X-rays. It explicitly asks for the TOTAL dose.
+      prompt = `Estimate the TOTAL occupational dose (in mSv) for a doctor from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
+    } else {
+      // This is the original, clearer prompt for single scans (or CT scans).
+      prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
     }
-    prompt += ` of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`
   }
+
   let validationRules = {}
   if (doseFor === 'patient') {
     validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }
@@ -244,18 +248,13 @@ const handleSubmit = async () => {
     if (!(await estimateDose('doctor'))) return
   }
 
-  // ✅ DEFINITIVE FIX: Manually parse the date to prevent all timezone/locale issues.
   if (!form.scanDate || !/^\d{4}-\d{2}-\d{2}$/.test(form.scanDate)) {
     alert('Invalid date format. Please select a valid date.');
     return;
   }
 
-  // 1. Split "YYYY-MM-DD" into parts.
-  const parts = form.scanDate.split('-'); // e.g., ["2025", "08", "06"]
-
-  // 2. Create a Date object using UTC components. Month is 0-indexed (0-11).
-  //    Using Date.UTC ensures it's timezone-agnostic.
-  const safeDate = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2], 12, 0, 0));
+  const parts = form.scanDate.split('-');
+  const safeDate = new Date(Date.UTC(parts[0], parseInt(parts[1], 10) - 1, parseInt(parts[2], 10), 12, 0, 0));
 
   const dataToSave = {
     id: form.id,
@@ -265,14 +264,13 @@ const handleSubmit = async () => {
     scanDetail: form.subScanType === 'Other' ? form.otherScanDescription : form.subScanType,
     scanPlace: form.scanPlace === 'other' ? form.otherScanPlaceDescription : form.scanPlace,
     numberOfScans: form.scanType === 'X-ray' ? Number(form.numberOfScans) : 1,
-    scanDate: Timestamp.fromDate(safeDate), // This will now receive a valid Date object.
+    scanDate: Timestamp.fromDate(safeDate),
     patientDose: form.dose,
     doctorDose: form.doctorDose,
     reason: form.reason,
     notes: form.notes,
     doctorAdditionalContext: form.doctorAdditionalContext,
   }
-  console.log(dataToSave)
 
   emit('save', dataToSave)
 }

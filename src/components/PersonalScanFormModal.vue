@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
-import { Timestamp } from 'firebase/firestore' // Import Timestamp
+import { Timestamp } from 'firebase/firestore'
 
 const props = defineProps({
   show: Boolean,
@@ -152,11 +152,16 @@ const estimateDose = async () => {
     finalScanPlaceText =
       currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar
   }
-  let prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a ${form.scanType} scan`
+
+  // ✅ FIX: The prompt is now unambiguous for multiple scans.
+  let prompt = ''
   if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-    prompt += ` (number of scans: ${form.numberOfScans})`
+    prompt = `Estimate the TOTAL effective dose (in mSv) for a patient from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`
+  } else {
+    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`
   }
-  prompt += ` of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`
+  prompt += ` Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`
+
   const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 }
   try {
     const payload = {
@@ -190,14 +195,11 @@ const estimateDose = async () => {
 }
 
 const handleSubmit = async () => {
-  console.log('[PersonalScanFormModal] handleSubmit started.');
-
   if (
     !form.scanDate || !form.scanPlace ||
     (showOtherScanPlaceInput.value && !form.otherScanPlaceDescription) ||
     !form.subScanType || (showOtherInput.value && !form.otherScanDescription)
   ) {
-    console.error('[PersonalScanFormModal] Validation failed: A required field is missing.');
     alert(
       currentLanguage.value === 'en'
         ? 'Please fill all required scan details.'
@@ -205,23 +207,25 @@ const handleSubmit = async () => {
     )
     return
   }
-  console.log('[PersonalScanFormModal] Initial validation passed.');
 
   if (form.scanType === 'X-ray' && (form.numberOfScans === null || form.numberOfScans < 1)) {
-    console.error('[PersonalScanFormModal] Validation failed: Invalid number of scans for X-ray.');
     alert(currentLanguage.value === 'en' ? 'Number of scans must be at least 1 for X-ray.' : 'عدد الفحوصات لأشعة إكس يجب أن يكون 1 على الأقل.');
     return;
   }
-  console.log('[PersonalScanFormModal] X-ray number of scans validation passed.');
 
   if (!form.patientDose && form.patientDose !== 0) {
-    console.log('[PersonalScanFormModal] Patient dose is empty. Attempting AI estimation...');
     const estimationSuccess = await estimateDose();
     if (!estimationSuccess) {
-      console.error('[PersonalScanFormModal] AI dose estimation failed. Halting submission.');
-      return; // This is the likely point of silent failure.
+      return;
     }
-    console.log('[PersonalScanFormModal] AI dose estimation successful.');
+  }
+
+  // Use robust date parsing
+  const parts = form.scanDate.split('-');
+  const safeDate = new Date(Date.UTC(parts[0], parseInt(parts[1], 10) - 1, parts[2]));
+  if (isNaN(safeDate.getTime())) {
+    alert('Invalid date. Please select a valid date.');
+    return;
   }
 
   const finalScanDetailValue = showOtherInput.value ? form.otherScanDescription : form.subScanType;
@@ -233,14 +237,13 @@ const handleSubmit = async () => {
     scanDetail: finalScanDetailValue,
     scanPlace: finalScanPlaceValue,
     numberOfScans: form.scanType === 'X-ray' ? Number(form.numberOfScans) : 1,
-    scanDate: Timestamp.fromDate(new Date(form.scanDate)),
+    scanDate: Timestamp.fromDate(safeDate),
     patientDose: form.patientDose,
     reason: form.reason,
     notes: form.notes,
     isPersonalScan: true,
   }
 
-  console.log('[PersonalScanFormModal] Preparing to emit "save" with payload:', dataToSave);
   emit('save', dataToSave)
 }
 </script>

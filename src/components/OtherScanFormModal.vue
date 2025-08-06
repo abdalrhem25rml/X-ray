@@ -63,7 +63,6 @@ const showOtherScanDetailInput = computed(() => form.scanDetail === 'Other')
 // --- Watchers ---
 watch(() => props.show, (isShown) => {
     if (isShown) {
-        // Reset form to defaults
         Object.assign(form, {
             id: null,
             scanPlace: '',
@@ -75,7 +74,6 @@ watch(() => props.show, (isShown) => {
             date: new Date().toISOString().split('T')[0],
             dosage: null,
         });
-        // Populate with existing data if in edit mode
         if (props.scan) {
             form.id = props.scan.id;
             form.scanPlace = props.scan.scanPlace || '';
@@ -95,7 +93,6 @@ watch(() => form.scanType, () => {
 
 // --- AI Dose Estimation ---
 const estimateDose = async () => {
-    // This logic is assumed to be correct from previous steps
     const userProfile = authStore.userProfile;
     if (!userProfile) {
         alert('User profile is not available. Cannot estimate dose.');
@@ -105,11 +102,16 @@ const estimateDose = async () => {
     const weight = userProfile.weight || 70;
     const finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
     const finalScanDetailText = showOtherScanDetailInput.value ? form.otherScanDetailDescription : form.scanDetail;
-    let prompt = `Estimate the typical effective dose (in mSv) for a person from a ${form.scanType} source/scan`;
+
+    // ✅ FIX: The prompt is now unambiguous for multiple scans.
+    let prompt = '';
     if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-        prompt += ` (number of scans: ${form.numberOfScans})`;
+      prompt = `Estimate the TOTAL effective dose (in mSv) for a person from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
+    } else {
+      prompt = `Estimate the typical effective dose (in mSv) for a person from a single ${form.scanType} source/scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
     }
-    prompt += ` of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Respond ONLY with a single number.`;
+    prompt += ` Patient Age: ${age}. Patient Weight: ${weight} kg. Respond ONLY with a single number.`;
+
     const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 };
     try {
         const payload = {
@@ -169,9 +171,6 @@ const handleSubmit = async () => {
     date: Timestamp.fromDate(safeDate),
     dosage: Number(form.dosage),
   };
-
-  // ✅ FIX: This line has been removed to prevent overwriting the detailed fields.
-  // dataToEmit.type = `${dataToEmit.scanType} - ${dataToEmit.scanDetail || dataToEmit.scanPlace}`;
 
   emit('save', dataToEmit)
 }
