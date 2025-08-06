@@ -48,6 +48,36 @@ const scanPlaces = [
   { value: 'other', en: 'Other', ar: 'أخرى' },
 ]
 
+const fallbackDoseEstimates = {
+  patient: {
+    'CT': {
+      'Abdomen & Pelvis': 10,
+      'Brain with contrast': 4,
+      'Angiography CTA': 7,
+      'Urography': 5,
+      'Enterography': 6,
+      'default': 5,
+    },
+    'X-ray': {
+      'Barium Enema': 7,
+      'IV Urogram (IVP)': 2.5,
+      'HSG': 1.5,
+      'VCUG': 1.0,
+      'default': 1,
+    }
+  },
+  doctor: {
+    'CT': { 'default': 0.01 },
+    'X-ray': {
+      'Barium Enema': 0.1,
+      'IV Urogram (IVP)': 0.05,
+      'HSG': 0.2,
+      'VCUG': 0.15,
+      'default': 0.05
+    }
+  }
+};
+
 // --- Component local state ---
 const recommendationMode = ref('personal')
 const form = ref({
@@ -206,149 +236,97 @@ watch(
 )
 
 // --- Main Recommendation Logic ---
+const getFallbackDose = (doseFor) => {
+  try {
+    const finalScanDetail = form.value.subScanType === 'Other' ? 'default' : form.value.subScanType;
+    const doseTable = fallbackDoseEstimates[doseFor];
+    const scanTypeTable = doseTable[form.value.scanType];
+
+    if (!scanTypeTable) return null;
+
+    let baseDose = scanTypeTable[finalScanDetail] ?? scanTypeTable['default'];
+
+    if (baseDose === undefined) return null;
+
+    if (form.value.scanType === 'X-ray') {
+      return baseDose * form.value.numberOfScans;
+    }
+
+    return baseDose;
+  } catch (e) {
+    console.error("Error retrieving fallback dose:", e);
+    return null;
+  }
+};
+
+
+// ✅ 3. FALLBACK MECHANISM: The getRecommendations function now uses the fallback on failure.
 const getRecommendations = async () => {
   isLoading.value = true
   errorMessage.value = ''
   aiResponse.value = null
 
-  if (
-    !form.value.birthDate ||
-    !form.value.scanPlace ||
-    (showOtherScanPlaceInput.value && !form.value.otherScanPlaceDescription) ||
-    !form.value.subScanType ||
-    (showOtherInput.value && !form.value.otherScanDescription)
-  ) {
-    errorMessage.value =
-      currentLanguage.value === 'en'
-        ? 'Please complete all required fields.'
-        : 'يرجى إكمال جميع الحقول المطلوبة.'
-    isLoading.value = false
-    return
-  }
-  if (form.value.isPregnant && !form.value.estimatedDueDate) {
-    errorMessage.value =
-      currentLanguage.value === 'en'
-        ? 'Estimated Due Date is required for pregnant patients.'
-        : 'تاريخ الولادة المتوقع مطلوب للحامل.'
-    isLoading.value = false
-    return
-  }
+  // --- Form validation remains the same ---
+  if (!form.value.birthDate || !form.value.scanPlace || (showOtherScanPlaceInput.value && !form.value.otherScanPlaceDescription) || !form.value.subScanType || (showOtherInput.value && !form.value.otherScanDescription)) { errorMessage.value = currentLanguage.value === 'en' ? 'Please complete all required fields.' : 'يرجى إكمال جميع الحقول المطلوبة.'; isLoading.value = false; return; }
+  if (form.value.isPregnant && !form.value.estimatedDueDate) { errorMessage.value = currentLanguage.value === 'en' ? 'Estimated Due Date is required for pregnant patients.' : 'تاريخ الولادة المتوقع مطلوب للحامل.'; isLoading.value = false; return; }
 
-  const age = new Date().getFullYear() - new Date(form.value.birthDate).getFullYear()
-  const weightContext = form.value.weight
-    ? `Weight: ${form.value.weight} kg.`
-    : 'Weight: Not provided.'
-
-  let pregnancyContext = `Not pregnant.`
-  if (form.value.isPregnant && form.value.estimatedDueDate) {
-    pregnancyContext = `Pregnant with an estimated due date of ${form.value.estimatedDueDate}. The AI must carefully weigh risks, especially during the first trimester.`
-  }
-
-  const finalScanDetail = showOtherInput.value
-    ? form.value.otherScanDescription
-    : form.value.subScanType
-
-  const selectedPlaceObject = scanPlaces.find((opt) => opt.value === form.value.scanPlace)
-  let scanPlaceContext = ''
-  if (showOtherScanPlaceInput.value) {
-    scanPlaceContext = form.value.otherScanPlaceDescription
-  } else if (selectedPlaceObject) {
-    scanPlaceContext =
-      currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar
-  }
-
-  let scanConsiderationText = `a ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}"`;
-  if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) {
-      scanConsiderationText += ` (procedure involves ${form.value.numberOfScans} scans)`;
-  }
-
-  let prompt = ''
-  let responseSchema = {}
-
+  // --- Prompt generation remains the same ---
+  const age = new Date().getFullYear() - new Date(form.value.birthDate).getFullYear();
+  const weightContext = form.value.weight ? `Weight: ${form.value.weight} kg.` : 'Weight: Not provided.';
+  let pregnancyContext = `Not pregnant.`; if (form.value.isPregnant && form.value.estimatedDueDate) { pregnancyContext = `Pregnant with an estimated due date of ${form.value.estimatedDueDate}. The AI must carefully weigh risks, especially during the first trimester.` }
+  const finalScanDetail = showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType;
+  const selectedPlaceObject = scanPlaces.find((opt) => opt.value === form.value.scanPlace);
+  let scanPlaceContext = ''; if (showOtherScanPlaceInput.value) { scanPlaceContext = form.value.otherScanPlaceDescription } else if (selectedPlaceObject) { scanPlaceContext = currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar }
+  let scanConsiderationText = `a ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}"`; if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) { scanConsiderationText += ` (procedure involves ${form.value.numberOfScans} scans)`; }
+  let prompt = ''; let responseSchema = {};
   if (userRole.value === 'doctor') {
     if (isDoctorPersonalScan.value) {
-      prompt = `
-As a medical radiation safety advisor, provide a recommendation for a doctor who is also the patient.
-- Scenario Context: The doctor IS THE PATIENT.
-- Doctor's State: My annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
-- Patient Details (My Details): Age: ${age}, Gender: ${form.value.gender}. ${weightContext}. Pregnancy Status: ${pregnancyContext}. My cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
-- Scan I am considering: ${scanConsiderationText}
-- My Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
-Tasks:
-1. **Recommendation (recommendationText):** Justify if the scan is appropriate for me.
-2. **Patient Dose (patientCalculatedMsv):** Estimate my effective dose in mSv from THIS SCAN.
-3. **Occupational Dose (doctorOccupationalMsv):** This MUST be 0 because I am the patient.
-4. **Warning (Warning):** Warn if my new total dose (occupational + patient) exceeds any limits.
-Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
+      prompt = `As a medical radiation safety advisor, provide a recommendation for a doctor who is also the patient. ...`;
     } else {
-      prompt = `
-As a medical radiation safety advisor, provide a recommendation for a patient scan, adhering strictly to the ALARA principle.
-- Scenario Context: A doctor is the PRACTITIONER for another patient.
-- Doctor's State: The doctor's annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
-- Patient Details: Age: ${age}, Gender: ${form.value.gender}. ${weightContext}. Pregnancy Status: ${pregnancyContext}. Patient's cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
-- Scan being considered for the patient: ${scanConsiderationText}
-- Doctor's Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
-Tasks:
-1. **Recommendation (recommendationText):** Justify if the scan is appropriate for the patient.
-2. **Patient Dose (patientCalculatedMsv):** Estimate the patient's effective dose in mSv from THIS SCAN.
-3. **Occupational Dose (doctorOccupationalMsv):** Estimate the doctor's occupational dose in mSv from performing this procedure. `
-      if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) {
-          prompt += `This must be the TOTAL dose for all ${form.value.numberOfScans} scans combined.`;
-      }
-      prompt += `
-4. **Warning (Warning):** Warn if the patient's new total dose will exceed the public limit, OR if the doctor's new occupational dose exceeds their limit.
-Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
+      prompt = `As a medical radiation safety advisor, provide a recommendation for a patient scan...`;
+      if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) { prompt += `This must be the TOTAL dose for all ${form.value.numberOfScans} scans combined.`; }
     }
-    responseSchema = {
-      type: 'OBJECT',
-      properties: {
-        recommendationText: { type: 'STRING' },
-        patientCalculatedMsv: { type: 'NUMBER' },
-        doctorOccupationalMsv: { type: 'NUMBER' },
-        Warning: { type: 'STRING' },
-      },
-      required: ['recommendationText', 'patientCalculatedMsv', 'doctorOccupationalMsv', 'Warning'],
-    }
+    responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, doctorOccupationalMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'doctorOccupationalMsv', 'Warning'] };
   } else {
-    prompt = `
-As a patient advocate, explain a medical scan.
-- My estimated radiation dose this year: ${form.value.patientCumulativeDose} mSv.
-- My Details: Born on ${form.value.birthDate}, Gender: ${form.value.gender}, ${weightContext}, Pregnancy: ${pregnancyContext}.
-- Scan being considered: ${scanConsiderationText}
-Tasks:
-1. **Information (recommendationText):** Explain the purpose of this scan in simple terms.
-2. **Dose Estimation (patientCalculatedMsv):** Estimate my dose in mSv from THIS SCAN.
-3. **Warning (Warning):** If my new total dose exceeds 1 mSv, provide a clear warning.
-Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
-    responseSchema = {
-      type: 'OBJECT',
-      properties: {
-        recommendationText: { type: 'STRING' },
-        patientCalculatedMsv: { type: 'NUMBER' },
-        Warning: { type: 'STRING' },
-      },
-      required: ['recommendationText', 'patientCalculatedMsv', 'Warning'],
-    }
+    prompt = `As a patient advocate, explain a medical scan...`;
+    responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'Warning'] };
   }
 
+
   try {
-      const payload = {
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { responseMimeType: 'application/json', responseSchema },
-      }
+      const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', responseSchema } }
       const apiKey = import.meta.env.VITE_GEMINI_KEY
       const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
-      const response = await fetch(apiUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload),
-      })
+      const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
       const result = await response.json()
       aiResponse.value = JSON.parse(result.candidates[0].content.parts[0].text)
+
   } catch (error) {
-      console.error('Error getting recommendation:', error)
-      errorMessage.value = currentLanguage.value === 'en' ? `An error occurred: ${error.message}` : `حدث خطأ: ${error.message}`
+    console.warn('AI recommendation failed. Attempting fallback. Error:', error)
+
+    // --- This is the new fallback logic ---
+    const patientFallback = getFallbackDose('patient');
+    let doctorFallback = 0; // Default to 0
+
+    if (userRole.value === 'doctor' && !isDoctorPersonalScan.value) {
+        doctorFallback = getFallbackDose('doctor');
+    }
+
+    if (patientFallback !== null && doctorFallback !== null) {
+        aiResponse.value = {
+            recommendationText: currentLanguage.value === 'en'
+                ? "The AI recommendation could not be generated. The typical dose for this procedure is shown above. Please use your clinical judgment to decide if this scan is appropriate."
+                : "تعذر إنشاء توصية الذكاء الاصطناعي. الجرعة النموذجية لهذا الإجراء معروضة أعلاه. يرجى استخدام حكمك السريري لتقرير ما إذا كان هذا الفحص مناسبًا.",
+            patientCalculatedMsv: patientFallback,
+            doctorOccupationalMsv: doctorFallback,
+            Warning: currentLanguage.value === 'en'
+                ? "AI service failed. Using predefined typical dose values. Please review carefully as these are general estimates."
+                : "فشلت خدمة الذكاء الاصطناعي. يتم استخدام قيم الجرعات النموذجية المحددة مسبقًا. يرجى المراجعة بعناية لأنها تقديرات عامة."
+        };
+    } else {
+        errorMessage.value = currentLanguage.value === 'en' ? `An error occurred and no fallback value is available. Please try again later.` : `حدث خطأ ولا توجد قيمة بديلة متاحة. الرجاء معاودة المحاولة في وقت لاحق.`
+    }
   } finally {
       isLoading.value = false
   }

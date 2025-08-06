@@ -42,6 +42,25 @@ const scanSubtypes = {
   ],
 }
 
+const fallbackDoseEstimates = {
+  personal: {
+    'CT': {
+      'Abdomen & Pelvis': 10,
+      'Brain with contrast': 4,
+      'default': 5, // Default for 'Other' CT scans
+    },
+    'X-ray': {
+      'Barium Enema': 7,
+      'IV Urogram (IVP)': 2.5,
+      'default': 1, // Default for 'Other' X-ray scans
+    },
+    'Background': {
+      'Annual Natural Background': 2.4,
+      'default': 2.4, // Default for all background types
+    }
+  }
+};
+
 // --- Form State ---
 const form = reactive({
   id: null,
@@ -92,18 +111,42 @@ watch(() => form.scanType, () => {
 });
 
 // --- AI Dose Estimation ---
+const getFallbackDose = () => {
+  try {
+    const finalScanDetail = form.scanDetail === 'Other' ? 'default' : form.scanDetail;
+    const doseTable = fallbackDoseEstimates.personal;
+    const scanTypeTable = doseTable[form.scanType];
+
+    if (!scanTypeTable) return null;
+
+    let baseDose = scanTypeTable[finalScanDetail] ?? scanTypeTable['default'];
+
+    if (baseDose === undefined) return null;
+
+    if (form.scanType === 'X-ray') {
+      return baseDose * form.numberOfScans;
+    }
+
+    return baseDose;
+  } catch (e) {
+    console.error("Error retrieving fallback dose:", e);
+    return null;
+  }
+};
+
+
+// ✅ 3. FALLBACK MECHANISM: The estimateDose function now uses the fallback on failure.
 const estimateDose = async () => {
     const userProfile = authStore.userProfile;
     if (!userProfile) {
         alert('User profile is not available. Cannot estimate dose.');
         return false;
     }
+    // --- Prompt generation logic remains the same ---
     const age = userProfile.birthDate ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear() : 'N/A';
     const weight = userProfile.weight || 70;
     const finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
     const finalScanDetailText = showOtherScanDetailInput.value ? form.otherScanDetailDescription : form.scanDetail;
-
-    // ✅ FIX: The prompt is now unambiguous for multiple scans.
     let prompt = '';
     if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
       prompt = `Estimate the TOTAL effective dose (in mSv) for a person from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
@@ -112,32 +155,43 @@ const estimateDose = async () => {
     }
     prompt += ` Patient Age: ${age}. Patient Weight: ${weight} kg. Respond ONLY with a single number.`;
 
-    const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 };
     try {
-        const payload = {
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { responseMimeType: 'text/plain' },
-        };
+        // --- API call logic remains the same ---
+        const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 };
+        const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'text/plain' } };
         const apiKey = import.meta.env.VITE_GEMINI_KEY;
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
+        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
         const result = await response.json();
         const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
         const estimated = parseFloat(aiText.match(/[\d.]+/));
-        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) {
-            throw new Error('AI returned an invalid or out-of-range value.');
-        }
+        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
         form.dosage = estimated;
         return true;
+
     } catch (error) {
-        console.error(`Dose estimation failed:`, error);
-        alert('AI estimation failed. Please enter the dose manually.');
-        return false;
+        console.warn(`AI dose estimation failed. Attempting fallback. Error:`, error);
+
+        // --- This is the new fallback logic ---
+        const fallbackDose = getFallbackDose();
+
+        if (fallbackDose !== null) {
+          form.dosage = fallbackDose;
+          alert(
+            currentLanguage.value === 'en'
+              ? `AI estimation failed. A typical value of ${fallbackDose.toFixed(3)} mSv has been used. You can review and adjust this value.`
+              : `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(3)} ملي سيفرت. يمكنك مراجعة هذه القيمة وتعديلها.`
+          );
+          return true; // Success! We used a fallback.
+        } else {
+          alert(
+            currentLanguage.value === 'en'
+              ? `AI estimation failed and no fallback value is available. Please enter the dose manually.`
+              : `فشل تقدير الذكاء الاصطناعي ولا توجد قيمة بديلة. يرجى إدخال الجرعة يدويًا.`
+          );
+          return false; // Total failure.
+        }
     }
 };
 
