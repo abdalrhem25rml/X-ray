@@ -10,6 +10,36 @@ const props = defineProps({
 const emit = defineEmits(['close', 'save'])
 const currentLanguage = inject('currentLanguage')
 
+const scanSubtypes = {
+  CT: [
+    { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
+    { value: 'Brain with contrast', en: 'Brain with contrast', ar: 'الدماغ بمادة تباين' },
+    { value: 'Angiography CTA', en: 'Angiography CTA', ar: 'تصوير الأوعية CTA' },
+    { value: 'Urography', en: 'Urography', ar: 'تصوير المسالك البولية' },
+    { value: 'Enterography', en: 'Enterography', ar: 'تصوير الأمعاء' },
+    { value: 'Other', en: 'Other...', ar: 'أخرى...' },
+  ],
+  'X-ray': [
+    { value: 'Barium Enema', en: 'Barium Enema', ar: 'حقنة الباريوم الشرجية' },
+    { value: 'IV Urogram (IVP)', en: 'IV Urogram (IVP)', ar: 'أشعة المسالك البولية (IVP)' },
+    { value: 'HSG', en: 'HSG', ar: 'أشعة الرحم (HSG)' },
+    { value: 'VCUG', en: 'VCUG', ar: 'دراسة المثانة بالصبغة (VCUG)' },
+    { value: 'Other', en: 'Other...', ar: 'أخرى...' },
+  ],
+}
+
+const scanPlaces = [
+  { value: 'head', en: 'Head', ar: 'الرأس' },
+  { value: 'neck', en: 'Neck', ar: 'الرقبة' },
+  { value: 'chest', en: 'Chest', ar: 'الصدر' },
+  { value: 'abdomen', en: 'Abdomen', ar: 'البطن' },
+  { value: 'pelvis', en: 'Pelvis', ar: 'الحوض' },
+  { value: 'spine', en: 'Spine', ar: 'العمود الفقري' },
+  { value: 'upper_extremity', en: 'Upper Extremity', ar: 'الطرف العلوي' },
+  { value: 'lower_extremity', en: 'Lower Extremity', ar: 'الطرف السفلي' },
+  { value: 'other', en: 'Other', ar: 'أخرى' },
+]
+
 const form = reactive({
   id: null,
   type: '',

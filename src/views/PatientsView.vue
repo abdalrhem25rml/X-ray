@@ -40,49 +40,34 @@ const fetchPatients = async () => {
 }
 
 const calculateAge = (birthDate) => {
-  // Return 'N/A' if the birthDate is invalid or missing
   if (!birthDate?.toDate) {
     return 'N/A'
   }
-
   const birth = birthDate.toDate()
   const today = new Date()
-
   let years = today.getFullYear() - birth.getFullYear()
   let months = today.getMonth() - birth.getMonth()
-
-  // Decrement months if the birth day of the month hasn't been reached yet
   if (today.getDate() < birth.getDate()) {
     months--
   }
-
-  // If months are negative, it means the birth month hasn't been reached this year
   if (months < 0) {
     years--
     months += 12
   }
-
-  // Apply conditional formatting based on the user's request
   if (years >= 2) {
     return `${years} ${currentLanguage.value === 'ar' ? 'سنوات' : 'years'}`
   } else {
-    // Handle cases under 2 years
     const yearText = currentLanguage.value === 'ar' ? 'سنة' : 'year'
     const monthTextPlural = currentLanguage.value === 'ar' ? 'أشهر' : 'months'
     const monthTextSingular = currentLanguage.value === 'ar' ? 'شهر' : 'month'
-
     if (years > 0) {
       const monthText = months === 1 ? monthTextSingular : monthTextPlural
-      // e.g., "1 year, 6 months"
       return `${years} ${yearText}, ${months} ${monthText}`
     } else {
-      // Handle cases under 1 year
       if (months > 0) {
         const monthText = months === 1 ? monthTextSingular : monthTextPlural
-        // e.g., "8 months"
         return `${months} ${monthText}`
       } else {
-        // Handle newborns less than a month old
         return currentLanguage.value === 'ar' ? 'أقل من شهر' : 'Less than a month'
       }
     }
@@ -98,7 +83,6 @@ const handleSavePatient = async (patientDataFromModal) => {
     const newPatientId = await databaseStore.addNewPatient(dataToSave)
     success = !!newPatientId
   }
-
   if (success) {
     showPatientFormModal.value = false
     await fetchPatients()
@@ -136,10 +120,8 @@ function openConfirmDeleteModal(patient) {
   showDeleteModal.value = true
 }
 
-// ✅ FIX: This function now navigates to the Recommend page with the patient's ID.
 function handleRecommend(patientId) {
   if (!patientId) return
-  // Use the router to push to the 'recommend' route, passing the patient's ID as a query parameter.
   router.push({
     name: 'recommend',
     query: { patientId: patientId },
@@ -191,9 +173,7 @@ watch(
                 <tr>
                   <th>{{ currentLanguage === 'en' ? 'Name' : 'الاسم' }}</th>
                   <th>{{ currentLanguage === 'en' ? 'Age' : 'العمر' }}</th>
-
                   <th>{{ currentLanguage === 'en' ? 'Weight' : 'الوزن' }}</th>
-
                   <th>{{ currentLanguage === 'en' ? 'Gender' : 'الجنس' }}</th>
                   <th class="details-column">
                     {{ currentLanguage === 'en' ? 'Medical History' : 'التاريخ الطبي' }}
@@ -208,8 +188,6 @@ watch(
                 <tr v-for="patient in patients" :key="patient.id">
                   <td>{{ patient.name ?? 'N/A' }}</td>
                   <td>{{ calculateAge(patient.birthDate) }}</td>
-
-                  <!-- ✅ ADDED: Weight data cell -->
                   <td>{{ patient.weight ? `${patient.weight} kg` : 'N/A' }}</td>
                   <td>
                     {{
@@ -282,6 +260,8 @@ watch(
         </div>
       </div>
     </div>
+
+    <!-- Modals controlled by this view -->
     <PatientFormModal
       :show="showPatientFormModal"
       :patient="patientToEdit"
@@ -289,11 +269,14 @@ watch(
       @close="showPatientFormModal = false"
       @save="handleSavePatient"
     />
+
     <PatientDetailsModal
       :show="showDetailsModal"
       :patient="selectedPatient"
       @close="showDetailsModal = false"
+      @scan-saved="fetchPatients"
     />
+
     <ConfirmDeleteModal
       :show="showDeleteModal"
       :title="currentLanguage === 'en' ? 'Delete Patient' : 'حذف المريض'"
