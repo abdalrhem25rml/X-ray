@@ -84,7 +84,7 @@ const form = ref({
 const isLoading = ref(false)
 const isSaving = ref(false)
 const isFetchingPatient = ref(false)
-const aiResponse = ref(null) // This will now hold the locally generated response
+const aiResponse = ref(null)
 const errorMessage = ref('')
 
 // --- Computed Properties ---
@@ -121,6 +121,7 @@ const clearForm = () => {
     numberOfScans: 1, doctorAdditionalContext: '',
   }
 }
+
 const toDateString = (input) => {
   if (!input) return ''
   let d = typeof input.toDate === 'function' ? input.toDate() : new Date(input)
@@ -169,6 +170,7 @@ watch(recommendationMode, (newMode) => {
     clearForm()
   }
 })
+
 watch(
   () => route.query.patientId,
   (newId) => {
@@ -182,12 +184,14 @@ watch(
   },
   { immediate: true },
 )
+
 watch(
   () => form.value.isPregnant,
   (isPregnant) => {
     if (!isPregnant) form.value.estimatedDueDate = ''
   },
 )
+
 watch(
   () => form.value.scanType,
   () => {
@@ -216,24 +220,19 @@ const getFallbackDose = (doseFor) => {
   }
 };
 
-const getRecommendations = () => {
+const getRecommendations = async () => {
   isLoading.value = true;
   errorMessage.value = '';
   aiResponse.value = null;
 
   // --- Form validation ---
-  if (!form.value.birthDate || !form.value.scanPlace || (showOtherScanPlaceInput.value && !form.value.otherScanPlaceDescription) || !form.value.subScanType || (showOtherInput.value && !form.value.otherScanDescription)) {
+  if (!form.value.birthDate || !form.value.scanPlace || !form.value.subScanType) {
     errorMessage.value = currentLanguage.value === 'en' ? 'Please complete all required fields.' : 'يرجى إكمال جميع الحقول المطلوبة.';
     isLoading.value = false;
     return;
   }
-  if (form.value.isPregnant && !form.value.estimatedDueDate) {
-    errorMessage.value = currentLanguage.value === 'en' ? 'Estimated Due Date is required for pregnant patients.' : 'تاريخ الولادة المتوقع مطلوب للحامل.';
-    isLoading.value = false;
-    return;
-  }
 
-  // 1. Calculate doses using the fallback function
+  // 1. Calculate doses LOCALLY using the fixed table.
   const patientDose = getFallbackDose('patient');
   let doctorDose = 0;
   if (userRole.value === 'doctor' && !isDoctorPersonalScan.value) {
@@ -241,54 +240,77 @@ const getRecommendations = () => {
   }
 
   if (patientDose === null || doctorDose === null) {
-      errorMessage.value = currentLanguage.value === 'en' ? 'Could not find a typical dose for the selected scan. Please check your selections.' : 'تعذر العثور على جرعة نموذجية للفحص المحدد. يرجى التحقق من اختياراتك.';
+      errorMessage.value = currentLanguage.value === 'en' ? 'Could not determine a dose for the selected scan.' : 'تعذر تحديد جرعة للفحص المختار.';
       isLoading.value = false;
       return;
   }
 
-  // 2. Generate static recommendation text
-  const recommendationText = currentLanguage.value === 'en'
-    ? "The typical doses for this procedure are displayed above. Please use your clinical judgment and the patient's medical history and symptoms to determine if this scan is appropriate and justified."
-    : "الجرعات النموذجية لهذا الإجراء معروضة أعلاه. يرجى استخدام حكمك السريري والتاريخ الطبي للمريض وأعراضه لتحديد ما إذا كان هذا الفحص مناسبًا ومبررًا.";
-
-  // 3. Generate dynamic warning messages
-  const warnings = [];
+  // 2. Construct the AI prompt with the calculated doses and expert persona.
   const lang = currentLanguage.value;
+  const persona = "You are a highly experienced, board-certified radiologist and medical physicist with over 20 years of clinical expertise. You specialize in radiation protection and strictly follow the ALARA (As Low As Reasonably Achievable) principle. Your goal is to provide clear, safety-conscious advice for healthcare providers and patients.";
+  const finalScanDetail = showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType;
+  const finalScanPlace = showOtherScanPlaceInput.value ? form.value.otherScanPlaceDescription : form.value.scanPlace;
 
-  if (form.value.isPregnant) {
-      warnings.push(lang === 'en' ? "The patient is pregnant. Scans involving the abdomen or pelvis carry a direct risk to the fetus. Justification must be exceptionally strong." : "المريضة حامل. الفحوصات التي تشمل البطن أو الحوض تحمل خطرًا مباشرًا على الجنين. يجب أن يكون التبرير قويًا بشكل استثنائي.");
-  }
+  const prompt = `
+    ${persona}
 
-  const newPatientDose = form.value.patientCumulativeDose + patientDose;
-  if (newPatientDose > 20) {
-      warnings.push(lang === 'en' ? `The patient's cumulative dose this year will be approximately ${newPatientDose.toFixed(2)} mSv, which is notable. Ensure the benefit outweighs the risk.` : `الجرعة التراكمية للمريض هذا العام ستبلغ حوالي ${newPatientDose.toFixed(2)} ملي سيفرت، وهو أمر ملحوظ. تأكد من أن الفائدة تفوق المخاطرة.`);
-  }
+    Task: Provide a concise recommendation and a separate warning based on the following clinical scenario. Respond in ${lang === 'en' ? 'English' : 'Arabic'}.
 
-  if (userRole.value === 'doctor' && !isDoctorPersonalScan.value) {
-    const newDoctorDose = currentTotalMsv.value + doctorDose;
-    if (newDoctorDose > doseLimit.value) {
-        warnings.push(lang === 'en' ? `Your new occupational dose of ~${newDoctorDose.toFixed(3)} mSv will EXCEED your annual limit of ${doseLimit.value} mSv.` : `جرعتك المهنية الجديدة البالغة ~${newDoctorDose.toFixed(3)} ملي سيفرت سوف تتجاوز حدك السنوي البالغ ${doseLimit.value} ملي سيفرت.`);
-    }
-  }
+    Scenario Details:
+    - Patient Age: ${new Date().getFullYear() - new Date(form.value.birthDate).getFullYear()}
+    - Patient Gender: ${form.value.gender}
+    - Patient is Pregnant: ${form.value.isPregnant ? `Yes, due around ${form.value.estimatedDueDate}` : 'No'}
+    - Patient Cumulative Dose (This Year): ${form.value.patientCumulativeDose.toFixed(5)} mSv
+    - Doctor Cumulative Dose (This Year): ${currentTotalMsv.value.toFixed(5)} mSv
+    - Proposed Scan: ${form.value.scanType} of the ${finalScanPlace}, protocol: "${finalScanDetail}"
+    - Reason / Symptoms: ${form.value.currentSymptoms || 'Not provided'}
+    - ESTIMATED Patient Dose (from this scan): ${patientDose.toFixed(5)} mSv
+    - ESTIMATED Doctor Occupational Dose (from this scan): ${doctorDose.toFixed(5)} mSv
 
-  if (isDoctorPersonalScan.value) {
-      const newTotalPersonalDose = currentTotalMsv.value + patientDose;
-      if (newTotalPersonalDose > doseLimit.value) {
-          warnings.push(lang === 'en' ? `Your combined personal and occupational dose this year will be ~${newTotalPersonalDose.toFixed(2)} mSv, EXCEEDING your annual occupational limit of ${doseLimit.value} mSv.` : `مجموع جرعتك الشخصية والمهنية هذا العام سيبلغ ~${newTotalPersonalDose.toFixed(2)} ملي سيفرت، متجاوزًا حدك المهني السنوي البالغ ${doseLimit.value} ملي سيفرت.`);
-      }
-  }
+    Instructions:
+    1.  **recommendationText:** Write a brief, professional justification or point of consideration for this scan, keeping the ALARA principle in mind.
+    2.  **Warning:** Based on all the data, write a clear, actionable warning if any high-risk factors are present (e.g., pregnancy, high cumulative dose, doctor exceeding limit). If no high risks are present, state that clearly.
+  `;
 
-  const warningText = warnings.length > 0 ? warnings.join('\n- ') : (lang === 'en' ? 'No high-priority warnings detected based on the provided data. Standard clinical caution is advised.' : 'لم يتم اكتشاف تحذيرات ذات أولوية عالية بناءً على البيانات المقدمة. يُنصح بتوخي الحذر السريري المعتاد.');
-
-  // 4. Construct final response object
-  aiResponse.value = {
-      recommendationText: recommendationText,
-      patientCalculatedMsv: patientDose,
-      doctorOccupationalMsv: isDoctorPersonalScan.value ? 0 : doctorDose,
-      Warning: warningText
+  const responseSchema = {
+      type: 'OBJECT',
+      properties: {
+          recommendationText: { type: 'STRING' },
+          Warning: { type: 'STRING' },
+      },
+      required: ['recommendationText', 'Warning'],
   };
 
-  isLoading.value = false;
+  // 3. Call the AI and handle the response.
+  try {
+      const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', responseSchema } }
+      const apiKey = import.meta.env.VITE_GEMINI_KEY
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
+      const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
+
+      const result = await response.json()
+      const aiContent = JSON.parse(result.candidates[0].content.parts[0].text)
+
+      // Combine local doses with AI advice
+      aiResponse.value = {
+          ...aiContent, // Contains recommendationText and Warning from AI
+          patientCalculatedMsv: patientDose,
+          doctorOccupationalMsv: isDoctorPersonalScan.value ? 0 : doctorDose,
+      };
+
+  } catch (error) {
+    console.error("AI advice generation failed. Using fallback.", error);
+    // Fallback if AI fails
+    aiResponse.value = {
+      recommendationText: lang === 'en' ? 'AI service failed. Please use clinical judgment based on the estimated doses.' : 'فشلت خدمة الذكاء الاصطناعي. يرجى استخدام الحكم السريري بناءً على الجرعات المقدرة.',
+      Warning: lang === 'en' ? 'Review dose values carefully.' : 'راجع قيم الجرعات بعناية.',
+      patientCalculatedMsv: patientDose,
+      doctorOccupationalMsv: isDoctorPersonalScan.value ? 0 : doctorDose,
+    };
+  } finally {
+      isLoading.value = false
+  }
 }
 
 const saveScanFromRecommendation = async () => {
@@ -309,7 +331,7 @@ const saveScanFromRecommendation = async () => {
             scanDate: Timestamp.now(),
             patientDose: Number(aiResponse.value.patientCalculatedMsv) || 0,
             doctorDose: Number(aiResponse.value.doctorOccupationalMsv) || 0,
-            reason: form.value.currentSymptoms || 'As per recommendation',
+            reason: form.value.currentSymptoms || 'As per AI recommendation',
             notes: aiResponse.value.recommendationText,
             isPersonalScan: recommendationMode.value === 'personal'
         }
