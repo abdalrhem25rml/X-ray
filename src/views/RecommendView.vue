@@ -280,6 +280,7 @@ const getRecommendations = async () => {
   let scanPlaceContext = '';
   if (showOtherScanPlaceInput.value) { scanPlaceContext = form.value.otherScanPlaceDescription } else if (selectedPlaceObject) { scanPlaceContext = currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar }
 
+  // ✅ FIX: Prompts now explicitly instruct the AI to return a non-zero value.
   let scanTaskText = '';
   if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) {
       scanTaskText = `
@@ -287,10 +288,10 @@ const getRecommendations = async () => {
         To calculate the dose:
         1. First, determine the typical effective dose for a SINGLE one of these X-rays.
         2. Then, multiply that single-scan dose by the number of scans (${form.value.numberOfScans}) to get the TOTAL dose.
-        The final 'patientCalculatedMsv' must be the result of this multiplication.
+        The final calculated dose values must be greater than zero.
       `;
   } else {
-      scanTaskText = `The scan being considered is a single ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}".`;
+      scanTaskText = `The scan being considered is a single ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}". The estimated dose must be greater than zero.`;
   }
 
   let prompt = '';
@@ -308,11 +309,12 @@ As a medical radiation safety advisor, provide a recommendation for a doctor who
 - My Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
 Tasks:
 1. **Recommendation (recommendationText):** Justify if the scan is appropriate for me.
-2. **Patient Dose (patientCalculatedMsv):** Estimate my total effective dose in mSv from this procedure.
+2. **Patient Dose (patientCalculatedMsv):** Estimate my total effective dose in mSv from this procedure. The result must be greater than zero.
 3. **Occupational Dose (doctorOccupationalMsv):** This MUST be 0 because I am the patient.
 4. **Warning (Warning):** Warn if my new total dose (occupational + patient) exceeds any limits.
 Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
     } else {
+      // Prompt for Doctor treating a patient
       prompt = `
 As a medical radiation safety advisor, provide a recommendation for a patient scan, adhering strictly to the ALARA principle.
 - Scenario Context: A doctor is the PRACTITIONER for another patient.
@@ -322,13 +324,14 @@ As a medical radiation safety advisor, provide a recommendation for a patient sc
 - Doctor's Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
 Tasks:
 1. **Recommendation (recommendationText):** Justify if the scan is appropriate for the patient.
-2. **Patient Dose (patientCalculatedMsv):** Estimate the patient's total effective dose in mSv from this procedure.
-3. **Occupational Dose (doctorOccupationalMsv):** Estimate the doctor's total occupational dose in mSv from performing this procedure. For multiple X-rays, calculate this the same way as the patient dose (single scan * number of scans).
+2. **Patient Dose (patientCalculatedMsv):** Estimate the patient's total effective dose in mSv from this procedure. The result must be greater than zero.
+3. **Occupational Dose (doctorOccupationalMsv):** Estimate the doctor's total occupational dose in mSv from performing this procedure. The result must be greater than zero.
 4. **Warning (Warning):** Warn if the patient's new total dose will exceed the public limit, OR if the doctor's new occupational dose exceeds their limit.
 Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
     }
     responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, doctorOccupationalMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'doctorOccupationalMsv', 'Warning'] };
   } else {
+    // Prompt for Patient
     prompt = `
 As a patient advocate, explain a medical scan.
 - My estimated radiation dose this year: ${form.value.patientCumulativeDose} mSv.
@@ -336,7 +339,7 @@ As a patient advocate, explain a medical scan.
 - Scan Details: ${scanTaskText}
 Tasks:
 1. **Information (recommendationText):** Explain the purpose of this scan in simple terms.
-2. **Dose Estimation (patientCalculatedMsv):** Estimate my total dose in mSv from this procedure.
+2. **Dose Estimation (patientCalculatedMsv):** Estimate my total dose in mSv from this procedure. The result must be greater than zero.
 3. **Warning (Warning):** If my new total dose exceeds 1 mSv, provide a clear warning.
 Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
     responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'Warning'] };

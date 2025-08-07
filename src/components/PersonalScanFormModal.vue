@@ -190,7 +190,7 @@ const estimateDose = async () => {
   let finalScanDetailText = showOtherInput.value ? form.otherScanDescription : form.subScanType;
   let finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
 
-  // ✅ FIX: The prompt is now primed with a two-step thinking process.
+  // ✅ FIX: Prompts now explicitly instruct the AI to return a non-zero value.
   let prompt = '';
   if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
     prompt = `
@@ -198,10 +198,10 @@ const estimateDose = async () => {
       Step 1: First, determine the typical effective dose for a SINGLE X-ray of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".
       Step 2: Multiply that single-scan dose by the number of scans, which is ${form.numberOfScans}.
       Patient Context: Age: ${age}, Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}".
-      Respond ONLY with the final numeric value from Step 2. Do not show your work or include units.
+      Respond ONLY with the final numeric value from Step 2. The result must be greater than zero.
     `;
   } else {
-    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`;
+    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". The value must be greater than zero. Respond ONLY with a single number.`;
   }
 
   try {
@@ -391,7 +391,7 @@ const handleSubmit = async () => {
             <label>{{ currentLanguage === 'en' ? 'Your Dose (mSv)' : 'جرعتك (mSv)' }}</label>
             <input
               type="number"
-              step="0.0001"
+              step="0.00005"
               v-model.number="form.patientDose"
               :placeholder="
                 currentLanguage === 'en'

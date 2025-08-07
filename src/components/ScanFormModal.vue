@@ -193,20 +193,21 @@ const estimateDose = async (doseFor) => {
         if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
             prompt = `
               Task: Calculate the TOTAL occupational dose in mSv for a doctor from a procedure involving multiple X-rays.
-              Step 1: First, determine the typical occupational dose for a SINGLE X-ray of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".
+              Step 1: First, determine the typical occupational dose for a SINGLE X-ray of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". A typical value is around 0.00005 mSv.
               Step 2: Multiply that single-scan dose by the number of scans, which is ${form.numberOfScans}.
               Doctor's Context: "${form.doctorAdditionalContext || 'None'}".
-              Respond ONLY with the final numeric value from Step 2. Do not show your work or include units.
+              Respond ONLY with the final numeric value from Step 2. Do not show your work or include units. Ensure the result is never zero.
             `;
         } else {
-            prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
+            prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". The value must be greater than zero. Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
         }
     }
 
     try {
+        // ✅ FIX: The minimum occupational dose is now set to a realistic floor.
         let validationRules = doseFor === 'patient'
             ? (form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 })
-            : { min: 0, max: 0.5 }; // Stricter validation for occupational dose
+            : { min: 0.00005, max: 0.5 };
 
         const payload = {
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
@@ -423,7 +424,6 @@ const handleSubmit = async () => {
               }}</label>
               <input
                 type="number"
-                step="0.0001"
                 v-model.number="form.doctorDose"
                 :placeholder="
                   currentLanguage === 'en'
