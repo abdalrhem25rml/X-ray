@@ -174,58 +174,54 @@ const estimateDose = async (doseFor) => {
     const weight = props.patient.weight || 70;
     let finalScanDetailText = showOtherInput.value ? form.otherScanDescription : form.subScanType;
     let finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
+
     let prompt = '';
+
     if (doseFor === 'patient') {
         if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-            prompt = `Estimate the TOTAL effective dose (in mSv) for a patient from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".`;
+            prompt = `
+              Task: Calculate the TOTAL effective dose in mSv for a patient from a procedure involving multiple X-rays.
+              Step 1: First, determine the typical effective dose for a SINGLE X-ray of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".
+              Step 2: Multiply that single-scan dose by the number of scans, which is ${form.numberOfScans}.
+              Patient Context: Age: ${age}, Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}".
+              Respond ONLY with the final numeric value from Step 2. Do not show your work or include units.
+            `;
         } else {
-            prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".`;
+            prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`;
         }
-        prompt += ` Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number.`;
-    } else {
+    } else { // doseFor === 'doctor'
         if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-            prompt = `Estimate the TOTAL occupational dose (in mSv) for a doctor from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
+            prompt = `
+              Task: Calculate the TOTAL occupational dose in mSv for a doctor from a procedure involving multiple X-rays.
+              Step 1: First, determine the typical occupational dose for a SINGLE X-ray of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".
+              Step 2: Multiply that single-scan dose by the number of scans, which is ${form.numberOfScans}.
+              Doctor's Context: "${form.doctorAdditionalContext || 'None'}".
+              Respond ONLY with the final numeric value from Step 2. Do not show your work or include units.
+            `;
         } else {
             prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} scan of the ${finalScanPlaceText} with protocol "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
         }
     }
 
     try {
-        let validationRules = doseFor === 'patient' ? (form.scanType === 'CT' ? {
-            min: 0.5,
-            max: 40
-        } : {
-            min: 0.001,
-            max: 10
-        }) : {
-            min: 0,
-            max: 2
-        };
+        let validationRules = doseFor === 'patient'
+            ? (form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 })
+            : { min: 0, max: 0.5 }; // Stricter validation for occupational dose
+
         const payload = {
-            contents: [{
-                role: 'user',
-                parts: [{
-                    text: prompt
-                }]
-            }],
-            generationConfig: {
-                responseMimeType: 'text/plain'
-            }
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { responseMimeType: 'text/plain' }
         };
         const apiKey = import.meta.env.VITE_GEMINI_KEY;
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
+        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
         if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
         const result = await response.json();
-      const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+        const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
         const estimated = parseFloat(aiText.match(/[\d.]+/));
-        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
+        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) {
+             throw new Error(`AI returned an invalid or out-of-range value. Got: ${estimated}`);
+        }
         if (doseFor === 'patient') form.patientDose = estimated;
         else form.doctorDose = estimated;
         return true;
@@ -237,8 +233,8 @@ const estimateDose = async (doseFor) => {
             else form.doctorDose = fallbackDose;
             alert(
                 currentLanguage.value === 'en' ?
-                `AI estimation failed. A typical value of ${fallbackDose.toFixed(3)} mSv has been used for the ${doseFor}. You can review and adjust this value.` :
-                `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(3)} ملي سيفرت لـ ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يمكنك مراجعة هذه القيمة وتعديلها.`
+                `AI estimation failed. A typical value of ${fallbackDose.toFixed(5)} mSv has been used for the ${doseFor}. You can review and adjust this value.` :
+                `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(5)} ملي سيفرت لـ ${doseFor === 'patient' ? 'المريض' : 'الطبيب'}. يمكنك مراجعة هذه القيمة وتعديلها.`
             );
             return true;
         } else {
@@ -412,7 +408,7 @@ const handleSubmit = async () => {
               }}</label>
               <input
                 type="number"
-                step="0.001"
+                step="0.0001"
                 v-model.number="form.patientDose"
                 :placeholder="
                   currentLanguage === 'en'
@@ -427,7 +423,7 @@ const handleSubmit = async () => {
               }}</label>
               <input
                 type="number"
-                step="0.001"
+                step="0.0001"
                 v-model.number="form.doctorDose"
                 :placeholder="
                   currentLanguage === 'en'

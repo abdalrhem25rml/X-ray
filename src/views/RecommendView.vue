@@ -1,4 +1,4 @@
-<script setup>
+<script setup>Recom
 import { ref, watch, computed, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -266,32 +266,81 @@ const getRecommendations = async () => {
   errorMessage.value = ''
   aiResponse.value = null
 
-  // --- Form validation remains the same ---
+  // --- Form validation ---
   if (!form.value.birthDate || !form.value.scanPlace || (showOtherScanPlaceInput.value && !form.value.otherScanPlaceDescription) || !form.value.subScanType || (showOtherInput.value && !form.value.otherScanDescription)) { errorMessage.value = currentLanguage.value === 'en' ? 'Please complete all required fields.' : 'يرجى إكمال جميع الحقول المطلوبة.'; isLoading.value = false; return; }
   if (form.value.isPregnant && !form.value.estimatedDueDate) { errorMessage.value = currentLanguage.value === 'en' ? 'Estimated Due Date is required for pregnant patients.' : 'تاريخ الولادة المتوقع مطلوب للحامل.'; isLoading.value = false; return; }
 
-  // --- Prompt generation remains the same ---
+  // --- Common context variables ---
   const age = new Date().getFullYear() - new Date(form.value.birthDate).getFullYear();
   const weightContext = form.value.weight ? `Weight: ${form.value.weight} kg.` : 'Weight: Not provided.';
-  let pregnancyContext = `Not pregnant.`; if (form.value.isPregnant && form.value.estimatedDueDate) { pregnancyContext = `Pregnant with an estimated due date of ${form.value.estimatedDueDate}. The AI must carefully weigh risks, especially during the first trimester.` }
+  let pregnancyContext = `Not pregnant.`;
+  if (form.value.isPregnant && form.value.estimatedDueDate) { pregnancyContext = `Pregnant with an estimated due date of ${form.value.estimatedDueDate}. The AI must carefully weigh risks, especially during the first trimester.` }
   const finalScanDetail = showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType;
   const selectedPlaceObject = scanPlaces.find((opt) => opt.value === form.value.scanPlace);
-  let scanPlaceContext = ''; if (showOtherScanPlaceInput.value) { scanPlaceContext = form.value.otherScanPlaceDescription } else if (selectedPlaceObject) { scanPlaceContext = currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar }
-  let scanConsiderationText = `a ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}"`; if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) { scanConsiderationText += ` (procedure involves ${form.value.numberOfScans} scans)`; }
-  let prompt = ''; let responseSchema = {};
+  let scanPlaceContext = '';
+  if (showOtherScanPlaceInput.value) { scanPlaceContext = form.value.otherScanPlaceDescription } else if (selectedPlaceObject) { scanPlaceContext = currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar }
+
+  let scanTaskText = '';
+  if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) {
+      scanTaskText = `
+        The scan being considered is a procedure involving ${form.value.numberOfScans} separate X-ray scans of the ${scanPlaceContext} with protocol "${finalScanDetail}".
+        To calculate the dose:
+        1. First, determine the typical effective dose for a SINGLE one of these X-rays.
+        2. Then, multiply that single-scan dose by the number of scans (${form.value.numberOfScans}) to get the TOTAL dose.
+        The final 'patientCalculatedMsv' must be the result of this multiplication.
+      `;
+  } else {
+      scanTaskText = `The scan being considered is a single ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}".`;
+  }
+
+  let prompt = '';
+  let responseSchema = {};
+
   if (userRole.value === 'doctor') {
     if (isDoctorPersonalScan.value) {
-      prompt = `As a medical radiation safety advisor, provide a recommendation for a doctor who is also the patient. ...`;
+      // Prompt for Doctor who is also the patient
+      prompt = `
+As a medical radiation safety advisor, provide a recommendation for a doctor who is also the patient.
+- Scenario Context: The doctor IS THE PATIENT.
+- Doctor's State: My annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
+- Patient Details (My Details): Age: ${age}, Gender: ${form.value.gender}. ${weightContext}. Pregnancy Status: ${pregnancyContext}. My cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
+- Scan Details: ${scanTaskText}
+- My Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
+Tasks:
+1. **Recommendation (recommendationText):** Justify if the scan is appropriate for me.
+2. **Patient Dose (patientCalculatedMsv):** Estimate my total effective dose in mSv from this procedure.
+3. **Occupational Dose (doctorOccupationalMsv):** This MUST be 0 because I am the patient.
+4. **Warning (Warning):** Warn if my new total dose (occupational + patient) exceeds any limits.
+Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
     } else {
-      prompt = `As a medical radiation safety advisor, provide a recommendation for a patient scan...`;
-      if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) { prompt += `This must be the TOTAL dose for all ${form.value.numberOfScans} scans combined.`; }
+      prompt = `
+As a medical radiation safety advisor, provide a recommendation for a patient scan, adhering strictly to the ALARA principle.
+- Scenario Context: A doctor is the PRACTITIONER for another patient.
+- Doctor's State: The doctor's annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
+- Patient Details: Age: ${age}, Gender: ${form.value.gender}. ${weightContext}. Pregnancy Status: ${pregnancyContext}. Patient's cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
+- Scan Details: ${scanTaskText}
+- Doctor's Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
+Tasks:
+1. **Recommendation (recommendationText):** Justify if the scan is appropriate for the patient.
+2. **Patient Dose (patientCalculatedMsv):** Estimate the patient's total effective dose in mSv from this procedure.
+3. **Occupational Dose (doctorOccupationalMsv):** Estimate the doctor's total occupational dose in mSv from performing this procedure. For multiple X-rays, calculate this the same way as the patient dose (single scan * number of scans).
+4. **Warning (Warning):** Warn if the patient's new total dose will exceed the public limit, OR if the doctor's new occupational dose exceeds their limit.
+Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
     }
     responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, doctorOccupationalMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'doctorOccupationalMsv', 'Warning'] };
   } else {
-    prompt = `As a patient advocate, explain a medical scan...`;
+    prompt = `
+As a patient advocate, explain a medical scan.
+- My estimated radiation dose this year: ${form.value.patientCumulativeDose} mSv.
+- My Details: Born on ${form.value.birthDate}, Gender: ${form.value.gender}, ${weightContext}, Pregnancy: ${pregnancyContext}.
+- Scan Details: ${scanTaskText}
+Tasks:
+1. **Information (recommendationText):** Explain the purpose of this scan in simple terms.
+2. **Dose Estimation (patientCalculatedMsv):** Estimate my total dose in mSv from this procedure.
+3. **Warning (Warning):** If my new total dose exceeds 1 mSv, provide a clear warning.
+Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
     responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'Warning'] };
   }
-
 
   try {
       const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', responseSchema } }
@@ -301,28 +350,19 @@ const getRecommendations = async () => {
       if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
       const result = await response.json()
       aiResponse.value = JSON.parse(result.candidates[0].content.parts[0].text)
-
   } catch (error) {
     console.warn('AI recommendation failed. Attempting fallback. Error:', error)
-
-    // --- This is the new fallback logic ---
     const patientFallback = getFallbackDose('patient');
-    let doctorFallback = 0; // Default to 0
-
+    let doctorFallback = 0;
     if (userRole.value === 'doctor' && !isDoctorPersonalScan.value) {
         doctorFallback = getFallbackDose('doctor');
     }
-
     if (patientFallback !== null && doctorFallback !== null) {
         aiResponse.value = {
-            recommendationText: currentLanguage.value === 'en'
-                ? "The AI recommendation could not be generated. The typical dose for this procedure is shown above. Please use your clinical judgment to decide if this scan is appropriate."
-                : "تعذر إنشاء توصية الذكاء الاصطناعي. الجرعة النموذجية لهذا الإجراء معروضة أعلاه. يرجى استخدام حكمك السريري لتقرير ما إذا كان هذا الفحص مناسبًا.",
+            recommendationText: currentLanguage.value === 'en' ? "The AI recommendation could not be generated. The typical dose for this procedure is shown above. Please use your clinical judgment to decide if this scan is appropriate." : "تعذر إنشاء توصية الذكاء الاصطناعي. الجرعة النموذجية لهذا الإجراء معروضة أعلاه. يرجى استخدام حكمك السريري لتقرير ما إذا كان هذا الفحص مناسبًا.",
             patientCalculatedMsv: patientFallback,
             doctorOccupationalMsv: doctorFallback,
-            Warning: currentLanguage.value === 'en'
-                ? "AI service failed. Using predefined typical dose values. Please review carefully as these are general estimates."
-                : "فشلت خدمة الذكاء الاصطناعي. يتم استخدام قيم الجرعات النموذجية المحددة مسبقًا. يرجى المراجعة بعناية لأنها تقديرات عامة."
+            Warning: currentLanguage.value === 'en' ? "AI service failed. Using predefined typical dose values. Please review carefully as these are general estimates." : "فشلت خدمة الذكاء الاصطناعي. يتم استخدام قيم الجرعات النموذجية المحددة مسبقًا. يرجى المراجعة بعناية لأنها تقديرات عامة."
         };
     } else {
         errorMessage.value = currentLanguage.value === 'en' ? `An error occurred and no fallback value is available. Please try again later.` : `حدث خطأ ولا توجد قيمة بديلة متاحة. الرجاء معاودة المحاولة في وقت لاحق.`

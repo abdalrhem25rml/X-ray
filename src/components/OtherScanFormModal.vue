@@ -14,6 +14,24 @@ const authStore = useAuthStore()
 const currentLanguage = inject('currentLanguage')
 
 // --- Data for Dropdowns ---
+const scanSubtypes = {
+  CT: [
+    { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
+    { value: 'Brain with contrast', en: 'Brain with contrast', ar: 'الدماغ بمادة تباين' },
+    { value: 'Angiography CTA', en: 'Angiography CTA', ar: 'تصوير الأوعية CTA' },
+    { value: 'Urography', en: 'Urography', ar: 'تصوير المسالك البولية' },
+    { value: 'Enterography', en: 'Enterography', ar: 'تصوير الأمعاء' },
+    { value: 'Other', en: 'Other...', ar: 'أخرى...' },
+  ],
+  'X-ray': [
+    { value: 'Barium Enema', en: 'Barium Enema', ar: 'حقنة الباريوم الشرجية' },
+    { value: 'IV Urogram (IVP)', en: 'IV Urogram (IVP)', ar: 'أشعة المسالك البولية (IVP)' },
+    { value: 'HSG', en: 'HSG', ar: 'أشعة الرحم (HSG)' },
+    { value: 'VCUG', en: 'VCUG', ar: 'دراسة المثانة بالصبغة (VCUG)' },
+    { value: 'Other', en: 'Other...', ar: 'أخرى...' },
+  ],
+}
+
 const scanPlaces = [
   { value: 'head', en: 'Head', ar: 'الرأس' },
   { value: 'neck', en: 'Neck', ar: 'الرقبة' },
@@ -25,22 +43,6 @@ const scanPlaces = [
   { value: 'lower_extremity', en: 'Lower Extremity', ar: 'الطرف السفلي' },
   { value: 'other', en: 'Other', ar: 'أخرى' },
 ]
-
-const scanSubtypes = {
-  CT: [
-    { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
-    { value: 'Brain with contrast', en: 'Brain with contrast', ar: 'الدماغ بمادة تباين' },
-    { value: 'Other', en: 'Other...', ar: 'أخرى...' },
-  ],
-  'X-ray': [
-    { value: 'Barium Enema', en: 'Barium Enema', ar: 'حقنة الباريوم الشرجية' },
-    { value: 'IV Urogram (IVP)', en: 'IV Urogram (IVP)', ar: 'أشعة المسالك البولية (IVP)' },
-    { value: 'Other', en: 'Other...', ar: 'أخرى...' },
-  ],
-  Background: [
-    { value: 'Annual Natural Background', en: 'Annual Natural Background', ar: 'الخلفية الطبيعية السنوية' },
-  ],
-}
 
 // ✅ FIX: The fallback table now contains typical DOCTOR occupational doses, which are much lower.
 const fallbackDoseEstimates = {
@@ -128,18 +130,25 @@ const estimateDose = async () => {
     const finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
     const finalScanDetailText = showOtherScanDetailInput.value ? form.otherScanDetailDescription : form.scanDetail;
 
-    // ✅ FIX: The prompt now asks for the DOCTOR'S occupational dose.
+    // ✅ FIX: The prompt is now primed with context and has stronger guardrails.
     let prompt = '';
     if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-      prompt = `Estimate the TOTAL occupational dose (in mSv) for a doctor from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
+      // This is the new, more robust prompt for multiple scans.
+      prompt = `
+        A single occupational X-ray of an extremity typically results in a dose of about 0.00005 mSv.
+        Based on this, calculate the TOTAL occupational dose in mSv for a doctor from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".
+        The final value should be the single scan dose multiplied by the number of scans.
+        Doctor's additional context: "${form.doctorAdditionalContext || 'None'}".
+        Respond ONLY with a single numeric value representing the total dose. Do NOT output the number of scans.
+      `;
     } else {
-      prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} source/scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
+      // The prompt for single scans or CTs remains the same.
+      prompt = `Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} source/scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
     }
-    prompt += ` Doctor's additional context (positioning, shielding, etc.): "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
 
     try {
-        // ✅ FIX: Validation rules are now stricter, for lower occupational doses.
-        const validationRules = { min: 0, max: 5 };
+        // ✅ FIX: Validation rules are now much stricter for occupational doses to catch unrealistic values.
+        const validationRules = { min: 0, max: 0.5 };
         const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'text/plain' } };
         const apiKey = import.meta.env.VITE_GEMINI_KEY;
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
@@ -148,7 +157,9 @@ const estimateDose = async () => {
         const result = await response.json();
         const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
         const estimated = parseFloat(aiText.match(/[\d.]+/));
-        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
+        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) {
+            throw new Error(`AI returned an invalid or out-of-range value. Got: ${estimated}`);
+        }
         form.dosage = estimated;
         return true;
     } catch (error) {
@@ -158,8 +169,8 @@ const estimateDose = async () => {
           form.dosage = fallbackDose;
           alert(
             currentLanguage.value === 'en'
-              ? `AI estimation failed. A typical value of ${fallbackDose.toFixed(3)} mSv has been used. You can review and adjust this value.`
-              : `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(3)} ملي سيفرت. يمكنك مراجعة هذه القيمة وتعديلها.`
+              ? `AI estimation failed. A typical value of ${fallbackDose.toFixed(5)} mSv has been used. You can review and adjust this value.`
+              : `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(5)} ملي سيفرت. يمكنك مراجعة هذه القيمة وتعديلها.`
           );
           return true;
         } else {
@@ -272,7 +283,7 @@ const handleSubmit = async () => {
 
           <div class="form-group">
           <label>{{ currentLanguage === 'en' ? 'Occupational Dose (mSv)' : 'الجرعة المهنية (mSv)' }}</label>
-            <input type="number" step="0.001" v-model.number="form.dosage" placeholder="Leave blank for AI estimate" />
+            <input type="number" step="0.00005" v-model.number="form.dosage" placeholder="Leave blank for AI estimate" />
           </div>
 
           <div class="modal-actions">

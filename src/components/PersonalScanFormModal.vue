@@ -184,22 +184,28 @@ const estimateDose = async () => {
     alert('User profile not available. Cannot estimate dose.')
     return false
   }
-  // --- Prompt generation logic remains the same ---
+
   const age = userProfile.birthDate ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear() : 'N/A';
   const weight = userProfile.weight || 70;
   let finalScanDetailText = showOtherInput.value ? form.otherScanDescription : form.subScanType;
   let finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
+
+  // ✅ FIX: The prompt is now primed with a two-step thinking process.
   let prompt = '';
   if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-    prompt = `Estimate the TOTAL effective dose (in mSv) for a patient from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
+    prompt = `
+      Task: Calculate the TOTAL effective dose in mSv for a patient from a procedure involving multiple X-rays.
+      Step 1: First, determine the typical effective dose for a SINGLE X-ray of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".
+      Step 2: Multiply that single-scan dose by the number of scans, which is ${form.numberOfScans}.
+      Patient Context: Age: ${age}, Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}".
+      Respond ONLY with the final numeric value from Step 2. Do not show your work or include units.
+    `;
   } else {
-    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".`;
+    prompt = `Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`;
   }
-  prompt += ` Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". Respond ONLY with a single number. Do not add any other text or units.`;
 
   try {
-    // --- API call logic remains the same ---
-    const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.001, max: 10 };
+    const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.0001, max: 10 };
     const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'text/plain' } };
     const apiKey = import.meta.env.VITE_GEMINI_KEY;
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
@@ -208,16 +214,15 @@ const estimateDose = async () => {
     const result = await response.json();
     const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const estimated = parseFloat(aiText.match(/[\d.]+/));
-    if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) throw new Error('AI returned an invalid or out-of-range value.');
+    if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) {
+        throw new Error(`AI returned an invalid or out-of-range value. Got: ${estimated}`);
+    }
     form.patientDose = estimated;
     return true;
 
   } catch (error) {
     console.warn(`AI dose estimation failed. Attempting fallback. Error:`, error);
-
-    // --- This is the new fallback logic ---
     const fallbackDose = getFallbackDose();
-
     if (fallbackDose !== null) {
       form.patientDose = fallbackDose;
       alert(
@@ -225,14 +230,14 @@ const estimateDose = async () => {
           ? `AI estimation failed. A typical value of ${fallbackDose.toFixed(3)} mSv has been used. You can review and adjust this value.`
           : `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(3)} ملي سيفرت. يمكنك مراجعة هذه القيمة وتعديلها.`
       );
-      return true; // Success! We used a fallback.
+      return true;
     } else {
       alert(
         currentLanguage.value === 'en'
           ? `AI estimation failed and no fallback value is available. Please enter the dose manually.`
           : `فشل تقدير الذكاء الاصطناعي ولا توجد قيمة بديلة. يرجى إدخال الجرعة يدويًا.`
       );
-      return false; // Total failure.
+      return false;
     }
   }
 }
@@ -386,7 +391,7 @@ const handleSubmit = async () => {
             <label>{{ currentLanguage === 'en' ? 'Your Dose (mSv)' : 'جرعتك (mSv)' }}</label>
             <input
               type="number"
-              step="0.001"
+              step="0.0001"
               v-model.number="form.patientDose"
               :placeholder="
                 currentLanguage === 'en'
