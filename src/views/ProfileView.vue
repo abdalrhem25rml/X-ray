@@ -224,7 +224,7 @@ onMounted(() => {
     <!-- ✅ NEW: Other Scans History Section -->
     <div class="history-section card">
       <div class="card-header">
-        <h2>{{ currentLanguage === 'en' ? 'Other Scans / Sources' : 'الفحوصات / المصادر الأخرى' }}</h2>
+        <h2>{{ currentLanguage === 'en' ? 'Occupational Exposure' : 'التعرض المهني' }}</h2>
         <button @click="openAddOtherScanModal" class="action-button">{{ currentLanguage === 'en' ? 'Add Other Source' : 'إضافة مصدر آخر' }}</button>
       </div>
       <OtherScansTable :scans="otherScans" :is-loading="databaseStore.loading" @edit="openEditOtherScanModal" @delete="openDeleteOtherScanConfirmation" />

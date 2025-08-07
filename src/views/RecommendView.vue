@@ -92,6 +92,9 @@ const userRole = computed(() => authStore.role)
 const isDoctorPersonalScan = computed(
   () => userRole.value === 'doctor' && recommendationMode.value === 'personal',
 )
+const areScanDetailsRequired = computed(
+  () => userRole.value === 'doctor' && recommendationMode.value === 'general',
+)
 const currentScanSubtypes = computed(() => scanSubtypes[form.value.scanType] || [])
 const showOtherInput = computed(() => form.value.subScanType === 'Other')
 const showOtherScanPlaceInput = computed(() => form.value.scanPlace === 'other')
@@ -108,8 +111,8 @@ const doctorDoseLabel = computed(() =>
   currentLanguage.value === 'en' ? 'Occupational Dose' : 'الجرعة المهنية',
 )
 const showDoctorDoseBox = computed(() => {
-  if (!aiResponse.value || aiResponse.value.doctorOccupationalMsv == null) return false
-  return !(userRole.value === 'doctor' && recommendationMode.value === 'personal')
+  if (!aiResponse.value || aiResponse.value.doctorOccupationalMsv === null) return false
+  return areScanDetailsRequired.value;
 })
 
 // --- Helpers ---
@@ -226,50 +229,69 @@ const getRecommendations = async () => {
   aiResponse.value = null;
 
   // --- Form validation ---
-  if (!form.value.birthDate || !form.value.scanPlace || !form.value.subScanType) {
-    errorMessage.value = currentLanguage.value === 'en' ? 'Please complete all required fields.' : 'يرجى إكمال جميع الحقول المطلوبة.';
+  if (!form.value.birthDate) {
+    errorMessage.value = currentLanguage.value === 'en' ? 'Date of Birth is a required field.' : 'تاريخ الميلاد حقل مطلوب.';
+    isLoading.value = false;
+    return;
+  }
+  const hasScanDetails = form.value.scanPlace && form.value.scanType && form.value.subScanType;
+  if (areScanDetailsRequired.value && !hasScanDetails) {
+    errorMessage.value = currentLanguage.value === 'en' ? 'Please complete all required scan details.' : 'يرجى إكمال جميع تفاصيل الفحص المطلوبة.';
     isLoading.value = false;
     return;
   }
 
-  // 1. Calculate doses LOCALLY using the fixed table.
-  const patientDose = getFallbackDose('patient');
-  let doctorDose = 0;
-  if (userRole.value === 'doctor' && !isDoctorPersonalScan.value) {
-    doctorDose = getFallbackDose('doctor');
-  }
-
-  if (patientDose === null || doctorDose === null) {
+  // --- Dose Calculation (only if details are provided) ---
+  let patientDose = null;
+  let doctorDose = null;
+  if (hasScanDetails) {
+    patientDose = getFallbackDose('patient');
+    if (areScanDetailsRequired.value) {
+      doctorDose = getFallbackDose('doctor');
+    }
+    if (patientDose === null) {
       errorMessage.value = currentLanguage.value === 'en' ? 'Could not determine a dose for the selected scan.' : 'تعذر تحديد جرعة للفحص المختار.';
       isLoading.value = false;
       return;
+    }
   }
 
-  // 2. Construct the AI prompt with the calculated doses and expert persona.
+  // --- Persona Selection ---
   const lang = currentLanguage.value;
-  const persona = "You are a highly experienced, board-certified radiologist and medical physicist with over 20 years of clinical expertise. You specialize in radiation protection and strictly follow the ALARA (As Low As Reasonably Achievable) principle. Your goal is to provide clear, safety-conscious advice for healthcare providers and patients.";
-  const finalScanDetail = showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType;
-  const finalScanPlace = showOtherScanPlaceInput.value ? form.value.otherScanPlaceDescription : form.value.scanPlace;
+  const patientPersona = `You are a highly specialized and board-certified medical radiation advisor. You are tasked with evaluating a patient's medical imaging exposure or providing general advice based on symptoms. Follow these guidelines: 1. *Risk Evaluation*: If scan details are given, estimate if the dose is low, moderate, or high. 2. *High Exposure Warning*: If dose is high, warn the patient. 3. *Alternative Recommendation*: If applicable, suggest safer alternatives like ultrasound or MRI. 4. *General Advice*: If no scan details are given, provide safe, general advice based on symptoms and history, and strongly recommend seeing a doctor. 5. *Doctor Referral*: Always emphasize that the final decision should be with their physician. 6. *Tone*: Be concise, non-alarming, professional, and empathetic.`;
+  const doctorPersona = `You are a highly experienced, board-certified radiologist and medical physicist. Your goal is to provide clear, safety-conscious advice for healthcare providers based on the provided clinical scenario. The recommendation should focus on justification and potential alternatives (like MRI or Ultrasound) if applicable. The warning should highlight any significant risks (e.g., pregnancy, high cumulative doses for patient or doctor). Use professional medical language.`;
+
+  let selectedPersona;
+  if (userRole.value === 'patient' || isDoctorPersonalScan.value) {
+    selectedPersona = patientPersona;
+  } else {
+    selectedPersona = doctorPersona;
+  }
+
+  // --- Dynamic Prompt Construction ---
+  const finalScanDetail = hasScanDetails ? (showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType) : 'N/A';
+  const finalScanPlace = hasScanDetails ? (showOtherScanPlaceInput.value ? form.value.otherScanPlaceDescription : form.value.scanPlace) : 'N/A';
 
   const prompt = `
-    ${persona}
-
+    ${selectedPersona}
     Task: Provide a concise recommendation and a separate warning based on the following clinical scenario. Respond in ${lang === 'en' ? 'English' : 'Arabic'}.
+    ${!hasScanDetails ? "Note: The user has NOT specified a scan and is seeking general advice based on their symptoms and history." : ""}
 
-    Scenario Details:
+    Clinical Scenario:
     - Patient Age: ${new Date().getFullYear() - new Date(form.value.birthDate).getFullYear()}
     - Patient Gender: ${form.value.gender}
     - Patient is Pregnant: ${form.value.isPregnant ? `Yes, due around ${form.value.estimatedDueDate}` : 'No'}
-    - Patient Cumulative Dose (This Year): ${form.value.patientCumulativeDose.toFixed(5)} mSv
-    - Doctor Cumulative Dose (This Year): ${currentTotalMsv.value.toFixed(5)} mSv
-    - Proposed Scan: ${form.value.scanType} of the ${finalScanPlace}, protocol: "${finalScanDetail}"
+    - Patient Cumulative Dose (This Year): ${form.value.patientCumulativeDose.toFixed(3)} mSv
+    - Doctor Cumulative Dose (This Year): ${currentTotalMsv.value.toFixed(3)} mSv
     - Reason / Symptoms: ${form.value.currentSymptoms || 'Not provided'}
-    - ESTIMATED Patient Dose (from this scan): ${patientDose.toFixed(5)} mSv
-    - ESTIMATED Doctor Occupational Dose (from this scan): ${doctorDose.toFixed(5)} mSv
+    - Doctor's Additional Context: ${form.value.doctorAdditionalContext || 'None'}
+    ${hasScanDetails ? `- Proposed Scan: ${form.value.scanType} of the ${finalScanPlace}, protocol: "${finalScanDetail}"` : ""}
+    ${hasScanDetails ? `- ESTIMATED Patient Dose (from this scan): ${patientDose.toFixed(3)} mSv` : ""}
+    ${hasScanDetails && doctorDose !== null ? `- ESTIMATED Doctor Occupational Dose (from this scan): ${doctorDose.toFixed(5)} mSv` : ""}
 
-    Instructions:
-    1.  **recommendationText:** Write a brief, professional justification or point of consideration for this scan, keeping the ALARA principle in mind.
-    2.  **Warning:** Based on all the data, write a clear, actionable warning if any high-risk factors are present (e.g., pregnancy, high cumulative dose, doctor exceeding limit). If no high risks are present, state that clearly.
+    Your Instructions:
+    1.  **recommendationText:** Write a brief, professional justification or point of consideration.
+    2.  **Warning:** Write a clear, actionable warning if any high-risk factors are present. If none, state that clearly.
   `;
 
   const responseSchema = {
@@ -281,35 +303,33 @@ const getRecommendations = async () => {
       required: ['recommendationText', 'Warning'],
   };
 
-  // 3. Call the AI and handle the response.
+  // --- API Call & Response Handling ---
   try {
       const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', responseSchema } }
-      const apiKey = import.meta.env.VITE_GEMINI_KEY
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
-      const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
+      const apiKey = import.meta.env.VITE_GEMINI_KEY;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+      const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
 
-      const result = await response.json()
-      const aiContent = JSON.parse(result.candidates[0].content.parts[0].text)
+      const result = await response.json();
+      const aiContent = JSON.parse(result.candidates[0].content.parts[0].text);
 
-      // Combine local doses with AI advice
       aiResponse.value = {
-          ...aiContent, // Contains recommendationText and Warning from AI
+          ...aiContent,
           patientCalculatedMsv: patientDose,
           doctorOccupationalMsv: isDoctorPersonalScan.value ? 0 : doctorDose,
       };
 
   } catch (error) {
     console.error("AI advice generation failed. Using fallback.", error);
-    // Fallback if AI fails
     aiResponse.value = {
-      recommendationText: lang === 'en' ? 'AI service failed. Please use clinical judgment based on the estimated doses.' : 'فشلت خدمة الذكاء الاصطناعي. يرجى استخدام الحكم السريري بناءً على الجرعات المقدرة.',
-      Warning: lang === 'en' ? 'Review dose values carefully.' : 'راجع قيم الجرعات بعناية.',
+      recommendationText: lang === 'en' ? 'AI service failed. Please use clinical judgment.' : 'فشلت خدمة الذكاء الاصطناعي. يرجى استخدام الحكم السريري.',
+      Warning: lang === 'en' ? 'Review inputs carefully.' : 'راجع المدخلات بعناية.',
       patientCalculatedMsv: patientDose,
       doctorOccupationalMsv: isDoctorPersonalScan.value ? 0 : doctorDose,
     };
   } finally {
-      isLoading.value = false
+      isLoading.value = false;
   }
 }
 
@@ -317,6 +337,11 @@ const saveScanFromRecommendation = async () => {
     if (!aiResponse.value || !form.value.patientId) {
         alert('No recommendation data to save or patient ID is missing.')
         return
+    }
+    // Do not allow saving if no scan details were provided
+    if (aiResponse.value.patientCalculatedMsv === null) {
+        alert(currentLanguage.value === 'en' ? 'Cannot save a record without specific scan details.' : 'لا يمكن حفظ سجل بدون تفاصيل فحص محددة.');
+        return;
     }
     isSaving.value = true
     try {
@@ -359,13 +384,13 @@ const saveScanFromRecommendation = async () => {
     <main class="recommend-main-content">
       <section class="recommend-card">
         <h2>
-          {{ currentLanguage === 'en' ? 'Medical Scan Recommendation' : 'توصية الفحص الطبي' }}
+          {{ currentLanguage === 'en' ? 'Medical Scan Advisor' : 'مستشار الفحص الطبي' }}
         </h2>
         <p>
           {{
             currentLanguage === 'en'
-              ? 'Fill in the patient and scan details to estimate radiation doses and review important safety warnings.'
-              : 'املأ تفاصيل المريض والفحص لتقدير جرعات الإشعاع ومراجعة تحذيرات السلامة الهامة.'
+              ? 'Fill in the details to get AI-powered advice. Scan details are optional for patients.'
+              : 'املأ التفاصيل للحصول على نصيحة مدعومة بالذكاء الاصطناعي. تفاصيل الفحص اختيارية للمرضى.'
           }}
         </p>
 
@@ -499,15 +524,15 @@ const saveScanFromRecommendation = async () => {
           </div>
 
           <h3 class="section-title">
-            {{ currentLanguage === 'en' ? 'Scan to Consider' : 'الفحص المقترح' }}
+            {{ currentLanguage === 'en' ? 'Scan to Consider (Optional for Patients)' : 'الفحص المقترح (اختياري للمرضى)' }}
           </h3>
 
           <div class="form-group">
             <label>
               {{ currentLanguage === 'en' ? 'Place of Scan' : 'مكان الفحص' }}
-              <span class="required-indicator">*</span>
+              <span v-if="areScanDetailsRequired" class="required-indicator">*</span>
             </label>
-            <select v-model="form.scanPlace" required>
+            <select v-model="form.scanPlace" :required="areScanDetailsRequired">
               <option disabled value="">
                 {{ currentLanguage === 'en' ? 'Select...' : 'اختر...' }}
               </option>
@@ -521,18 +546,18 @@ const saveScanFromRecommendation = async () => {
               {{
                 currentLanguage === 'en' ? 'Please specify other place' : 'يرجى تحديد المكان الآخر'
               }}
-              <span class="required-indicator">*</span>
+              <span v-if="areScanDetailsRequired" class="required-indicator">*</span>
             </label>
-            <input type="text" v-model="form.otherScanPlaceDescription" required />
+            <input type="text" v-model="form.otherScanPlaceDescription" :required="areScanDetailsRequired" />
           </div>
 
           <div class="form-row">
             <div class="form-group">
               <label>
                 {{ currentLanguage === 'en' ? 'Scan Category' : 'فئة الفحص' }}
-                <span class="required-indicator">*</span>
+                <span v-if="areScanDetailsRequired" class="required-indicator">*</span>
               </label>
-              <select v-model="form.scanType" required>
+              <select v-model="form.scanType" :required="areScanDetailsRequired">
                 <option value="CT">
                   {{ currentLanguage === 'en' ? 'CT Scan' : 'الأشعة المقطعية' }}
                 </option>
@@ -544,9 +569,9 @@ const saveScanFromRecommendation = async () => {
             <div class="form-group">
               <label>
                 {{ currentLanguage === 'en' ? 'Scan Protocol' : 'بروتوكول الفحص' }}
-                <span class="required-indicator">*</span>
+                <span v-if="areScanDetailsRequired" class="required-indicator">*</span>
               </label>
-              <select v-model="form.subScanType" required>
+              <select v-model="form.subScanType" :required="areScanDetailsRequired">
                 <option disabled value="">
                   {{ currentLanguage === 'en' ? 'Select...' : 'اختر...' }}
                 </option>
@@ -568,15 +593,12 @@ const saveScanFromRecommendation = async () => {
                   ? 'Please specify scan protocol'
                   : 'يرجى تحديد بروتوكول الفحص'
               }}
-              <span class="required-indicator">*</span>
+              <span v-if="areScanDetailsRequired" class="required-indicator">*</span>
             </label>
             <input
               type="text"
               v-model="form.otherScanDescription"
-              :placeholder="
-                currentLanguage === 'en' ? 'e.g., Chest X-ray' : 'مثال: أشعة سينية للصدر'
-              "
-              required
+              :required="areScanDetailsRequired"
             />
           </div>
 
@@ -584,11 +606,11 @@ const saveScanFromRecommendation = async () => {
             {{
               isLoading
                 ? currentLanguage === 'en'
-                  ? 'Getting Recommendations...'
-                  : 'جاري الحصول على التوصيات...'
+                  ? 'Getting Advice...'
+                  : 'جاري الحصول على النصيحة...'
                 : currentLanguage === 'en'
-                  ? 'Get Recommendation'
-                  : 'الحصول على توصية'
+                  ? 'Get Advice'
+                  : 'الحصول على نصيحة'
             }}
           </button>
         </form>
@@ -597,53 +619,37 @@ const saveScanFromRecommendation = async () => {
 
         <div v-if="aiResponse" class="prediction-result-wrapper">
           <div v-if="aiResponse.Warning" class="message warning-message">
-            <h4>{{ currentLanguage === 'en' ? 'Important Warning' : 'تحذير هام' }}</h4>
-            <p>{{ aiResponse.Warning }}</p>
+            <h4>{{ currentLanguage === 'en' ? 'Important Note' : 'ملاحظة هامة' }}</h4>
+            <p style="white-space: pre-wrap;">{{ aiResponse.Warning }}</p>
           </div>
 
           <div class="prediction-result">
-            <h3>
-              {{
-                currentLanguage === 'en'
-                  ? 'Typical Value'
-                  : 'القيمة القياسية'
-              }}
-            </h3>
-            <div class="msv-details-container">
-              <div v-if="aiResponse.patientCalculatedMsv !== null" class="msv-details">
+            <div v-if="aiResponse.patientCalculatedMsv !== null" class="msv-details-container">
+              <div class="msv-details">
                 <h4>{{ patientDoseLabel }}</h4>
-                <p>
-                  <strong>{{ aiResponse.patientCalculatedMsv }} mSv</strong>
-                </p>
+                <p><strong>{{ aiResponse.patientCalculatedMsv }} mSv</strong></p>
               </div>
               <div v-if="showDoctorDoseBox" class="msv-details doctor-dose">
                 <h4>{{ doctorDoseLabel }}</h4>
-                <p>
-                  <strong>{{ aiResponse.doctorOccupationalMsv }} mSv</strong>
-                </p>
+                <p><strong>{{ aiResponse.doctorOccupationalMsv.toFixed(5) }} mSv</strong></p>
               </div>
             </div>
             <div class="result-text">
-              <h4>{{ currentLanguage === 'en' ? 'Recommendation' : 'التوصية' }}</h4>
-              <p>{{ aiResponse.recommendationText }}</p>
+              <h4>{{ currentLanguage === 'en' ? 'AI-Powered Advice' : 'نصيحة مدعومة بالذكاء الاصطناعي' }}</h4>
+              <p style="white-space: pre-wrap;">{{ aiResponse.recommendationText }}</p>
             </div>
           </div>
 
-          <!-- ✅ NEW FEATURE: Save Recommendation as a Scan Button -->
-          <div class="save-recommendation-section">
-            <button
-              @click="saveScanFromRecommendation"
-              :disabled="isSaving"
-              class="action-button save-button"
-            >
+          <div v-if="aiResponse.patientCalculatedMsv !== null" class="save-recommendation-section">
+            <button @click="saveScanFromRecommendation" :disabled="isSaving" class="action-button save-button">
               {{
                 isSaving
                   ? (currentLanguage === 'en' ? 'Saving...' : '...جاري الحفظ')
-                  : (currentLanguage === 'en' ? 'Save Recommendation as Scan' : 'حفظ التوصية كفحص')
+                  : (currentLanguage === 'en' ? 'Save as Scan Record' : 'حفظ كسجل فحص')
               }}
             </button>
             <p class="save-note">
-              {{ currentLanguage === 'en' ? 'This will create a new scan record with today\'s date using the estimated doses.' : 'سيؤدي هذا إلى إنشاء سجل فحص جديد بتاريخ اليوم باستخدام الجرعات المقدرة.'}}
+              {{ currentLanguage === 'en' ? 'This will create a new scan record with the estimated doses.' : 'سيؤدي هذا إلى إنشاء سجل فحص جديد بالجرعات المقدرة.'}}
             </p>
           </div>
 
