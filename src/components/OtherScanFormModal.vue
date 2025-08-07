@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
 import { Timestamp } from 'firebase/firestore'
-import { useAuthStore } from '@/stores/auth'
+// Removed unused useAuthStore import
 
 const props = defineProps({
   show: Boolean,
@@ -10,10 +10,9 @@ const props = defineProps({
 })
 const emit = defineEmits(['close', 'save'])
 
-const authStore = useAuthStore()
 const currentLanguage = inject('currentLanguage')
 
-// --- Data for Dropdowns ---
+// --- Data for Dropdowns and Dose Calculation ---
 const scanSubtypes = {
   CT: [
     { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
@@ -44,7 +43,6 @@ const scanPlaces = [
   { value: 'other', en: 'Other', ar: 'أخرى' },
 ]
 
-// ✅ FIX: The fallback table now contains typical DOCTOR occupational doses, which are much lower.
 const fallbackDoseEstimates = {
   doctor: {
     'CT': { 'default': 0.00001 },
@@ -69,7 +67,6 @@ const form = reactive({
   numberOfScans: 1,
   date: new Date().toISOString().split('T')[0],
   dosage: null,
-  // ✅ FIX: Added context field for more accurate estimation
   doctorAdditionalContext: '',
 })
 
@@ -103,10 +100,10 @@ watch(() => form.scanType, () => {
     form.otherScanDetailDescription = '';
 });
 
+// --- Dose Calculation Logic ---
 const getFallbackDose = () => {
   try {
     const finalScanDetail = form.scanDetail === 'Other' ? 'default' : form.scanDetail;
-    // ✅ FIX: Using the 'doctor' dose table.
     const doseTable = fallbackDoseEstimates.doctor;
     const scanTypeTable = doseTable[form.scanType];
     if (!scanTypeTable) return null;
@@ -122,112 +119,36 @@ const getFallbackDose = () => {
   }
 };
 
-const estimateDose = async () => {
-    if (!authStore.userProfile) {
-        alert('User profile is not available. Cannot estimate dose.');
-        return false;
-    }
-    const finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
-    const finalScanDetailText = showOtherScanDetailInput.value ? form.otherScanDetailDescription : form.scanDetail;
-
-    // ✅ FIX: The prompt is now primed with context and has stronger guardrails.
-    let prompt = '';
-    if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-      // This is the new, more robust prompt for multiple scans.
-      prompt = `
-You are a highly experienced and board-certified radiologist and medical physicist with over 20 years of clinical expertise in diagnostic imaging, radiation protection, and occupational exposure assessment. You specialize in estimating radiation doses for both patients and healthcare workers in radiological procedures, including X-rays, CT scans, nuclear medicine, and interventional imaging.
-
-You are deeply familiar with international radiation safety standards, such as those from the ICRP (International Commission on Radiological Protection) and the IAEA (International Atomic Energy Agency), and you strictly follow the ALARA principle (As Low As Reasonably Achievable).
-
-When asked to estimate a radiation dose:
-- Provide a clear, realistic value (in mSv) based on the given procedure and context.
-- Take into account scan type, scan region, number of images, shielding, doctor position, and time of entry.
-- Provide conservative and safety-aware estimates suitable for professional use.
-- Never guess wildly or return values outside medically accepted ranges.
-- Focus only on the number (unless explicitly asked for context or explanation).
-
-Your goal is to help healthcare providers stay within occupational dose limits, optimize patient safety, and make informed decisions based on accurate dosimetry principles.
-        A single occupational X-ray of an extremity typically results in a dose of about 0.00005 mSv.
-        Based on this, calculate the TOTAL occupational dose in mSv for a doctor from a procedure involving ${form.numberOfScans} separate X-ray scans of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}".
-        The final value should be the single scan dose multiplied by the number of scans.
-        Doctor's additional context: "${form.doctorAdditionalContext || 'None'}".
-        Respond ONLY with a single numeric value representing the total dose. Do NOT output the number of scans.
-      `;
-    } else {
-      // The prompt for single scans or CTs remains the same.
-      prompt = `You are a highly experienced and board-certified radiologist and medical physicist with over 20 years of clinical expertise in diagnostic imaging, radiation protection, and occupational exposure assessment. You specialize in estimating radiation doses for both patients and healthcare workers in radiological procedures, including X-rays, CT scans, nuclear medicine, and interventional imaging.
-
-You are deeply familiar with international radiation safety standards, such as those from the ICRP (International Commission on Radiological Protection) and the IAEA (International Atomic Energy Agency), and you strictly follow the ALARA principle (As Low As Reasonably Achievable).
-
-When asked to estimate a radiation dose:
-- Provide a clear, realistic value (in mSv) based on the given procedure and context.
-- Take into account scan type, scan region, number of images, shielding, doctor position, and time of entry.
-- Provide conservative and safety-aware estimates suitable for professional use.
-- Never guess wildly or return values outside medically accepted ranges.
-- Focus only on the number (unless explicitly asked for context or explanation).
-
-Your goal is to help healthcare providers stay within occupational dose limits, optimize patient safety, and make informed decisions based on accurate dosimetry principles.
-Estimate the typical occupational dose (in mSv) for a doctor during a single patient's ${form.scanType} source/scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Doctor's additional context: "${form.doctorAdditionalContext || 'None'}". Respond ONLY with a single number.`;
-    }
-
-    try {
-        // ✅ FIX: Validation rules are now much stricter for occupational doses to catch unrealistic values.
-        const validationRules = { min: 0, max: 0.5 };
-        const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'text/plain' } };
-        const apiKey = import.meta.env.VITE_GEMINI_KEY;
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-        const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-        if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-        const result = await response.json();
-        const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const estimated = parseFloat(aiText.match(/[\d.]+/));
-        if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) {
-            throw new Error(`AI returned an invalid or out-of-range value. Got: ${estimated}`);
-        }
-        form.dosage = estimated;
-        return true;
-    } catch (error) {
-        console.warn(`AI dose estimation failed. Attempting fallback. Error:`, error);
-        const fallbackDose = getFallbackDose();
-        if (fallbackDose !== null) {
-          form.dosage = fallbackDose;
-          alert(
-            currentLanguage.value === 'en'
-              ? `AI estimation failed. A typical value of ${fallbackDose.toFixed(5)} mSv has been used. You can review and adjust this value.`
-              : `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(5)} ملي سيفرت. يمكنك مراجعة هذه القيمة وتعديلها.`
-          );
-          return true;
-        } else {
-          alert(
-            currentLanguage.value === 'en'
-              ? `AI estimation failed and no fallback value is available. Please enter the dose manually.`
-              : `فشل تقدير الذكاء الاصطناعي ولا توجد قيمة بديلة. يرجى إدخال الجرعة يدويًا.`
-          );
-          return false;
-        }
-    }
-};
-
-const handleSubmit = async () => {
+// --- Form Submission ---
+const handleSubmit = () => {
+  // Validation
   if (!form.scanPlace || !form.scanType || !form.date) {
     alert('Please fill all required fields.')
     return
   }
 
-  if (form.dosage === null) {
-      const estimationSuccess = await estimateDose();
-      if (!estimationSuccess) {
-          return;
-      }
+  // Populate dose using fixed values if it's empty
+  if (form.dosage === null || form.dosage === '') {
+      form.dosage = getFallbackDose();
   }
 
+  // Check if a dose value could be found
+  if (form.dosage === null) {
+      alert(currentLanguage.value === 'en'
+          ? 'Could not find a typical dose value for the selected scan. Please enter the dose manually.'
+          : 'تعذر العثور على قيمة جرعة نموذجية للفحص المحدد. يرجى إدخال الجرعة يدويًا.');
+      return;
+  }
+
+  // Date Parsing
   const parts = form.date.split('-');
-  const safeDate = new Date(Date.UTC(parts[0], parseInt(parts[1], 10) - 1, parts[2]));
+  const safeDate = new Date(Date.UTC(parts[0], parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)));
   if (isNaN(safeDate.getTime())) {
     alert('Invalid date format. Please use YYYY-MM-DD.');
     return;
   }
 
+  // Emit the final data object
   const dataToEmit = {
     id: form.id,
     scanPlace: showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace,
@@ -307,7 +228,13 @@ const handleSubmit = async () => {
 
           <div class="form-group">
           <label>{{ currentLanguage === 'en' ? 'Occupational Dose (mSv)' : 'الجرعة المهنية (mSv)' }}</label>
-            <input type="number" step="0.00005" v-model.number="form.dosage" placeholder="Leave blank for AI estimate" />
+            <input type="number" step="0.00005" v-model.number="form.dosage"
+                  :placeholder="
+                  currentLanguage === 'en'
+                    ? 'Leave blank for typical value'
+                    : 'اتركه فارغًا لتقدير للقيمة القياسسية'
+                "
+ />
           </div>
 
           <div class="modal-actions">

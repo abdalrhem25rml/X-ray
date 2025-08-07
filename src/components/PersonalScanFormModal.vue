@@ -1,7 +1,7 @@
 <script setup>
 import { reactive, watch, inject, computed } from 'vue'
-import { useAuthStore } from '@/stores/auth'
 import { Timestamp } from 'firebase/firestore'
+// Removed unused useAuthStore import
 
 const props = defineProps({
   show: Boolean,
@@ -10,10 +10,9 @@ const props = defineProps({
 })
 const emit = defineEmits(['close', 'save'])
 
-const authStore = useAuthStore()
 const currentLanguage = inject('currentLanguage')
 
-// --- Data for Dropdowns ---
+// --- Data for Dropdowns and Dose Calculation ---
 const scanSubtypes = {
   CT: [
     { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
@@ -62,15 +61,9 @@ const fallbackDoseEstimates = {
       'default': 0.5,
     }
   },
-  doctor: {
-    'CT': { 'default': 0.00001  },
-    'X-ray': {
-      'Barium Enema': 0.0001,
-      'IV Urogram (IVP)': 0.00005,
-      'HSG': 0.0002,
-      'VCUG': 0.00015,
-      'default': 0.00005
-    }
+  doctor: { // This key can be kept for consistency or removed if not used elsewhere
+    'CT': { 'default': 0.00001 },
+    'X-ray': { 'Barium Enema': 0.0001, 'IV Urogram (IVP)': 0.00005, 'HSG': 0.0002, 'VCUG': 0.00015, 'default': 0.00005 }
   }
 };
 
@@ -100,19 +93,10 @@ watch(
   (isShown) => {
     if (isShown) {
       Object.assign(form, {
-        id: null,
-        scanType: 'X-ray',
-        subScanType: '',
-        otherScanDescription: '',
-        scanPlace: '',
-        otherScanPlaceDescription: '',
-        numberOfScans: 1,
-        scanDate: new Date().toISOString().split('T')[0],
-        patientDose: null,
-        reason: '',
-        notes: '',
+        id: null, scanType: 'X-ray', subScanType: '', otherScanDescription: '',
+        scanPlace: '', otherScanPlaceDescription: '', numberOfScans: 1,
+        scanDate: new Date().toISOString().split('T')[0], patientDose: null, reason: '', notes: '',
       })
-
       if (props.scan) {
         form.id = props.scan.id
         form.scanType = props.scan.scanType
@@ -121,55 +105,36 @@ watch(
         form.reason = props.scan.reason
         form.notes = props.scan.notes
         form.numberOfScans = props.scan.numberOfScans || 1
-
         const savedSubtype = props.scan.scanDetail
-        const isStandardSubtype = currentScanSubtypes.value.some(
-          (opt) => opt.value === savedSubtype,
-        )
-        if (isStandardSubtype) {
-          form.subScanType = savedSubtype
-        } else if (savedSubtype) {
-          form.subScanType = 'Other'
-          form.otherScanDescription = savedSubtype
-        }
-
+        const isStandardSubtype = currentScanSubtypes.value.some((opt) => opt.value === savedSubtype)
+        if (isStandardSubtype) { form.subScanType = savedSubtype }
+        else if (savedSubtype) { form.subScanType = 'Other'; form.otherScanDescription = savedSubtype }
         const savedPlace = props.scan.scanPlace
         const isStandardPlace = scanPlaces.some((opt) => opt.value === savedPlace)
-        if (isStandardPlace) {
-          form.scanPlace = savedPlace
-        } else if (savedPlace) {
-          form.scanPlace = 'other'
-          form.otherScanPlaceDescription = savedPlace
-        }
+        if (isStandardPlace) { form.scanPlace = savedPlace }
+        else if (savedPlace) { form.scanPlace = 'other'; form.otherScanPlaceDescription = savedPlace }
       }
     }
   },
 )
 
-watch(
-  () => form.scanType,
-  () => {
+watch(() => form.scanType, () => {
     form.subScanType = ''
     form.otherScanDescription = ''
-  },
-)
+});
 
+// --- Dose Calculation Logic ---
 const getFallbackDose = () => {
   try {
     const finalScanDetail = form.subScanType === 'Other' ? 'default' : form.subScanType;
     const doseTable = fallbackDoseEstimates.patient;
     const scanTypeTable = doseTable[form.scanType];
-
     if (!scanTypeTable) return null;
-
     let baseDose = scanTypeTable[finalScanDetail] ?? scanTypeTable['default'];
-
     if (baseDose === undefined) return null;
-
     if (form.scanType === 'X-ray') {
       return baseDose * form.numberOfScans;
     }
-
     return baseDose;
   } catch (e) {
     console.error("Error retrieving fallback dose:", e);
@@ -177,122 +142,32 @@ const getFallbackDose = () => {
   }
 };
 
-// ✅ 3. FALLBACK MECHANISM: The estimateDose function now uses the fallback on failure.
-const estimateDose = async () => {
-  const userProfile = authStore.userProfile
-  if (!userProfile) {
-    alert('User profile not available. Cannot estimate dose.')
-    return false
-  }
-
-  const age = userProfile.birthDate ? new Date().getFullYear() - userProfile.birthDate.toDate().getFullYear() : 'N/A';
-  const weight = userProfile.weight || 70;
-  let finalScanDetailText = showOtherInput.value ? form.otherScanDescription : form.subScanType;
-  let finalScanPlaceText = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
-
-  // ✅ FIX: Prompts now explicitly instruct the AI to return a non-zero value.
-  let prompt = '';
-  if (form.scanType === 'X-ray' && form.numberOfScans > 1) {
-    prompt = `You are a highly experienced and board-certified radiologist and medical physicist with over 20 years of clinical expertise in diagnostic imaging, radiation protection, and occupational exposure assessment. You specialize in estimating radiation doses for both patients and healthcare workers in radiological procedures, including X-rays, CT scans, nuclear medicine, and interventional imaging.
-
-You are deeply familiar with international radiation safety standards, such as those from the ICRP (International Commission on Radiological Protection) and the IAEA (International Atomic Energy Agency), and you strictly follow the ALARA principle (As Low As Reasonably Achievable).
-
-When asked to estimate a radiation dose:
-- Provide a clear, realistic value (in mSv) based on the given procedure and context.
-- Take into account scan type, scan region, number of images, shielding, doctor position, and time of entry.
-- Provide conservative and safety-aware estimates suitable for professional use.
-- Never guess wildly or return values outside medically accepted ranges.
-- Focus only on the number (unless explicitly asked for context or explanation).
-
-Your goal is to help healthcare providers stay within occupational dose limits, optimize patient safety, and make informed decisions based on accurate dosimetry principles.
-
-      Task: Calculate the TOTAL effective dose in mSv for a patient from a procedure involving multiple X-rays.
-      Step 1: First, determine the typical effective dose for a SINGLE X-ray of the ${finalScanPlaceText} with protocol "${finalScanDetailText}".
-      Step 2: Multiply that single-scan dose by the number of scans, which is ${form.numberOfScans}.
-      Patient Context: Age: ${age}, Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}".
-      Respond ONLY with the final numeric value from Step 2. The result must be greater than zero.
-    `;
-  } else {
-    prompt = `You are a highly experienced and board-certified radiologist and medical physicist with over 20 years of clinical expertise in diagnostic imaging, radiation protection, and occupational exposure assessment. You specialize in estimating radiation doses for both patients and healthcare workers in radiological procedures, including X-rays, CT scans, nuclear medicine, and interventional imaging.
-
-You are deeply familiar with international radiation safety standards, such as those from the ICRP (International Commission on Radiological Protection) and the IAEA (International Atomic Energy Agency), and you strictly follow the ALARA principle (As Low As Reasonably Achievable).
-
-When asked to estimate a radiation dose:
-- Provide a clear, realistic value (in mSv) based on the given procedure and context.
-- Take into account scan type, scan region, number of images, shielding, doctor position, and time of entry.
-- Provide conservative and safety-aware estimates suitable for professional use.
-- Never guess wildly or return values outside medically accepted ranges.
-- Focus only on the number (unless explicitly asked for context or explanation).
-
-Your goal is to help healthcare providers stay within occupational dose limits, optimize patient safety, and make informed decisions based on accurate dosimetry principles.
-Estimate the typical effective dose (in mSv) for a patient undergoing a single ${form.scanType} scan of the ${finalScanPlaceText} with the specific protocol: "${finalScanDetailText}". Patient Age: ${age}. Patient Weight: ${weight} kg. Reason for scan: "${form.reason || 'Not provided'}". The value must be greater than zero. Respond ONLY with a single number.`;
-  }
-
-  try {
-    const validationRules = form.scanType === 'CT' ? { min: 0.5, max: 40 } : { min: 0.0001, max: 10 };
-    const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'text/plain' } };
-    const apiKey = import.meta.env.VITE_GEMINI_KEY;
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
-    const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-    const result = await response.json();
-    const aiText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const estimated = parseFloat(aiText.match(/[\d.]+/));
-    if (isNaN(estimated) || estimated < validationRules.min || estimated > validationRules.max) {
-        throw new Error(`AI returned an invalid or out-of-range value. Got: ${estimated}`);
-    }
-    form.patientDose = estimated;
-    return true;
-
-  } catch (error) {
-    console.warn(`AI dose estimation failed. Attempting fallback. Error:`, error);
-    const fallbackDose = getFallbackDose();
-    if (fallbackDose !== null) {
-      form.patientDose = fallbackDose;
-      alert(
-        currentLanguage.value === 'en'
-          ? `AI estimation failed. A typical value of ${fallbackDose.toFixed(3)} mSv has been used. You can review and adjust this value.`
-          : `فشل تقدير الذكاء الاصطناعي. تم استخدام قيمة نموذجية تبلغ ${fallbackDose.toFixed(3)} ملي سيفرت. يمكنك مراجعة هذه القيمة وتعديلها.`
-      );
-      return true;
-    } else {
-      alert(
-        currentLanguage.value === 'en'
-          ? `AI estimation failed and no fallback value is available. Please enter the dose manually.`
-          : `فشل تقدير الذكاء الاصطناعي ولا توجد قيمة بديلة. يرجى إدخال الجرعة يدويًا.`
-      );
-      return false;
-    }
-  }
-}
-
-const handleSubmit = async () => {
-  if (
-    !form.scanDate || !form.scanPlace ||
-    (showOtherScanPlaceInput.value && !form.otherScanPlaceDescription) ||
-    !form.subScanType || (showOtherInput.value && !form.otherScanDescription)
-  ) {
-    alert(
-      currentLanguage.value === 'en'
-        ? 'Please fill all required scan details.'
-        : 'يرجى ملء جميع تفاصيل الفحص المطلوبة.',
-    )
+// --- Form Submission ---
+const handleSubmit = () => {
+  // Validation
+  if (!form.scanDate || !form.scanPlace || (showOtherScanPlaceInput.value && !form.otherScanPlaceDescription) || !form.subScanType || (showOtherInput.value && !form.otherScanDescription)) {
+    alert(currentLanguage.value === 'en' ? 'Please fill all required scan details.' : 'يرجى ملء جميع تفاصيل الفحص المطلوبة.')
     return
   }
-
   if (form.scanType === 'X-ray' && (form.numberOfScans === null || form.numberOfScans < 1)) {
     alert(currentLanguage.value === 'en' ? 'Number of scans must be at least 1 for X-ray.' : 'عدد الفحوصات لأشعة إكس يجب أن يكون 1 على الأقل.');
     return;
   }
 
-  if (!form.patientDose && form.patientDose !== 0) {
-    const estimationSuccess = await estimateDose();
-    if (!estimationSuccess) {
-      return;
-    }
+  // Populate dose using fixed values if it is empty
+  if (form.patientDose === null || form.patientDose === '') {
+    form.patientDose = getFallbackDose();
   }
 
-  // Use robust date parsing
+  // Check if a dose value could be found
+  if (form.patientDose === null) {
+      alert(currentLanguage.value === 'en'
+          ? 'Could not find a typical dose value for the selected scan. Please enter the dose manually.'
+          : 'تعذر العثور على قيمة جرعة نموذجية للفحص المحدد. يرجى إدخال الجرعة يدويًا.');
+      return;
+  }
+
+  // Date Parsing
   const parts = form.scanDate.split('-');
   const safeDate = new Date(Date.UTC(parts[0], parseInt(parts[1], 10) - 1, parts[2]));
   if (isNaN(safeDate.getTime())) {
@@ -300,17 +175,15 @@ const handleSubmit = async () => {
     return;
   }
 
-  const finalScanDetailValue = showOtherInput.value ? form.otherScanDescription : form.subScanType;
-  const finalScanPlaceValue = showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace;
-
+  // Emit the final data object
   const dataToSave = {
     id: form.id,
     scanType: form.scanType,
-    scanDetail: finalScanDetailValue,
-    scanPlace: finalScanPlaceValue,
+    scanDetail: showOtherInput.value ? form.otherScanDescription : form.subScanType,
+    scanPlace: showOtherScanPlaceInput.value ? form.otherScanPlaceDescription : form.scanPlace,
     numberOfScans: form.scanType === 'X-ray' ? Number(form.numberOfScans) : 1,
     scanDate: Timestamp.fromDate(safeDate),
-    patientDose: form.patientDose,
+    patientDose: Number(form.patientDose),
     reason: form.reason,
     notes: form.notes,
     isPersonalScan: true,
@@ -417,12 +290,12 @@ const handleSubmit = async () => {
               type="number"
               step="0.00005"
               v-model.number="form.patientDose"
-              :placeholder="
-                currentLanguage === 'en'
-                  ? 'Leave blank for AI estimate'
-                  : 'اتركه فارغًا لتقدير الذكاء الاصطناعي'
-              "
-            />
+                              :placeholder="
+                  currentLanguage === 'en'
+                    ? 'Leave blank for typical value'
+                    : 'اتركه فارغًا لتقدير للقيمة القياسسية'
+                "
+>
           </div>
 
           <div class="form-group">

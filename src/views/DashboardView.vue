@@ -174,8 +174,8 @@ const handleLogout = async () => {
                 <p :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
                   {{
                     currentLanguage === 'en'
-                      ? 'Use AI to get recommendations on the necessity of radiological scans.'
-                      : 'استخدم الذكاء الاصطناعي للحصول على توصيات حول ضرورة الفحوصات الإشعاعية.'
+                      ? 'Assess a radiological scan to estimate doses and review safety-based warnings.'
+                      : 'تقييم الفحص الإشعاعي لتقدير الجرعات ومراجعة تحذيرات السلامة.'
                   }}
                 </p>
               </div>

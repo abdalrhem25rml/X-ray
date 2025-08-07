@@ -1,4 +1,4 @@
-<script setup>Recom
+<script setup>
 import { ref, watch, computed, inject } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -17,7 +17,7 @@ const currentTotalMsv = inject('currentMsv')
 const doseLimit = inject('doseLimit')
 const triggerMsvRecalculation = inject('triggerMsvRecalculation')
 
-// --- Data for Dropdowns ---
+// --- Data for Dropdowns and Dose Calculation ---
 const scanSubtypes = {
   CT: [
     { value: 'Abdomen & Pelvis', en: 'Abdomen & Pelvis', ar: 'البطن والحوض' },
@@ -35,7 +35,6 @@ const scanSubtypes = {
     { value: 'Other', en: 'Other...', ar: 'أخرى...' },
   ],
 }
-
 const scanPlaces = [
   { value: 'head', en: 'Head', ar: 'الرأس' },
   { value: 'neck', en: 'Neck', ar: 'الرقبة' },
@@ -47,34 +46,14 @@ const scanPlaces = [
   { value: 'lower_extremity', en: 'Lower Extremity', ar: 'الطرف السفلي' },
   { value: 'other', en: 'Other', ar: 'أخرى' },
 ]
-
 const fallbackDoseEstimates = {
   patient: {
-    'CT': {
-      'Abdomen & Pelvis': 14,
-      'Brain with contrast': 2,
-      'Angiography CTA': 12,
-      'Urography': 8,
-      'Enterography': 8,
-      'default': 6,
-    },
-    'X-ray': {
-      'Barium Enema': 7,
-      'IV Urogram (IVP)': 2.5,
-      'HSG': 1.5,
-      'VCUG': 1.0,
-      'default': 0.5,
-    }
+    'CT': { 'Abdomen & Pelvis': 14, 'Brain with contrast': 2, 'Angiography CTA': 12, 'Urography': 8, 'Enterography': 8, 'default': 6 },
+    'X-ray': { 'Barium Enema': 7, 'IV Urogram (IVP)': 2.5, 'HSG': 1.5, 'VCUG': 1.0, 'default': 0.5 }
   },
   doctor: {
     'CT': { 'default': 0.00001 },
-    'X-ray': {
-      'Barium Enema': 0.0001,
-      'IV Urogram (IVP)': 0.00005,
-      'HSG': 0.0002,
-      'VCUG': 0.00015,
-      'default': 0.00005
-    }
+    'X-ray': { 'Barium Enema': 0.0001, 'IV Urogram (IVP)': 0.00005, 'HSG': 0.0002, 'VCUG': 0.00015, 'default': 0.00005 }
   }
 };
 
@@ -105,7 +84,7 @@ const form = ref({
 const isLoading = ref(false)
 const isSaving = ref(false)
 const isFetchingPatient = ref(false)
-const aiResponse = ref(null)
+const aiResponse = ref(null) // This will now hold the locally generated response
 const errorMessage = ref('')
 
 // --- Computed Properties ---
@@ -136,33 +115,19 @@ const showDoctorDoseBox = computed(() => {
 // --- Helpers ---
 const clearForm = () => {
   form.value = {
-    patientId: null,
-    patientName: '',
-    birthDate: '',
-    gender: 'male',
-    weight: null,
-    patientCumulativeDose: 0,
-    medicalHistory: '',
-    currentSymptoms: '',
-    allergies: '',
-    isPregnant: false,
-    estimatedDueDate: '',
-    scanType: 'CT',
-    scanPlace: '',
-    otherScanPlaceDescription: '',
-    subScanType: '',
-    otherScanDescription: '',
-    numberOfScans: 1,
-    doctorAdditionalContext: '',
+    patientId: null, patientName: '', birthDate: '', gender: 'male', weight: null, patientCumulativeDose: 0,
+    medicalHistory: '', currentSymptoms: '', allergies: '', isPregnant: false, estimatedDueDate: '',
+    scanType: 'CT', scanPlace: '', otherScanPlaceDescription: '', subScanType: '', otherScanDescription: '',
+    numberOfScans: 1, doctorAdditionalContext: '',
   }
 }
-
 const toDateString = (input) => {
   if (!input) return ''
   let d = typeof input.toDate === 'function' ? input.toDate() : new Date(input)
   return d.toISOString().split('T')[0]
 }
 
+// --- Data Loading ---
 const loadPatientData = async (id) => {
     if (!id) return
     isFetchingPatient.value = true
@@ -204,7 +169,6 @@ watch(recommendationMode, (newMode) => {
     clearForm()
   }
 })
-
 watch(
   () => route.query.patientId,
   (newId) => {
@@ -218,14 +182,12 @@ watch(
   },
   { immediate: true },
 )
-
 watch(
   () => form.value.isPregnant,
   (isPregnant) => {
     if (!isPregnant) form.value.estimatedDueDate = ''
   },
 )
-
 watch(
   () => form.value.scanType,
   () => {
@@ -241,17 +203,12 @@ const getFallbackDose = (doseFor) => {
     const finalScanDetail = form.value.subScanType === 'Other' ? 'default' : form.value.subScanType;
     const doseTable = fallbackDoseEstimates[doseFor];
     const scanTypeTable = doseTable[form.value.scanType];
-
     if (!scanTypeTable) return null;
-
     let baseDose = scanTypeTable[finalScanDetail] ?? scanTypeTable['default'];
-
     if (baseDose === undefined) return null;
-
     if (form.value.scanType === 'X-ray') {
       return baseDose * form.value.numberOfScans;
     }
-
     return baseDose;
   } catch (e) {
     console.error("Error retrieving fallback dose:", e);
@@ -259,156 +216,79 @@ const getFallbackDose = (doseFor) => {
   }
 };
 
-
-// ✅ 3. FALLBACK MECHANISM: The getRecommendations function now uses the fallback on failure.
-const getRecommendations = async () => {
-  isLoading.value = true
-  errorMessage.value = ''
-  aiResponse.value = null
+const getRecommendations = () => {
+  isLoading.value = true;
+  errorMessage.value = '';
+  aiResponse.value = null;
 
   // --- Form validation ---
-  if (!form.value.birthDate || !form.value.scanPlace || (showOtherScanPlaceInput.value && !form.value.otherScanPlaceDescription) || !form.value.subScanType || (showOtherInput.value && !form.value.otherScanDescription)) { errorMessage.value = currentLanguage.value === 'en' ? 'Please complete all required fields.' : 'يرجى إكمال جميع الحقول المطلوبة.'; isLoading.value = false; return; }
-  if (form.value.isPregnant && !form.value.estimatedDueDate) { errorMessage.value = currentLanguage.value === 'en' ? 'Estimated Due Date is required for pregnant patients.' : 'تاريخ الولادة المتوقع مطلوب للحامل.'; isLoading.value = false; return; }
-
-  // --- Common context variables ---
-  const age = new Date().getFullYear() - new Date(form.value.birthDate).getFullYear();
-  const weightContext = form.value.weight ? `Weight: ${form.value.weight} kg.` : 'Weight: Not provided.';
-  let pregnancyContext = `Not pregnant.`;
-  if (form.value.isPregnant && form.value.estimatedDueDate) { pregnancyContext = `Pregnant with an estimated due date of ${form.value.estimatedDueDate}. The AI must carefully weigh risks, especially during the first trimester.` }
-  const finalScanDetail = showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType;
-  const selectedPlaceObject = scanPlaces.find((opt) => opt.value === form.value.scanPlace);
-  let scanPlaceContext = '';
-  if (showOtherScanPlaceInput.value) { scanPlaceContext = form.value.otherScanPlaceDescription } else if (selectedPlaceObject) { scanPlaceContext = currentLanguage.value === 'en' ? selectedPlaceObject.en : selectedPlaceObject.ar }
-
-  // ✅ FIX: Prompts now explicitly instruct the AI to return a non-zero value.
-  let scanTaskText = '';
-  if (form.value.scanType === 'X-ray' && form.value.numberOfScans > 1) {
-      scanTaskText = `
-        The scan being considered is a procedure involving ${form.value.numberOfScans} separate X-ray scans of the ${scanPlaceContext} with protocol "${finalScanDetail}".
-        To calculate the dose:
-        1. First, determine the typical effective dose for a SINGLE one of these X-rays.
-        2. Then, multiply that single-scan dose by the number of scans (${form.value.numberOfScans}) to get the TOTAL dose.
-        The final calculated dose values must be greater than zero.
-      `;
-  } else {
-      scanTaskText = `The scan being considered is a single ${form.value.scanType} of the ${scanPlaceContext} with protocol "${finalScanDetail}". The estimated dose must be greater than zero.`;
+  if (!form.value.birthDate || !form.value.scanPlace || (showOtherScanPlaceInput.value && !form.value.otherScanPlaceDescription) || !form.value.subScanType || (showOtherInput.value && !form.value.otherScanDescription)) {
+    errorMessage.value = currentLanguage.value === 'en' ? 'Please complete all required fields.' : 'يرجى إكمال جميع الحقول المطلوبة.';
+    isLoading.value = false;
+    return;
+  }
+  if (form.value.isPregnant && !form.value.estimatedDueDate) {
+    errorMessage.value = currentLanguage.value === 'en' ? 'Estimated Due Date is required for pregnant patients.' : 'تاريخ الولادة المتوقع مطلوب للحامل.';
+    isLoading.value = false;
+    return;
   }
 
-  let prompt = '';
-  let responseSchema = {};
-
-  if (userRole.value === 'doctor') {
-    if (isDoctorPersonalScan.value) {
-      // Prompt for Doctor who is also the patient
-      prompt = `You are a highly experienced and board-certified radiologist and medical physicist with over 20 years of clinical expertise in diagnostic imaging, radiation protection, and occupational exposure assessment. You specialize in estimating radiation doses for both patients and healthcare workers in radiological procedures, including X-rays, CT scans, nuclear medicine, and interventional imaging.
-
-You are deeply familiar with international radiation safety standards, such as those from the ICRP (International Commission on Radiological Protection) and the IAEA (International Atomic Energy Agency), and you strictly follow the ALARA principle (As Low As Reasonably Achievable).
-
-When asked to estimate a radiation dose:
-- Provide a clear, realistic value (in mSv) based on the given procedure and context.
-- Take into account scan type, scan region, number of images, shielding, doctor position, and time of entry.
-- Provide conservative and safety-aware estimates suitable for professional use.
-- Never guess wildly or return values outside medically accepted ranges.
-- Focus only on the number (unless explicitly asked for context or explanation).
-
-Your goal is to help healthcare providers stay within occupational dose limits, optimize patient safety, and make informed decisions based on accurate dosimetry principles.
-
-As a medical radiation safety advisor, provide a recommendation for a doctor who is also the patient.
-- Scenario Context: The doctor IS THE PATIENT.
-- Doctor's State: My annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
-- Patient Details (My Details): Age: ${age}, Gender: ${form.value.gender}. ${weightContext}. Pregnancy Status: ${pregnancyContext}. My cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
-- Scan Details: ${scanTaskText}
-- My Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
-Tasks:
-1. **Recommendation (recommendationText):** Justify if the scan is appropriate for me.
-2. **Patient Dose (patientCalculatedMsv):** Estimate my total effective dose in mSv from this procedure. The result must be greater than zero.
-3. **Occupational Dose (doctorOccupationalMsv):** This MUST be 0 because I am the patient.
-4. **Warning (Warning):** Warn if my new total dose (occupational + patient) exceeds any limits.
-Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
-    } else {
-      // Prompt for Doctor treating a patient
-      prompt = `You are a highly experienced and board-certified radiologist and medical physicist with over 20 years of clinical expertise in diagnostic imaging, radiation protection, and occupational exposure assessment. You specialize in estimating radiation doses for both patients and healthcare workers in radiological procedures, including X-rays, CT scans, nuclear medicine, and interventional imaging.
-
-You are deeply familiar with international radiation safety standards, such as those from the ICRP (International Commission on Radiological Protection) and the IAEA (International Atomic Energy Agency), and you strictly follow the ALARA principle (As Low As Reasonably Achievable).
-
-When asked to estimate a radiation dose:
-- Provide a clear, realistic value (in mSv) based on the given procedure and context.
-- Take into account scan type, scan region, number of images, shielding, doctor position, and time of entry.
-- Provide conservative and safety-aware estimates suitable for professional use.
-- Never guess wildly or return values outside medically accepted ranges.
-- Focus only on the number (unless explicitly asked for context or explanation).
-
-Your goal is to help healthcare providers stay within occupational dose limits, optimize patient safety, and make informed decisions based on accurate dosimetry principles.
-
-As a medical radiation safety advisor, provide a recommendation for a patient scan, adhering strictly to the ALARA principle.
-- Scenario Context: A doctor is the PRACTITIONER for another patient.
-- Doctor's State: The doctor's annual occupational dose is ${currentTotalMsv.value.toFixed(2)} mSv. The annual limit is ${doseLimit.value} mSv.
-- Patient Details: Age: ${age}, Gender: ${form.value.gender}. ${weightContext}. Pregnancy Status: ${pregnancyContext}. Patient's cumulative dose this year: ${form.value.patientCumulativeDose} mSv.
-- Scan Details: ${scanTaskText}
-- Doctor's Exposure Context: ${form.value.doctorAdditionalContext || 'No additional context provided.'}
-Tasks:
-1. **Recommendation (recommendationText):** Justify if the scan is appropriate for the patient.
-2. **Patient Dose (patientCalculatedMsv):** Estimate the patient's total effective dose in mSv from this procedure. The result must be greater than zero.
-3. **Occupational Dose (doctorOccupationalMsv):** Estimate the doctor's total occupational dose in mSv from performing this procedure. The result must be greater than zero.
-4. **Warning (Warning):** Warn if the patient's new total dose will exceed the public limit, OR if the doctor's new occupational dose exceeds their limit.
-Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
-    }
-    responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, doctorOccupationalMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'doctorOccupationalMsv', 'Warning'] };
-  } else {
-    // Prompt for Patient
-    prompt = `You are a highly experienced and board-certified radiologist and medical physicist with over 20 years of clinical expertise in diagnostic imaging, radiation protection, and occupational exposure assessment. You specialize in estimating radiation doses for both patients and healthcare workers in radiological procedures, including X-rays, CT scans, nuclear medicine, and interventional imaging.
-
-You are deeply familiar with international radiation safety standards, such as those from the ICRP (International Commission on Radiological Protection) and the IAEA (International Atomic Energy Agency), and you strictly follow the ALARA principle (As Low As Reasonably Achievable).
-
-When asked to estimate a radiation dose:
-- Provide a clear, realistic value (in mSv) based on the given procedure and context.
-- Take into account scan type, scan region, number of images, shielding, doctor position, and time of entry.
-- Provide conservative and safety-aware estimates suitable for professional use.
-- Never guess wildly or return values outside medically accepted ranges.
-- Focus only on the number (unless explicitly asked for context or explanation).
-
-Your goal is to help healthcare providers stay within occupational dose limits, optimize patient safety, and make informed decisions based on accurate dosimetry principles.
-
-As a patient advocate, explain a medical scan.
-- My estimated radiation dose this year: ${form.value.patientCumulativeDose} mSv.
-- My Details: Born on ${form.value.birthDate}, Gender: ${form.value.gender}, ${weightContext}, Pregnancy: ${pregnancyContext}.
-- Scan Details: ${scanTaskText}
-Tasks:
-1. **Information (recommendationText):** Explain the purpose of this scan in simple terms.
-2. **Dose Estimation (patientCalculatedMsv):** Estimate my total dose in mSv from this procedure. The result must be greater than zero.
-3. **Warning (Warning):** If my new total dose exceeds 1 mSv, provide a clear warning.
-Respond ONLY with valid JSON in ${currentLanguage.value === 'en' ? 'English' : 'Arabic'}.`
-    responseSchema = { type: 'OBJECT', properties: { recommendationText: { type: 'STRING' }, patientCalculatedMsv: { type: 'NUMBER' }, Warning: { type: 'STRING' } }, required: ['recommendationText', 'patientCalculatedMsv', 'Warning'] };
+  // 1. Calculate doses using the fallback function
+  const patientDose = getFallbackDose('patient');
+  let doctorDose = 0;
+  if (userRole.value === 'doctor' && !isDoctorPersonalScan.value) {
+    doctorDose = getFallbackDose('doctor');
   }
 
-  try {
-      const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', responseSchema } }
-      const apiKey = import.meta.env.VITE_GEMINI_KEY
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
-      const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (!response.ok) throw new Error(`API Error: ${response.statusText}`)
-      const result = await response.json()
-      aiResponse.value = JSON.parse(result.candidates[0].content.parts[0].text)
-  } catch (error) {
-    console.warn('AI recommendation failed. Attempting fallback. Error:', error)
-    const patientFallback = getFallbackDose('patient');
-    let doctorFallback = 0;
-    if (userRole.value === 'doctor' && !isDoctorPersonalScan.value) {
-        doctorFallback = getFallbackDose('doctor');
-    }
-    if (patientFallback !== null && doctorFallback !== null) {
-        aiResponse.value = {
-            recommendationText: currentLanguage.value === 'en' ? "The AI recommendation could not be generated. The typical dose for this procedure is shown above. Please use your clinical judgment to decide if this scan is appropriate." : "تعذر إنشاء توصية الذكاء الاصطناعي. الجرعة النموذجية لهذا الإجراء معروضة أعلاه. يرجى استخدام حكمك السريري لتقرير ما إذا كان هذا الفحص مناسبًا.",
-            patientCalculatedMsv: patientFallback,
-            doctorOccupationalMsv: doctorFallback,
-            Warning: currentLanguage.value === 'en' ? "AI service failed. Using predefined typical dose values. Please review carefully as these are general estimates." : "فشلت خدمة الذكاء الاصطناعي. يتم استخدام قيم الجرعات النموذجية المحددة مسبقًا. يرجى المراجعة بعناية لأنها تقديرات عامة."
-        };
-    } else {
-        errorMessage.value = currentLanguage.value === 'en' ? `An error occurred and no fallback value is available. Please try again later.` : `حدث خطأ ولا توجد قيمة بديلة متاحة. الرجاء معاودة المحاولة في وقت لاحق.`
-    }
-  } finally {
-      isLoading.value = false
+  if (patientDose === null || doctorDose === null) {
+      errorMessage.value = currentLanguage.value === 'en' ? 'Could not find a typical dose for the selected scan. Please check your selections.' : 'تعذر العثور على جرعة نموذجية للفحص المحدد. يرجى التحقق من اختياراتك.';
+      isLoading.value = false;
+      return;
   }
+
+  // 2. Generate static recommendation text
+  const recommendationText = currentLanguage.value === 'en'
+    ? "The typical doses for this procedure are displayed above. Please use your clinical judgment and the patient's medical history and symptoms to determine if this scan is appropriate and justified."
+    : "الجرعات النموذجية لهذا الإجراء معروضة أعلاه. يرجى استخدام حكمك السريري والتاريخ الطبي للمريض وأعراضه لتحديد ما إذا كان هذا الفحص مناسبًا ومبررًا.";
+
+  // 3. Generate dynamic warning messages
+  const warnings = [];
+  const lang = currentLanguage.value;
+
+  if (form.value.isPregnant) {
+      warnings.push(lang === 'en' ? "The patient is pregnant. Scans involving the abdomen or pelvis carry a direct risk to the fetus. Justification must be exceptionally strong." : "المريضة حامل. الفحوصات التي تشمل البطن أو الحوض تحمل خطرًا مباشرًا على الجنين. يجب أن يكون التبرير قويًا بشكل استثنائي.");
+  }
+
+  const newPatientDose = form.value.patientCumulativeDose + patientDose;
+  if (newPatientDose > 20) {
+      warnings.push(lang === 'en' ? `The patient's cumulative dose this year will be approximately ${newPatientDose.toFixed(2)} mSv, which is notable. Ensure the benefit outweighs the risk.` : `الجرعة التراكمية للمريض هذا العام ستبلغ حوالي ${newPatientDose.toFixed(2)} ملي سيفرت، وهو أمر ملحوظ. تأكد من أن الفائدة تفوق المخاطرة.`);
+  }
+
+  if (userRole.value === 'doctor' && !isDoctorPersonalScan.value) {
+    const newDoctorDose = currentTotalMsv.value + doctorDose;
+    if (newDoctorDose > doseLimit.value) {
+        warnings.push(lang === 'en' ? `Your new occupational dose of ~${newDoctorDose.toFixed(3)} mSv will EXCEED your annual limit of ${doseLimit.value} mSv.` : `جرعتك المهنية الجديدة البالغة ~${newDoctorDose.toFixed(3)} ملي سيفرت سوف تتجاوز حدك السنوي البالغ ${doseLimit.value} ملي سيفرت.`);
+    }
+  }
+
+  if (isDoctorPersonalScan.value) {
+      const newTotalPersonalDose = currentTotalMsv.value + patientDose;
+      if (newTotalPersonalDose > doseLimit.value) {
+          warnings.push(lang === 'en' ? `Your combined personal and occupational dose this year will be ~${newTotalPersonalDose.toFixed(2)} mSv, EXCEEDING your annual occupational limit of ${doseLimit.value} mSv.` : `مجموع جرعتك الشخصية والمهنية هذا العام سيبلغ ~${newTotalPersonalDose.toFixed(2)} ملي سيفرت، متجاوزًا حدك المهني السنوي البالغ ${doseLimit.value} ملي سيفرت.`);
+      }
+  }
+
+  const warningText = warnings.length > 0 ? warnings.join('\n- ') : (lang === 'en' ? 'No high-priority warnings detected based on the provided data. Standard clinical caution is advised.' : 'لم يتم اكتشاف تحذيرات ذات أولوية عالية بناءً على البيانات المقدمة. يُنصح بتوخي الحذر السريري المعتاد.');
+
+  // 4. Construct final response object
+  aiResponse.value = {
+      recommendationText: recommendationText,
+      patientCalculatedMsv: patientDose,
+      doctorOccupationalMsv: isDoctorPersonalScan.value ? 0 : doctorDose,
+      Warning: warningText
+  };
+
+  isLoading.value = false;
 }
 
 const saveScanFromRecommendation = async () => {
@@ -429,7 +309,7 @@ const saveScanFromRecommendation = async () => {
             scanDate: Timestamp.now(),
             patientDose: Number(aiResponse.value.patientCalculatedMsv) || 0,
             doctorDose: Number(aiResponse.value.doctorOccupationalMsv) || 0,
-            reason: form.value.currentSymptoms || 'As per AI recommendation',
+            reason: form.value.currentSymptoms || 'As per recommendation',
             notes: aiResponse.value.recommendationText,
             isPersonalScan: recommendationMode.value === 'personal'
         }
@@ -462,8 +342,8 @@ const saveScanFromRecommendation = async () => {
         <p>
           {{
             currentLanguage === 'en'
-              ? 'Get an AI-powered recommendation based on patient details and radiation safety principles.'
-              : 'احصل على توصية مدعومة بالذكاء الاصطناعي بناءً على تفاصيل المريض ومبادئ السلامة من الإشعاع.'
+              ? 'Fill in the patient and scan details to estimate radiation doses and review important safety warnings.'
+              : 'املأ تفاصيل المريض والفحص لتقدير جرعات الإشعاع ومراجعة تحذيرات السلامة الهامة.'
           }}
         </p>
 
@@ -703,8 +583,8 @@ const saveScanFromRecommendation = async () => {
             <h3>
               {{
                 currentLanguage === 'en'
-                  ? 'AI Powered Recommendation'
-                  : 'التوصية المدعومة بالذكاء الاصطناعي'
+                  ? 'Typical Value'
+                  : 'القيمة القياسية'
               }}
             </h3>
             <div class="msv-details-container">
