@@ -272,7 +272,7 @@ const handleSubmit = async () => {
 
           <div class="form-group">
           <label>{{ currentLanguage === 'en' ? 'Occupational Dose (mSv)' : 'الجرعة المهنية (mSv)' }}</label>
-            <input type="number" step="0.01" v-model.number="form.dosage" placeholder="Leave blank for AI estimate" />
+            <input type="number" step="0.001" v-model.number="form.dosage" placeholder="Leave blank for AI estimate" />
           </div>
 
           <div class="modal-actions">

@@ -386,7 +386,7 @@ const handleSubmit = async () => {
             <label>{{ currentLanguage === 'en' ? 'Your Dose (mSv)' : 'جرعتك (mSv)' }}</label>
             <input
               type="number"
-              step="0.01"
+              step="0.001"
               v-model.number="form.patientDose"
               :placeholder="
                 currentLanguage === 'en'
