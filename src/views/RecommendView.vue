@@ -67,12 +67,12 @@ const fallbackDoseEstimates = {
     }
   },
   doctor: {
-    'CT': { 'default': 0.113 },
+    'CT': { 'default': 0.00001 },
     'X-ray': {
-      'Barium Enema': 0.1,
-      'IV Urogram (IVP)': 0.05,
-      'HSG': 0.2,
-      'VCUG': 0.15,
+      'Barium Enema': 0.0001,
+      'IV Urogram (IVP)': 0.00005,
+      'HSG': 0.0002,
+      'VCUG': 0.00015,
       'default': 0.00005
     }
   }
