@@ -4,6 +4,7 @@ import { RouterView } from 'vue-router'
 import { useAuthStore } from './stores/auth'
 import { useDatabaseStore } from './stores/database'
 import TheHeader from './components/TheHeader.vue'
+import InfoModal from './components/InfoModal.vue'
 
 // --- Pinia Stores ---
 const authStore = useAuthStore()
@@ -24,6 +25,12 @@ const setLanguage = (lang) => {
 }
 const toggleLanguage = () => {
   setLanguage(currentLanguage.value === 'en' ? 'ar' : 'en')
+}
+
+const showInfo = () => {
+  console.log('Before showInfoModal:', showInfoModal.value)
+  showInfoModal.value = true
+  console.log('After showInfoModal:', showInfoModal.value)
 }
 
 // --- Dose Calculation ---
@@ -59,6 +66,7 @@ provide('currentLanguage', currentLanguage)
 provide('currentMsv', currentMsv)
 provide('doseLimit', doseLimit)
 provide('triggerMsvRecalculation', calculateAnnualMsv)
+provide('showInfoModal', showInfoModal)
 
 // --- ✅ CORRECTED WATCHER ---
 // We now watch the userProfile. This ensures that the user's role is
@@ -82,6 +90,7 @@ setLanguage(currentLanguage.value)
 </script>
 
 <template>
+
   <div id="app-container">
     <TheHeader
       :current-language="currentLanguage"
@@ -92,8 +101,11 @@ setLanguage(currentLanguage.value)
         isLoading: databaseStore.loading,
       }"
       @toggle-language="toggleLanguage"
-      @toggle-info-modal="showInfoModal = true"
+      @toggle-info-modal="showInfo"
     />
+
+
+  <InfoModal :show="showInfoModal" @close="showInfoModal = false" />
     <main class="main-content">
       <RouterView v-if="authStore.isAuthReady" />
       <div v-else class="loading-fullpage">

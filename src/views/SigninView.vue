@@ -34,6 +34,10 @@ const navigateToSignup = () => {
 const navigateToResetPassword = () => {
   router.push('/resetpassword')
 }
+
+const navigateToGuestRecommend = () => {
+  router.push('/recommend/guest')
+}
 </script>
 
 <template>
@@ -101,7 +105,6 @@ const navigateToResetPassword = () => {
           </button>
         </form>
 
-        <!-- Display error message from store -->
         <div
           v-if="authStore.error"
           class="message error-message"
@@ -109,7 +112,6 @@ const navigateToResetPassword = () => {
         >
           {{ authStore.error }}
         </div>
-        <!-- Display success message from store -->
         <div
           v-if="authStore.successMessage"
           class="message success-message"
@@ -155,6 +157,17 @@ const navigateToResetPassword = () => {
           }}</span>
         </button>
 
+        <!-- New Guest Recommendation Option -->
+        <button
+          class="action-button guest-button"
+          @click="navigateToGuestRecommend"
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+        >
+          {{ currentLanguage === 'en'
+            ? 'Get Recommendation as Guest'
+            : 'الحصول على نصيحة كضيف' }}
+        </button>
+
         <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{ currentLanguage === 'en' ? "Don't have an account?" : 'ليس لديك حساب؟' }}
           <a href="#" @click.prevent="navigateToSignup">
@@ -167,16 +180,12 @@ const navigateToResetPassword = () => {
 </template>
 
 <style scoped>
-/* Inherit common styles from App.vue or define new ones */
-
 .login-page {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 80px); /* Adjust height to account for global header */
+  min-height: calc(100vh - 80px);
   width: 100%;
 }
-
-/* No .app-header, .project-title here - they are in App.vue */
 
 .login-main-content {
   flex-grow: 1;
@@ -211,20 +220,19 @@ const navigateToResetPassword = () => {
   font-size: 1.1em;
 }
 
-/* Form Styling (similar to signup-form) */
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 20px; /* Space between form groups */
-  margin-bottom: 30px; /* Space before the "Or Go to Dashboard" link */
+  gap: 20px;
+  margin-bottom: 30px;
 }
 
 .form-group {
-  text-align: left; /* Align labels and inputs to the left */
+  text-align: left;
 }
 
 .form-group label {
-  display: block; /* Make label take full width */
+  display: block;
   margin-bottom: 8px;
   color: #333;
   font-weight: 600;
@@ -238,36 +246,29 @@ const navigateToResetPassword = () => {
   border-radius: 8px;
   font-size: 1em;
   color: #333;
-  transition:
-    border-color 0.3s ease,
-    box-shadow 0.3s ease;
-  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-sizing: border-box;
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #8d99ae; /* Highlight border on focus */
-  box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2); /* Subtle glow on focus */
+  border-color: #8d99ae;
+  box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2);
 }
 
-/* New style for forgot password link */
 .forgot-password-link {
-  text-align: left; /* Default for LTR languages */
-  margin-top: 8px; /* Space above the link */
+  text-align: left;
+  margin-top: 8px;
   font-size: 0.9em;
 }
-
-/* Specific style for RTL direction */
 [dir='rtl'] .forgot-password-link {
   text-align: right;
 }
-
 .forgot-password-link a {
-  color: #8d99ae; /* Use the theme's accent color */
+  color: #8d99ae;
   text-decoration: none;
   font-weight: 500;
 }
-
 .forgot-password-link a:hover {
   text-decoration: underline;
 }
@@ -281,12 +282,9 @@ const navigateToResetPassword = () => {
   cursor: pointer;
   font-size: 1.15em;
   font-weight: 600;
-  transition:
-    background-color 0.3s ease,
-    transform 0.2s ease;
+  transition: background-color 0.3s ease, transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  width: 100%; /* Make button full width */
-  /* margin-top: 20px; Space above the button, if not already handled by form-group gap */
+  width: 100%;
 }
 
 .action-button:hover {
@@ -301,9 +299,18 @@ const navigateToResetPassword = () => {
   box-shadow: none;
 }
 
+.guest-button {
+  background-color: #4fa24b;
+  margin-top: 18px;
+}
+.guest-button:hover {
+  background-color: #306e2e;
+}
+
 .switch-link-container {
   font-size: 0.95em;
   color: #666;
+  margin-top: 25px;
 }
 
 .switch-link-container a {
@@ -312,13 +319,11 @@ const navigateToResetPassword = () => {
   font-weight: 600;
   transition: color 0.3s ease;
 }
-
 .switch-link-container a:hover {
   color: #5a6473;
   text-decoration: underline;
 }
 
-/* Divider for OR */
 .divider {
   display: flex;
   align-items: center;
@@ -327,25 +332,21 @@ const navigateToResetPassword = () => {
   color: #777;
   font-size: 0.9em;
 }
-
 .divider::before,
 .divider::after {
   content: '';
   flex: 1;
   border-bottom: 1px solid #ddd;
 }
-
 .divider:not(:empty)::before {
   margin-right: 0.25em;
 }
-
 .divider:not(:empty)::after {
   margin-left: 0.25em;
 }
 
-/* Google Button Styling */
 .google-button {
-  background-color: #4285f4; /* Google blue */
+  background-color: #4285f4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -356,32 +357,26 @@ const navigateToResetPassword = () => {
   cursor: pointer;
   font-size: 1.05em;
   font-weight: 600;
-  transition:
-    background-color 0.3s ease,
-    transform 0.2s ease;
+  transition: background-color 0.3s ease, transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   width: 100%;
-  margin-bottom: 20px; /* Space below Google button */
+  margin-bottom: 20px;
 }
-
 .google-button:hover {
-  background-color: #357ae8; /* Darker blue on hover */
+  background-color: #357ae8;
   transform: translateY(-2px);
 }
-
 .google-button:disabled {
   background-color: #b0b0b0;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
-
 .google-icon {
   width: 24px;
   height: 24px;
 }
 
-/* Message Styling */
 .message {
   margin-top: 20px;
   padding: 10px 15px;
@@ -390,20 +385,17 @@ const navigateToResetPassword = () => {
   font-weight: 500;
   text-align: center;
 }
-
 .error-message {
   background-color: #ffe0e0;
   color: #d32f2f;
   border: 1px solid #d32f2f;
 }
-
 .success-message {
   background-color: #e6ffed;
   color: #1a7a3d;
   border: 1px solid #1a7a3d;
 }
 
-/* Responsive Adjustments (similar to SignupView) */
 @media (max-width: 768px) {
   .login-main-content {
     padding: 15px;
@@ -411,19 +403,17 @@ const navigateToResetPassword = () => {
   .login-card {
     padding: 30px;
   }
-
   .login-card h2 {
     font-size: 1.8em;
   }
 }
-
 @media (max-width: 480px) {
   .login-card {
     padding: 20px;
   }
-
   .action-button,
-  .google-button {
+  .google-button,
+  .guest-button {
     padding: 12px 20px;
     font-size: 1em;
   }

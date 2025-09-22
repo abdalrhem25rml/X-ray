@@ -1,48 +1,41 @@
-<!-- SignupView.vue -->
 <script setup>
 import { ref, inject } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth' // Import your auth store
+import { useAuthStore } from '../stores/auth'
 
 const router = useRouter()
-const authStore = useAuthStore() // Access the auth store
+const authStore = useAuthStore()
 
-// Inject the globally provided language state
 const currentLanguage = inject('currentLanguage')
 
-// Form fields - these are now local state for the form inputs
-// const name = ref(''); // Removed as per request
 const email = ref('')
 const password = ref('')
 const confirmPassword = ref('')
 
-// Function to handle email/password signup
+// Handle email/password signup
 const handleEmailSignup = async () => {
   if (password.value !== confirmPassword.value) {
     authStore.error =
-      currentLanguage.value === 'en' ? 'Passwords do not match.' : 'كلمتا المرور غير متطابقتين.'
+      currentLanguage.value === 'en'
+        ? 'Passwords do not match.'
+        : 'كلمتا المرور غير متطابقتين.'
     return
   }
-  // Pass an empty string or null for name if it's no longer collected
   await authStore.signupWithEmail('', email.value, password.value)
 }
 
 const handleGoogleSignup = async () => {
-  // Use the correctly named action from your store
   const success = await authStore.signInWithGoogle()
-
-  if (success) {
-    // Optionally, redirect the user after a successful sign-in
-    console.log('Successfully signed in with Google! Redirecting...')
-    // router.push({ name: 'home' }) // Example redirect
-  } else {
-    // The error is already set in the store, you can display it in your template
-    console.error('Google sign-in failed:', authStore.error)
-  }
+  // Optionally redirect here if desired on success
 }
 
 const navigateToLogin = () => {
-  router.push('/signin') // Navigate to the /login path
+  router.push('/signin')
+}
+
+// NEW: Guest recommendation navigation
+const navigateToGuestRecommend = () => {
+  router.push('/recommend/guest')
 }
 </script>
 
@@ -60,23 +53,6 @@ const navigateToLogin = () => {
         </p>
 
         <form @submit.prevent="handleEmailSignup" class="signup-form">
-          <!-- Removed Full Name Input Field -->
-          <!--
-          <div class="form-group">
-            <label for="name" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
-              {{ currentLanguage === 'en' ? 'Full Name' : 'الاسم الكامل' }}
-            </label>
-            <input
-              type="text"
-              id="name"
-              v-model="name"
-              :placeholder="currentLanguage === 'en' ? 'Enter your full name' : 'أدخل اسمك الكامل'"
-              :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
-              required
-            />
-          </div>
-          -->
-
           <div class="form-group">
             <label for="email" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
               {{ currentLanguage === 'en' ? 'Email Address' : 'عنوان البريد الإلكتروني' }}
@@ -131,7 +107,6 @@ const navigateToLogin = () => {
           </button>
         </form>
 
-        <!-- Display error message from store -->
         <div
           v-if="authStore.error"
           class="message error-message"
@@ -139,7 +114,6 @@ const navigateToLogin = () => {
         >
           {{ authStore.error }}
         </div>
-        <!-- Success message will trigger redirection, so no explicit display needed here -->
 
         <div class="divider" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           <span>{{ currentLanguage === 'en' ? 'OR' : 'أو' }}</span>
@@ -178,6 +152,17 @@ const navigateToLogin = () => {
           }}</span>
         </button>
 
+        <!-- New Guest Recommendation Option -->
+        <button
+          class="action-button guest-button"
+          @click="navigateToGuestRecommend"
+          :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'"
+        >
+          {{ currentLanguage === 'en'
+            ? 'Get Recommendation as Guest'
+            : 'الحصول على نصيحة كضيف' }}
+        </button>
+
         <p class="switch-link-container" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
           {{ currentLanguage === 'en' ? 'Already have an account?' : 'هل لديك حساب بالفعل؟' }}
           <a href="#" @click.prevent="navigateToLogin">
@@ -190,68 +175,57 @@ const navigateToLogin = () => {
 </template>
 
 <style scoped>
-/* Main Page Layout */
 .signup-page {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 80px); /* Adjust height to account for global header */
+  min-height: calc(100vh - 80px);
   width: 100%;
 }
-
-/* Main Content Area */
 .signup-main-content {
-  flex-grow: 1; /* Takes remaining vertical space */
+  flex-grow: 1;
   display: flex;
   justify-content: center;
   align-items: center;
   padding: 30px;
-  background-color: #f8f9fa; /* Consistent light background */
+  background-color: #f8f9fa;
 }
-
 .signup-card {
   background-color: white;
   padding: 50px;
-  border-radius: 12px; /* Nicer rounded corners */
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1); /* More pronounced shadow */
+  border-radius: 12px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
   text-align: center;
   max-width: 500px;
   width: 100%;
-  border: 1px solid #eee; /* Subtle border */
+  border: 1px solid #eee;
 }
-
 .signup-card h2 {
-  color: #8d99ae; /* Accent color for headings */
+  color: #8d99ae;
   margin-bottom: 20px;
   font-size: 2em;
   font-weight: 700;
 }
-
 .signup-card p {
   color: #555;
   margin-bottom: 30px;
   font-size: 1.1em;
 }
-
-/* Form Styling */
 .signup-form {
   display: flex;
   flex-direction: column;
-  gap: 20px; /* Space between form groups */
-  margin-bottom: 30px; /* Space before the "Already have an account?" link */
+  gap: 20px;
+  margin-bottom: 30px;
 }
-
 .form-group {
-  text-align: left; /* Align labels and inputs to the left */
+  text-align: left;
 }
-
 .form-group label {
-  display: block; /* Make label take full width */
+  display: block;
   margin-bottom: 8px;
   color: #333;
   font-weight: 600;
   font-size: 0.95em;
 }
-
 .form-group input {
   width: 100%;
   padding: 12px 15px;
@@ -259,19 +233,14 @@ const navigateToLogin = () => {
   border-radius: 8px;
   font-size: 1em;
   color: #333;
-  transition:
-    border-color 0.3s ease,
-    box-shadow 0.3s ease;
-  box-sizing: border-box; /* Include padding and border in the element's total width and height */
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  box-sizing: border-box;
 }
-
 .form-group input:focus {
   outline: none;
-  border-color: #8d99ae; /* Highlight border on focus */
-  box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2); /* Subtle glow on focus */
+  border-color: #8d99ae;
+  box-shadow: 0 0 0 3px rgba(141, 153, 174, 0.2);
 }
-
-/* Action button (Create Account) */
 .action-button {
   background-color: #8d99ae;
   color: white;
@@ -281,45 +250,43 @@ const navigateToLogin = () => {
   cursor: pointer;
   font-size: 1.15em;
   font-weight: 600;
-  transition:
-    background-color 0.3s ease,
-    transform 0.2s ease;
+  transition: background-color 0.3s ease, transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
-  width: 100%; /* Make button full width */
-  margin-top: 20px; /* Space above the button, if not already handled by form-group gap */
+  width: 100%;
+  margin-top: 20px;
 }
-
 .action-button:hover {
   background-color: #6a7483;
-  transform: translateY(-2px); /* Slight lift effect */
+  transform: translateY(-2px);
 }
-
 .action-button:disabled {
   background-color: #b0b0b0;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
-
+.guest-button {
+  background-color: #4fa24b;
+  margin-top: 18px;
+}
+.guest-button:hover {
+  background-color: #306e2e;
+}
 .switch-link-container {
-  margin-top: 25px; /* Space above the link */
+  margin-top: 25px;
   font-size: 0.95em;
   color: #666;
 }
-
 .switch-link-container a {
   color: #8d99ae;
   text-decoration: none;
   font-weight: 600;
   transition: color 0.3s ease;
 }
-
 .switch-link-container a:hover {
   color: #5a6473;
   text-decoration: underline;
 }
-
-/* Divider for OR */
 .divider {
   display: flex;
   align-items: center;
@@ -328,25 +295,20 @@ const navigateToLogin = () => {
   color: #777;
   font-size: 0.9em;
 }
-
 .divider::before,
 .divider::after {
   content: '';
   flex: 1;
   border-bottom: 1px solid #ddd;
 }
-
 .divider:not(:empty)::before {
   margin-right: 0.25em;
 }
-
 .divider:not(:empty)::after {
   margin-left: 0.25em;
 }
-
-/* Google Button Styling */
 .google-button {
-  background-color: #4285f4; /* Google blue */
+  background-color: #4285f4;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -357,32 +319,25 @@ const navigateToLogin = () => {
   cursor: pointer;
   font-size: 1.05em;
   font-weight: 600;
-  transition:
-    background-color 0.3s ease,
-    transform 0.2s ease;
+  transition: background-color 0.3s ease, transform 0.2s ease;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
   width: 100%;
-  margin-bottom: 20px; /* Space below Google button */
+  margin-bottom: 20px;
 }
-
 .google-button:hover {
-  background-color: #357ae8; /* Darker blue on hover */
+  background-color: #357ae8;
   transform: translateY(-2px);
 }
-
 .google-button:disabled {
   background-color: #b0b0b0;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
-
 .google-icon {
   width: 24px;
   height: 24px;
 }
-
-/* Message Styling */
 .message {
   margin-top: 20px;
   padding: 10px 15px;
@@ -391,37 +346,29 @@ const navigateToLogin = () => {
   font-weight: 500;
   text-align: center;
 }
-
 .error-message {
   background-color: #ffe0e0;
   color: #d32f2f;
   border: 1px solid #d32f2f;
 }
-
-/* No explicit success message on this page, as successful signup triggers redirection */
-
-/* Responsive Adjustments */
 @media (max-width: 768px) {
   .signup-main-content {
     padding: 15px;
   }
-
   .signup-card {
     padding: 30px;
   }
-
   .signup-card h2 {
     font-size: 1.8em;
   }
 }
-
 @media (max-width: 480px) {
   .signup-card {
     padding: 20px;
   }
-
   .action-button,
-  .google-button {
+  .google-button,
+  .guest-button {
     padding: 12px 20px;
     font-size: 1em;
   }

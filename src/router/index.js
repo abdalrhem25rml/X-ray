@@ -8,6 +8,7 @@ import PatientsView from '@/views/PatientsView.vue'
 import DashboardView from '@/views/DashboardView.vue'
 import ResetPasswordView from '@/views/ResetPasswordView.vue' // Import the new component
 import ProfileView from '@/views/ProfileView.vue'
+import RecommendGuestView from '@/views/RecommendGuestView.vue'
 
 import { useAuthStore } from '@/stores/auth' // Import the auth store
 
@@ -35,6 +36,12 @@ const router = createRouter({
       name: 'recommend',
       component: RecommendView,
       meta: { requiresAuth: true }, // Uncomment this later if you want to protect this route
+    },
+    {
+      path: '/recommend/guest',
+      name: 'recommendGuest',
+      component: RecommendGuestView,
+      meta: { requiresAuth: false }, // Uncomment this later if you want to protect this route
     },
     {
       path: '/patients',
@@ -113,7 +120,7 @@ router.beforeEach(async (to, from, next) => {
   console.log(`isAuthenticated: ${isAuthenticated}`)
 
   // Define routes that do NOT require authentication (public routes)
-  const publicRoutes = ['signup', 'signin', 'resetpassword', 'newpassword'] // Added 'newpassword'
+  const publicRoutes = ['signup', 'signin', 'resetpassword', 'newpassword', 'recommendGuest'] // Added 'newpassword'
   const isPublicRoute = publicRoutes.includes(to.name)
 
   if (isAuthenticated) {

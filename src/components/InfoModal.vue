@@ -1,7 +1,10 @@
 <script setup>
+import { inject } from 'vue'
+
+const currentLanguage = inject('currentLanguage')
+
 defineProps({
   show: Boolean,
-  currentLanguage: String,
 })
 
 defineEmits(['close'])
@@ -34,6 +37,7 @@ According to the recommendations of the International Commission on Radiological
 
 <template>
   <Transition name="modal-fade">
+    <!-- ✅ CORRECTED: The v-if now uses the 'show' prop. This is the correct pattern for transitions. -->
     <div v-if="show" class="modal-overlay" @click.self="$emit('close')">
       <div class="modal-content" :dir="currentLanguage === 'ar' ? 'rtl' : 'ltr'">
         <button class="close-modal-button" @click="$emit('close')">&times;</button>
@@ -134,7 +138,6 @@ According to the recommendations of the International Commission on Radiological
   display: flex;
   justify-content: center;
   align-items: center;
-  z-index: 1000;
   padding: 20px;
 }
 .modal-content {
