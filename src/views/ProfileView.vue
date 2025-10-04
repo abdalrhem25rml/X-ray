@@ -76,9 +76,40 @@ const fetchAllScans = async () => {
 // --- CRUD Handlers ---
 const onProfileSaved = async (formData) => {
   if (!userId.value) return
-  // This logic is complete as provided in previous versions
-  const profileToSave = { /* ... */ };
-  const success = await databaseStore.setUserProfile(userId.value, profileToSave);
+
+  // Build profile object with only provided fields
+  const profileToSave = {}
+
+  // Add fields only if they have actual values
+  if (formData.name !== undefined && formData.name !== null && formData.name !== '') {
+    profileToSave.name = formData.name.trim()
+  }
+
+  if (formData.email !== undefined && formData.email !== null && formData.email !== '') {
+    profileToSave.email = formData.email.trim()
+  }
+
+  if (formData.role) {
+    profileToSave.role = formData.role
+  }
+
+  if (formData.weight) {
+    profileToSave.weight = formData.weight
+  }
+
+  if (formData.birthDate) {
+    profileToSave.birthDate = formData.birthDate
+  }
+
+  if (formData.gender) {
+    profileToSave.gender = formData.gender
+  }
+
+  // Always update timestamp
+  profileToSave.updatedAt = new Date().toISOString()
+
+  const success = await databaseStore.setUserProfile(userId.value, profileToSave)
+
   if (success) {
     authStore.setUserProfile(profileToSave)
     showProfileFormModal.value = false
@@ -224,7 +255,11 @@ onMounted(() => {
     <!-- ✅ NEW: Other Scans History Section -->
     <div class="history-section card">
       <div class="card-header">
-        <h2>{{ currentLanguage === 'en' ? 'Occupational Exposure' : 'التعرض المهني' }}</h2>
+        <h2>{{
+      authStore.role === 'doctor'
+      ? (currentLanguage === 'en' ? 'Occupational Exposure' : 'التعرض المهني')
+      : (currentLanguage === 'en' ? 'Other Sources' : 'مصادر أخرى')
+  }}</h2>
         <button @click="openAddOtherScanModal" class="action-button">{{ currentLanguage === 'en' ? 'Add Other Source' : 'إضافة مصدر آخر' }}</button>
       </div>
       <OtherScansTable :scans="otherScans" :is-loading="databaseStore.loading" @edit="openEditOtherScanModal" @delete="openDeleteOtherScanConfirmation" />
