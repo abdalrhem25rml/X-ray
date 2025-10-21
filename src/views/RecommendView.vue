@@ -256,42 +256,73 @@ const getRecommendations = async () => {
     }
   }
 
-  // --- Persona Selection ---
+  // --- Prompt Definition ---
   const lang = currentLanguage.value;
-  const patientPersona = `You are a highly specialized and board-certified medical radiation advisor. You are tasked with evaluating a patient's medical imaging exposure or providing general advice based on symptoms. Follow these guidelines: 1. *Risk Evaluation*: If scan details are given, estimate if the dose is low, moderate, or high. 2. *High Exposure Warning*: If dose is high, warn the patient. 3. *Alternative Recommendation*: If applicable, suggest safer alternatives like ultrasound or MRI. 4. *General Advice*: If no scan details are given, provide safe, general advice based on symptoms and history, and strongly recommend seeing a doctor. 5. *Doctor Referral*: Always emphasize that the final decision should be with their physician. 6. *Tone*: Be concise, non-alarming, professional, and empathetic.`;
-  const doctorPersona = `You are a highly experienced, board-certified radiologist and medical physicist. Your goal is to provide clear, safety-conscious advice for healthcare providers based on the provided clinical scenario. The recommendation should focus on justification and potential alternatives (like MRI or Ultrasound) if applicable. The warning should highlight any significant risks (e.g., pregnancy, high cumulative doses for patient or doctor). Use professional medical language.`;
+  const userTypeForPrompt = (userRole.value === 'patient' || isDoctorPersonalScan.value) ? 'Patient' : 'Doctor';
 
-  let selectedPersona;
-  if (userRole.value === 'patient' || isDoctorPersonalScan.value) {
-    selectedPersona = patientPersona;
-  } else {
-    selectedPersona = doctorPersona;
-  }
+  const fullSystemPrompt = `You are an expert medical radiation physicist and AI assistant specialized in radiological protection and dosimetry.
+You are assisting in a medical radiation exposure tracking system for X-ray and CT imaging.
+
+Use the following input fields to generate customized recommendations:
+
+- User type: [Doctor / Patient]
+- Examination type: [X-ray / CT / Dental / Chest / Abdomen / Limbs / etc.]
+- Number of scans: [integer]
+- Exposure time: [seconds]
+- Patient parameters: [age, sex, pregnancy status, body thickness]
+- Distance from source: [cm]
+- Shielding availability: [Lead apron / thyroid collar / gonadal shield / none]
+- Estimated dose (mSv): [value from AI estimation model]
+
+Now, based on these inputs:
+
+If the user is Doctor:
+1. Suggest the optimal exposure factors (kVp, mAs, distance, and filtration) according to the examination type.
+2. Recommend the appropriate shielding devices (lead apron, thyroid shield, gonadal shield) and where to place them on the patient.
+3. Provide the expected dose for the patient and compare it to the international reference levels (ICRP/IAEA guidelines).
+4. Remind about occupational exposure limits and advise on distance/time/shielding optimization for staff.
+5. Display protocols recommended by WHO and ICRP for that specific examination.
+6. If exposure is close to the limit, suggest protocol adjustments or additional shielding.
+
+If the user is Patient:
+1. Explain the expected radiation dose and its percentage relative to the annual recommended public limit (1 mSv/year).
+2. Indicate the risk level qualitatively (e.g., negligible / low / moderate / high).
+3. Provide safety tips before and after the scan (e.g., avoid repeated imaging unnecessarily).
+4. Advise consulting the doctor about radiation-free alternatives (e.g., ultrasound, MRI) if appropriate for the case.
+5. Offer educational notes about radiation safety, purpose of shields, and importance of medical justification.
+6. Encourage saving and tracking dose history in the app for cumulative exposure monitoring.
+
+Always provide the output in clear, human-friendly language and reference international safety standards (ICRP 103, IAEA GSR Part 3, WHO 2016).
+`;
 
   // --- Dynamic Prompt Construction ---
   const finalScanDetail = hasScanDetails ? (showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType) : 'N/A';
   const finalScanPlace = hasScanDetails ? (showOtherScanPlaceInput.value ? form.value.otherScanPlaceDescription : form.value.scanPlace) : 'N/A';
+  const examinationType = hasScanDetails ? `${form.value.scanType} of the ${finalScanPlace}, protocol: "${finalScanDetail}"` : 'Not specified';
 
   const prompt = `
-    ${selectedPersona}
-    Task: Provide a concise recommendation and a separate warning based on the following clinical scenario. Respond in ${lang === 'en' ? 'English' : 'Arabic'}.
-    ${!hasScanDetails ? "Note: The user has NOT specified a scan and is seeking general advice based on their symptoms and history." : ""}
+    ${fullSystemPrompt}
 
-    Clinical Scenario:
-    - Patient Age: ${new Date().getFullYear() - new Date(form.value.birthDate).getFullYear()}
-    - Patient Gender: ${form.value.gender}
-    - Patient is Pregnant: ${form.value.isPregnant ? `Yes, due around ${form.value.estimatedDueDate}` : 'No'}
-    - Patient Cumulative Dose (This Year): ${form.value.patientCumulativeDose.toFixed(3)} mSv
-    - Doctor Cumulative Dose (This Year): ${currentTotalMsv.value.toFixed(3)} mSv
-    - Reason / Symptoms: ${form.value.currentSymptoms || 'Not provided'}
-    - Doctor's Additional Context: ${form.value.doctorAdditionalContext || 'None'}
-    ${hasScanDetails ? `- Proposed Scan: ${form.value.scanType} of the ${finalScanPlace}, protocol: "${finalScanDetail}"` : ""}
-    ${hasScanDetails ? `- ESTIMATED Patient Dose (from this scan): ${patientDose.toFixed(3)} mSv` : ""}
-    ${hasScanDetails && doctorDose !== null ? `- ESTIMATED Doctor Occupational Dose (from this scan): ${doctorDose.toFixed(5)} mSv` : ""}
+    ---
+    **GENERATE RECOMMENDATION BASED ON THE FOLLOWING DATA. FOLLOW THE RULES FOR THE SPECIFIED USER TYPE ABOVE.**
+    ---
+    - **User type:** ${userTypeForPrompt}
+    - **Examination type:** ${examinationType}
+    - **Number of scans:** ${form.value.numberOfScans}
+    - **Exposure time:** "Not provided"
+    - **Patient parameters:** "age: ${new Date().getFullYear() - new Date(form.value.birthDate).getFullYear()}, sex: ${form.value.gender}, pregnancy status: ${form.value.isPregnant ? `Yes, due around ${form.value.estimatedDueDate}` : 'No'}, body thickness: ${form.value.weight ? `${form.value.weight}kg` : 'Not provided'}"
+    - **Distance from source:** "Not provided"
+    - **Shielding availability:** "Not provided"
+    - **Estimated dose (mSv):** ${patientDose !== null ? patientDose.toFixed(3) : 'N/A'}
+    - **Patient Cumulative Dose (This Year):** ${form.value.patientCumulativeDose.toFixed(3)} mSv
+    - **Doctor Cumulative Dose (This Year):** ${currentTotalMsv.value.toFixed(3)} mSv
+    - **Reason / Symptoms / Medical History:** "${form.value.currentSymptoms || 'Not provided'}. History: ${form.value.medicalHistory || 'None'}"
+    - **Doctor's Additional Context on Positioning/Shielding:** "${form.value.doctorAdditionalContext || 'None'}"
+    - **Language for response:** ${lang === 'en' ? 'English' : 'Arabic'}
 
-    Your Instructions:
-    1.  **recommendationText:** Write a brief, professional justification or point of consideration.
-    2.  **Warning:** Write a clear, actionable warning if any high-risk factors are present. If none, state that clearly.
+    **Your Instructions:**
+    1.  **recommendationText:** Fulfill all the requirements for the specified **User type** above. Combine all points into a single, comprehensive, well-structured response.
+    2.  **Warning:** Write a clear, actionable warning if any high-risk factors are present (e.g., pregnancy, high cumulative dose, etc.). If none, state that clearly.
   `;
 
   const responseSchema = {

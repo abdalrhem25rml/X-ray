@@ -156,38 +156,63 @@ async function getRecommendations() {
     }
   }
 
-  // Compose simplified prompt for user-friendly answers
-  const lang = currentLanguage.value
-  const age = new Date().getFullYear() - new Date(form.value.birthDate).getFullYear()
-  const doseToReport = patientDoseEstimate.value !== null ? patientDoseEstimate.value.toFixed(3) : 'N/A'
-  const overdoseStatus = isOverdose.value ? (lang === 'en' ? 'The total estimated radiation dose you have received this year is above the recommended safety limit.' : 'الجرعة الكلية المقدرة التي تلقيتها هذا العام تفوق الحد الأقصى الموصى به.') :
-        (lang === 'en' ? 'Your estimated radiation exposure is within safe limits.' : 'تعرضك المقدر للإشعاع ضمن الحدود الآمنة.')
+  // --- New Prompt Definition ---
+  const lang = currentLanguage.value;
+  const fullSystemPrompt = `You are an expert medical radiation physicist and AI assistant specialized in radiological protection and dosimetry.
+You are assisting in a medical radiation exposure tracking system for X-ray and CT imaging.
 
-  const scanDesc = hasScanDetails
-    ? `${form.value.scanType} scan of the ${showOtherScanPlaceInput.value ? form.value.otherScanPlaceDescription : form.value.scanPlace}, protocol: ${showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType}`
-    : 'No specific scan information provided.'
+Use the following input fields to generate customized recommendations:
+
+- User type: [Doctor / Patient]
+- Examination type: [X-ray / CT / Dental / Chest / Abdomen / Limbs / etc.]
+- Number of scans: [integer]
+- Exposure time: [seconds]
+- Patient parameters: [age, sex, pregnancy status, body thickness]
+- Distance from source: [cm]
+- Shielding availability: [Lead apron / thyroid collar / gonadal shield / none]
+- Estimated dose (mSv): [value from AI estimation model]
+
+Now, based on these inputs:
+
+If the user is Patient:
+1. Explain the expected radiation dose and its percentage relative to the annual recommended public limit (1 mSv/year).
+2. Indicate the risk level qualitatively (e.g., negligible / low / moderate / high).
+3. Provide safety tips before and after the scan (e.g., avoid repeated imaging unnecessarily).
+4. Advise consulting the doctor about radiation-free alternatives (e.g., ultrasound, MRI) if appropriate for the case.
+5. Offer educational notes about radiation safety, purpose of shields, and importance of medical justification.
+6. Encourage saving and tracking dose history in the app for cumulative exposure monitoring.
+
+Always provide the output in clear, human-friendly language and reference international safety standards (ICRP 103, IAEA GSR Part 3, WHO 2016).
+`;
+
+  // --- Dynamic Prompt Construction ---
+  const finalScanDetail = hasScanDetails ? (showOtherInput.value ? form.value.otherScanDescription : form.value.subScanType) : 'N/A';
+  const finalScanPlace = hasScanDetails ? (showOtherScanPlaceInput.value ? form.value.otherScanPlaceDescription : form.value.scanPlace) : 'N/A';
+  const examinationType = hasScanDetails ? `${form.value.scanType} of the ${finalScanPlace}, protocol: "${finalScanDetail}"` : 'Not specified';
 
   const prompt = `
-You are a friendly medical radiation advisor helping laypersons understand their radiation exposure from medical scans.
+    ${fullSystemPrompt}
 
-Please provide a clear, simple summary of the radiation dose based on this information:
-- Patient Age: ${age}
-- Gender: ${form.value.gender === 'male' ? (lang === 'en' ? 'Male' : 'ذكر') : (lang === 'en' ? 'Female' : 'أنثى')}
-- Pregnant: ${form.value.isPregnant ? (lang === 'en' ? 'Yes, due around ' + form.value.estimatedDueDate : 'نعم، متوقعه حول ' + form.value.estimatedDueDate) : (lang === 'en' ? 'No' : 'لا')}
-- Weight: ${form.value.weight || 'Not provided'} kg
-- Relevant Medical History: ${form.value.medicalHistory || 'None'}
-- Estimated Previous Year Radiation Dose: ${form.value.previousYearDose || 0} mSv
-- Proposed Scan: ${scanDesc}
-- Current Symptoms: ${form.value.currentSymptoms || 'None'}
-- Estimated Dose from Scan: ${hasScanDetails ? patientDose.toFixed(3) + ' mSv' : 'N/A'}
+    ---
+    **GENERATE RECOMMENDATION BASED ON THE FOLLOWING DATA. YOU ARE ADDRESSING A PATIENT.**
+    ---
+    - **User type:** Patient
+    - **Examination type:** ${examinationType}
+    - **Number of scans:** ${form.value.numberOfScans}
+    - **Exposure time:** "Not provided"
+    - **Patient parameters:** "age: ${new Date().getFullYear() - new Date(form.value.birthDate).getFullYear()}, sex: ${form.value.gender}, pregnancy status: ${form.value.isPregnant ? `Yes, due around ${form.value.estimatedDueDate}` : 'No'}, body thickness: ${form.value.weight ? `${form.value.weight}kg` : 'Not provided'}"
+    - **Distance from source:** "Not provided"
+    - **Shielding availability:** "Not provided"
+    - **Estimated dose (mSv) for this scan:** ${patientDose !== null ? patientDose.toFixed(3) : 'N/A'}
+    - **Patient Cumulative Dose (This Year, including this scan):** ${patientDoseEstimate.value !== null ? patientDoseEstimate.value.toFixed(3) : 'N/A'}
+    - **Reason / Symptoms / Medical History:** "${form.value.currentSymptoms || 'Not provided'}. History: ${form.value.medicalHistory || 'None'}"
+    - **Language for response:** ${lang === 'en' ? 'English' : 'Arabic'}
 
-Please clearly tell the user their total estimated radiation dose this year, whether this is safe or high (use the info below), and give simple advice on what they can do next, avoiding medical jargon or complex terms.
+    **Your Instructions:**
+    1.  **recommendationText:** Fulfill all the requirements for the **Patient** user type above. Combine all points into a single, comprehensive, well-structured response.
+    2.  **Warning:** Write a clear, actionable warning if any high-risk factors are present (e.g., pregnancy, high cumulative dose, etc.). If none, state that clearly.
+  `;
 
-Advice:
-${overdoseStatus}
-
-Note: Always consult your healthcare provider for personalized medical decisions.
-  `
   const responseSchema = {
     type: 'OBJECT',
     properties: {
