@@ -10,6 +10,8 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const databaseStore = useDatabaseStore()
+import MarkdownIt from 'markdown-it';
+const md = new MarkdownIt();
 
 // --- Injected global app states ---
 const currentLanguage = inject('currentLanguage')
@@ -85,6 +87,12 @@ const isLoading = ref(false)
 const isSaving = ref(false)
 const isFetchingPatient = ref(false)
 const aiResponse = ref(null)
+const renderedRecommendation = computed(() => {
+  if (aiResponse.value && aiResponse.value.recommendationText) {
+    return md.render(aiResponse.value.recommendationText);
+  }
+  return '';
+});
 const errorMessage = ref('')
 
 // --- Computed Properties ---
@@ -321,7 +329,8 @@ Always provide the output in clear, human-friendly language and reference intern
     - **Language for response:** ${lang === 'en' ? 'English' : 'Arabic'}
 
     **Your Instructions:**
-    1.  **recommendationText:** Fulfill all the requirements for the specified **User type** above. Combine all points into a single, comprehensive, well-structured response.
+    1.  **recommendationText:** Fulfill all the requirements for the **Patient** user type above.
+    Combine all points into a single, comprehensive, well-structured response, **Use Markdown for formatting** (e.g., **bold** for emphasis, and unordered lists with -)
     2.  **Warning:** Write a clear, actionable warning if any high-risk factors are present (e.g., pregnancy, high cumulative dose, etc.). If none, state that clearly.
   `;
 
@@ -338,7 +347,7 @@ Always provide the output in clear, human-friendly language and reference intern
   try {
       const payload = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json', responseSchema } }
       const apiKey = import.meta.env.VITE_GEMINI_KEY;
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
       const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
 
@@ -667,7 +676,7 @@ const saveScanFromRecommendation = async () => {
             </div>
             <div class="result-text">
               <h4>{{ currentLanguage === 'en' ? 'AI-Powered Advice' : 'نصيحة مدعومة بالذكاء الاصطناعي' }}</h4>
-              <p style="white-space: pre-wrap;">{{ aiResponse.recommendationText }}</p>
+                <div v-html="renderedRecommendation"></div>
             </div>
           </div>
 

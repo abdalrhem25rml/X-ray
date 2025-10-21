@@ -8,6 +8,8 @@ import { Timestamp } from 'firebase/firestore'
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+import MarkdownIt from 'markdown-it';
+const md = new MarkdownIt();
 
 // --- Injected global app states ---
 const currentLanguage = inject('currentLanguage')
@@ -78,6 +80,12 @@ const showOtherScanPlaceInput = computed(() => form.value.scanPlace === 'other')
 const isLoading = ref(false)
 const errorMessage = ref('')
 const aiResponse = ref(null)
+const renderedRecommendation = computed(() => {
+  if (aiResponse.value && aiResponse.value.recommendationText) {
+    return md.render(aiResponse.value.recommendationText);
+  }
+  return '';
+});
 
 // Compute patient cumulative dose (previous + current scan estimate)
 const patientDoseEstimate = computed(() => {
@@ -209,7 +217,9 @@ Always provide the output in clear, human-friendly language and reference intern
     - **Language for response:** ${lang === 'en' ? 'English' : 'Arabic'}
 
     **Your Instructions:**
-    1.  **recommendationText:** Fulfill all the requirements for the **Patient** user type above. Combine all points into a single, comprehensive, well-structured response.
+    1.  **recommendationText:** Fulfill all the requirements for the **Patient** user type above.
+    Combine all points into a single, comprehensive, well-structured response, **Use Markdown for
+    formatting** (e.g., **bold** for emphasis, and unordered lists with -)
     2.  **Warning:** Write a clear, actionable warning if any high-risk factors are present (e.g., pregnancy, high cumulative dose, etc.). If none, state that clearly.
   `;
 
@@ -224,7 +234,7 @@ Always provide the output in clear, human-friendly language and reference intern
 
   try {
     const apiKey = import.meta.env.VITE_GEMINI_KEY
-    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`
+  const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`
     const payload = {
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: 'application/json', responseSchema }
@@ -469,7 +479,7 @@ Always provide the output in clear, human-friendly language and reference intern
 
             <div class="result-text">
               <h4>{{ currentLanguage === 'en' ? 'AI-Powered Advice' : 'نصيحة مدعومة بالذكاء الاصطناعي' }}</h4>
-              <p style="white-space: pre-wrap;">{{ aiResponse.recommendationText }}</p>
+                <div v-html="renderedRecommendation"></div>
             </div>
           </div>
         </div>
